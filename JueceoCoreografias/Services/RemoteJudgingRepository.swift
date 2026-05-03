@@ -2,13 +2,15 @@ import Foundation
 
 struct SupabaseConfig: Sendable {
     let url: URL
-    let anonKey: String
+    let apiKey: String
 
     static func load() -> SupabaseConfig? {
         let environment = ProcessInfo.processInfo.environment
         let rawURL = environment["SUPABASE_URL"]
             ?? Bundle.main.object(forInfoDictionaryKey: "SUPABASE_URL") as? String
-        let rawKey = environment["SUPABASE_ANON_KEY"]
+        let rawKey = environment["SUPABASE_PUBLISHABLE_KEY"]
+            ?? environment["SUPABASE_ANON_KEY"]
+            ?? Bundle.main.object(forInfoDictionaryKey: "SUPABASE_PUBLISHABLE_KEY") as? String
             ?? Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String
 
         guard
@@ -19,7 +21,7 @@ struct SupabaseConfig: Sendable {
         else {
             return nil
         }
-        return SupabaseConfig(url: url, anonKey: rawKey.trimmingCharacters(in: .whitespacesAndNewlines))
+        return SupabaseConfig(url: url, apiKey: rawKey.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
 
@@ -199,8 +201,8 @@ actor RemoteJudgingRepository {
         var request = URLRequest(url: endpoint)
         request.httpMethod = method
         request.httpBody = body
-        request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
-        request.setValue("Bearer \(config.anonKey)", forHTTPHeaderField: "Authorization")
+        request.setValue(config.apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let prefer {
             request.setValue(prefer, forHTTPHeaderField: "Prefer")

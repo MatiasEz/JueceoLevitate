@@ -116,7 +116,7 @@ final class JudgingStore: ObservableObject {
     func refreshEvents() async {
         guard let remoteRepository else {
             syncStatus = .localOnly
-            syncMessage = "Configura SUPABASE_URL y SUPABASE_ANON_KEY para usar online."
+            syncMessage = "Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para usar online."
             return
         }
         syncStatus = .connecting
@@ -244,8 +244,13 @@ final class JudgingStore: ObservableObject {
             }
     }
 
-    func exportPDF() {
-        lastPDFURL = PDFExporter.export(results: rankings, judges: judges, sourceName: appData.sourceName)
+    func exportPDF(results exportResults: [RoutineResult]? = nil, title: String = "Calificaciones y Dictamen Final") {
+        lastPDFURL = PDFExporter.export(
+            results: exportResults ?? rankings,
+            judges: judges,
+            sourceName: appData.sourceName,
+            title: title
+        )
     }
 
     private func applyRemoteBundle(_ bundle: RemoteEventBundle) {

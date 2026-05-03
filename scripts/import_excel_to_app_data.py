@@ -299,9 +299,12 @@ def supabase_request(
     prefer: str | None = None,
 ) -> Any:
     base_url = os.environ.get("SUPABASE_URL", "").rstrip("/")
-    key = os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or os.environ.get("SUPABASE_ANON_KEY")
+    key = (
+        os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        or os.environ.get("SUPABASE_SECRET_KEY")
+    )
     if not base_url or not key:
-        raise RuntimeError("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY/SUPABASE_ANON_KEY.")
+        raise RuntimeError("Faltan SUPABASE_URL y SUPABASE_SERVICE_ROLE_KEY/SUPABASE_SECRET_KEY.")
 
     data = None if payload is None else json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(f"{base_url}/rest/v1/{path.lstrip('/')}", data=data, method=method)

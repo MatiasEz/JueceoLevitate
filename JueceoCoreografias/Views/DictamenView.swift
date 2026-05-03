@@ -3,10 +3,9 @@ import SwiftUI
 struct DictamenView: View {
     @EnvironmentObject private var store: JudgingStore
     let results: [RoutineResult]
-    let onExportPDF: () -> Void
+    let onExportPDF: ([RoutineResult], String) -> Void
 
     @State private var selectedGroupID: String?
-    @State private var presentedGroup: DictamenGroup?
 
     private var dictamenGroups: [DictamenGroup] {
         Dictionary(grouping: results) { result in
@@ -46,9 +45,6 @@ struct DictamenView: View {
         }
         .padding(30)
         .background(LevitTheme.paper)
-        .fullScreenCover(item: $presentedGroup) { group in
-            FullScreenPodiumView(group: group)
-        }
     }
 
     private var header: some View {
@@ -109,29 +105,19 @@ struct DictamenView: View {
     private var actionButtons: some View {
         VStack(spacing: 12) {
             Button {
-                presentedGroup = selectedGroup
+                guard let selectedGroup else { return }
+                onExportPDF(selectedGroup.results, "Dictamen final - \(selectedGroup.title)")
             } label: {
-                Label("Mostrar podio en pantalla completa", systemImage: "trophy")
-                    .font(.headline.weight(.black))
+                Label("Descargar PDF del dictamen seleccionado", systemImage: "doc.richtext")
+                    .font(.headline.weight(.bold))
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
+                    .padding(.vertical, 15)
                     .foregroundStyle(.white)
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 17))
             }
             .buttonStyle(.plain)
             .disabled(dictamenGroups.isEmpty)
             .opacity(dictamenGroups.isEmpty ? 0.45 : 1)
-
-            Button(action: onExportPDF) {
-                Label("Generar y exportar resultados", systemImage: "doc.richtext")
-                    .font(.headline.weight(.bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .foregroundStyle(LevitTheme.ink)
-                    .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
-                    .overlay(RoundedRectangle(cornerRadius: 17).stroke(LevitTheme.line))
-            }
-            .buttonStyle(.plain)
         }
     }
 
@@ -141,7 +127,6 @@ struct DictamenView: View {
                 ForEach(dictamenGroups) { group in
                     Button {
                         selectedGroupID = group.id
-                        presentedGroup = group
                     } label: {
                         DictamenGroupCard(
                             group: group,
@@ -260,157 +245,6 @@ private struct DictamenGroupCard: View {
         .background(isSelected ? LevitTheme.palePink.opacity(0.76) : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(isSelected ? LevitTheme.pink.opacity(0.34) : LevitTheme.line, lineWidth: isSelected ? 1.4 : 1))
         .shadow(color: .black.opacity(isSelected ? 0.08 : 0.035), radius: 18, x: 0, y: 10)
-    }
-}
-
-private struct FullScreenPodiumView: View {
-    @Environment(\.dismiss) private var dismiss
-    let group: DictamenGroup
-
-    var body: some View {
-        GeometryReader { proxy in
-            let podium = group.podium
-            let winnerHeight = min(430, proxy.size.height * 0.48)
-            let sideHeight = min(330, proxy.size.height * 0.36)
-
-            VStack(spacing: 24) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Dictamen final")
-                            .font(.title3.weight(.black))
-                            .foregroundStyle(.white.opacity(0.58))
-                        Text(group.title)
-                            .font(.system(size: 46, weight: .black, design: .rounded))
-                            .foregroundStyle(.white)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.55)
-                        HStack(spacing: 8) {
-                            LevitTag(group.genre, dark: true)
-                            LevitTag(group.age, dark: true)
-                            LevitTag(group.amount, dark: true)
-                        }
-                    }
-
-                    Spacer()
-
-                    Button {
-                        dismiss()
-                    } label: {
-                        Label("Cerrar", systemImage: "xmark")
-                            .font(.headline.weight(.black))
-                            .padding(.horizontal, 18)
-                            .padding(.vertical, 12)
-                            .foregroundStyle(.white.opacity(0.84))
-                            .background(.white.opacity(0.10), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Spacer(minLength: 10)
-
-                HStack(alignment: .bottom, spacing: 28) {
-                    FullScreenPodiumCard(
-                        result: podium.indices.contains(1) ? podium[1] : nil,
-                        title: "Segundo lugar",
-                        rank: 2,
-                        height: sideHeight,
-                        color: LevitTheme.silverPodium
-                    )
-
-                    FullScreenPodiumCard(
-                        result: podium.indices.contains(0) ? podium[0] : nil,
-                        title: "Primer lugar",
-                        rank: 1,
-                        height: winnerHeight,
-                        color: LevitTheme.pink
-                    )
-
-                    FullScreenPodiumCard(
-                        result: podium.indices.contains(2) ? podium[2] : nil,
-                        title: "Tercer lugar",
-                        rank: 3,
-                        height: sideHeight,
-                        color: LevitTheme.bronzePodium
-                    )
-                }
-                .frame(maxWidth: 1120)
-
-                Spacer(minLength: 0)
-
-                Text("\(group.completedCount) de \(group.results.count) coreografias calificadas")
-                    .font(.headline.monospacedDigit().weight(.bold))
-                    .foregroundStyle(.white.opacity(0.58))
-            }
-            .padding(.horizontal, 48)
-            .padding(.vertical, 36)
-            .frame(width: proxy.size.width, height: proxy.size.height)
-            .background(
-                LinearGradient(
-                    colors: [LevitTheme.dark, Color(red: 0.065, green: 0.075, blue: 0.095), Color(red: 0.035, green: 0.043, blue: 0.060)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .overlay(alignment: .topTrailing) {
-                RadialGradient(colors: [LevitTheme.pink.opacity(0.22), .clear], center: .topTrailing, startRadius: 40, endRadius: 520)
-                    .allowsHitTesting(false)
-            }
-        }
-        .ignoresSafeArea()
-    }
-}
-
-private struct FullScreenPodiumCard: View {
-    let result: RoutineResult?
-    let title: String
-    let rank: Int
-    let height: CGFloat
-    let color: Color
-
-    private var isWinner: Bool { rank == 1 }
-
-    var body: some View {
-        VStack(spacing: 18) {
-            Text(title)
-                .font(.title3.weight(.black))
-                .foregroundStyle(isWinner ? .white.opacity(0.76) : LevitTheme.muted)
-
-            ZStack {
-                Circle()
-                    .fill(isWinner ? Color.yellow.opacity(0.96) : LevitTheme.softFill)
-                    .frame(width: isWinner ? 74 : 60, height: isWinner ? 74 : 60)
-                Text("\(rank)")
-                    .font(.system(size: isWinner ? 31 : 25, weight: .black, design: .rounded))
-                    .foregroundStyle(isWinner ? LevitTheme.pink : LevitTheme.muted)
-            }
-
-            Spacer()
-
-            VStack(spacing: 10) {
-                Text(result?.routine.academy ?? "SIN RESULTADO")
-                    .font(.system(size: isWinner ? 30 : 24, weight: .black, design: .rounded))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(isWinner ? .white : LevitTheme.ink)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.65)
-
-                Text(result.map { "#\($0.routine.id) \($0.routine.name)" } ?? "Sin coreografia")
-                    .font(.headline.weight(.bold))
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(isWinner ? .white.opacity(0.70) : LevitTheme.muted)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.7)
-            }
-
-            Text(result.map { $0.total.formatted(.number.precision(.fractionLength(1))) } ?? "-")
-                .font(.system(size: isWinner ? 46 : 36, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(isWinner ? .white : LevitTheme.ink)
-        }
-        .padding(isWinner ? 30 : 24)
-        .frame(maxWidth: 330, minHeight: height, maxHeight: height)
-        .background(isWinner ? LevitTheme.pinkGradient : LinearGradient(colors: [color, color], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 26))
-        .overlay(RoundedRectangle(cornerRadius: 26).stroke(isWinner ? .white.opacity(0.26) : .white.opacity(0.08)))
-        .shadow(color: isWinner ? LevitTheme.pink.opacity(0.30) : .black.opacity(0.18), radius: 30, x: 0, y: 18)
     }
 }
 

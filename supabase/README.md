@@ -8,8 +8,8 @@
 4. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
-SUPABASE_URL=https://your-project-ref.supabase.co
-SUPABASE_ANON_KEY=your-anon-public-key
+SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-for-imports-only
 ```
 
@@ -22,4 +22,4 @@ python3 scripts/import_excel_to_app_data.py "JueceoCoreografias/Resources/Bloque
 python3 scripts/import_excel_to_app_data.py "JueceoCoreografias/Resources/Bloque2.xlsx" --supabase --event-slug bloque-2-2024 --event-name "Bloque 2 2024"
 ```
 
-Use `SUPABASE_SERVICE_ROLE_KEY` for imports because event/routine/template tables are admin-owned. The mobile apps only need `SUPABASE_ANON_KEY`.
+Use `SUPABASE_SERVICE_ROLE_KEY` for imports because event/routine/template tables are admin-owned. The mobile apps only need `SUPABASE_PUBLISHABLE_KEY`.

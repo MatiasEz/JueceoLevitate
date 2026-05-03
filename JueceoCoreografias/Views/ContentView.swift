@@ -111,7 +111,9 @@ struct ContentView: View {
                         case .calificaciones:
                             ScoresView(results: store.rankings, onExportPDF: exportPDF)
                         case .dictamen:
-                            DictamenView(results: store.rankings, onExportPDF: exportPDF)
+                            DictamenView(results: store.rankings) { results, title in
+                                exportPDF(results: results, title: title)
+                            }
                         }
                     }
                 }
@@ -138,7 +140,11 @@ struct ContentView: View {
     }
 
     private func exportPDF() {
-        store.exportPDF()
+        exportPDF(results: nil, title: "Calificaciones y Dictamen Final")
+    }
+
+    private func exportPDF(results: [RoutineResult]?, title: String) {
+        store.exportPDF(results: results, title: title)
         sharing = store.lastPDFURL != nil
     }
 }
@@ -169,8 +175,8 @@ private struct DashboardView: View {
         let pending = orderedRoutines.filter { store.result(for: $0).total == 0 }
         let blockPending = pending.filter { $0.block == blockName }
         let extraPending = pending.filter { $0.block != blockName && !blockPending.contains($0) }
-        let preview = Array((blockPending + extraPending).prefix(5))
-        return preview.isEmpty ? Array(orderedRoutines.prefix(5)) : preview
+        let preview = Array((blockPending + extraPending).prefix(3))
+        return preview.isEmpty ? Array(orderedRoutines.prefix(3)) : preview
     }
 
     private var completedCount: Int {
@@ -183,74 +189,120 @@ private struct DashboardView: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let isPhoneLandscape = proxy.size.height < 560
             let isCompactHeight = proxy.size.height < 830
-            let pagePadding: CGFloat = isCompactHeight ? 28 : 38
-            let contentSpacing: CGFloat = isCompactHeight ? 14 : 22
-            let heroHeight: CGFloat = isCompactHeight ? 170 : max(230, min(290, proxy.size.height * 0.32))
+            let pagePadding: CGFloat = isPhoneLandscape ? 18 : (isCompactHeight ? 26 : 38)
+            let contentSpacing: CGFloat = isPhoneLandscape ? 10 : (isCompactHeight ? 12 : 22)
+            let heroHeight: CGFloat = isPhoneLandscape ? 96 : (isCompactHeight ? 118 : max(230, min(290, proxy.size.height * 0.32)))
+            let topPadding: CGFloat = isPhoneLandscape ? 14 : (isCompactHeight ? 20 : 34)
+            let bottomPadding: CGFloat = isPhoneLandscape ? 18 : (isCompactHeight ? 20 : 34)
 
-            VStack(spacing: 0) {
-                VStack(spacing: 0) {
-                    topBar
-                }
-                .padding(.horizontal, pagePadding)
-                .padding(.top, isCompactHeight ? 24 : 34)
-                .padding(.bottom, isCompactHeight ? 10 : 18)
-
-                VStack(spacing: contentSpacing) {
-                    HStack(alignment: .center, spacing: 34) {
-                        greeting
-                            .frame(width: min(420, proxy.size.width * 0.34), alignment: .leading)
-
-                        Spacer(minLength: 14)
-
-                        DancerHero()
-                            .frame(maxWidth: min(610, proxy.size.width * 0.52), maxHeight: .infinity)
+            Group {
+                if isPhoneLandscape {
+                    ScrollView {
+                        dashboardStack(
+                            pagePadding: pagePadding,
+                            topPadding: topPadding,
+                            bottomPadding: bottomPadding,
+                            contentSpacing: contentSpacing,
+                            heroHeight: heroHeight,
+                            contentWidth: proxy.size.width,
+                            isCompactHeight: true,
+                            isPhoneLandscape: true
+                        )
+                        .frame(minHeight: proxy.size.height, alignment: .top)
                     }
-                    .frame(maxWidth: .infinity)
-                    .frame(height: heroHeight)
-
-                    metrics
-                        .frame(maxWidth: .infinity)
-
-                    pendingRoutinesCard(isCompact: isCompactHeight)
-                        .frame(maxWidth: .infinity)
-
-                    Spacer(minLength: 12)
-
-                    enterJudgingButton
+                    .scrollIndicators(.hidden)
+                } else {
+                    dashboardStack(
+                        pagePadding: pagePadding,
+                        topPadding: topPadding,
+                        bottomPadding: bottomPadding,
+                        contentSpacing: contentSpacing,
+                        heroHeight: heroHeight,
+                        contentWidth: proxy.size.width,
+                        isCompactHeight: isCompactHeight,
+                        isPhoneLandscape: false
+                    )
                 }
-                .frame(maxWidth: 1180, alignment: .top)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .padding(.horizontal, pagePadding)
-                .padding(.bottom, isCompactHeight ? 24 : 34)
             }
         }
         .background(DashboardBackground())
     }
 
-    private var topBar: some View {
-        HStack(spacing: 28) {
-            LevitBrand()
+    private func dashboardStack(
+        pagePadding: CGFloat,
+        topPadding: CGFloat,
+        bottomPadding: CGFloat,
+        contentSpacing: CGFloat,
+        heroHeight: CGFloat,
+        contentWidth: CGFloat,
+        isCompactHeight: Bool,
+        isPhoneLandscape: Bool
+    ) -> some View {
+        VStack(spacing: 0) {
+            topBar(isCompact: isPhoneLandscape)
+                .padding(.horizontal, pagePadding)
+                .padding(.top, topPadding)
+                .padding(.bottom, isPhoneLandscape ? 8 : (isCompactHeight ? 8 : 18))
+
+            VStack(spacing: contentSpacing) {
+                HStack(alignment: .center, spacing: isPhoneLandscape ? 18 : 34) {
+                    greeting(isPhoneLandscape: isPhoneLandscape)
+                        .frame(width: isPhoneLandscape ? min(260, contentWidth * 0.36) : min(420, contentWidth * 0.34), alignment: .leading)
+
+                    Spacer(minLength: isPhoneLandscape ? 8 : 14)
+
+                    DancerHero(isCompact: isCompactHeight)
+                        .frame(maxWidth: isPhoneLandscape ? min(300, contentWidth * 0.42) : min(610, contentWidth * 0.52), maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: heroHeight)
+
+                metrics(isCompact: isCompactHeight)
+                    .frame(maxWidth: .infinity)
+
+                pendingRoutinesCard(isCompact: isCompactHeight)
+                    .frame(maxWidth: .infinity)
+
+                if !isPhoneLandscape {
+                    Spacer(minLength: 6)
+                }
+
+                enterJudgingButton(isCompact: isCompactHeight)
+            }
+            .frame(maxWidth: 1180, alignment: .top)
+            .frame(maxHeight: isPhoneLandscape ? nil : .infinity, alignment: .top)
+            .padding(.horizontal, pagePadding)
+            .padding(.bottom, bottomPadding)
+        }
+    }
+
+    private func topBar(isCompact: Bool) -> some View {
+        HStack(spacing: isCompact ? 12 : 28) {
+            LevitBrand(isCompact: isCompact)
 
             Spacer()
 
-            EventPill()
-            SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount)
+            EventPill(isCompact: isCompact)
+            SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount, isCompact: isCompact)
 
             Button {
                 addingJudge = true
             } label: {
-                HStack(spacing: 12) {
+                HStack(spacing: isCompact ? 8 : 12) {
                     Text(String(store.selectedJudge.prefix(2)))
                         .font(.caption.weight(.bold))
-                        .frame(width: 42, height: 42)
+                        .frame(width: isCompact ? 34 : 42, height: isCompact ? 34 : 42)
                         .background(LevitTheme.softFill, in: Circle())
                     VStack(alignment: .leading, spacing: 2) {
                         Text(store.selectedJudge)
-                            .font(.headline.weight(.bold))
-                        Text("Juez")
-                            .font(.caption)
-                            .foregroundStyle(LevitTheme.muted)
+                            .font((isCompact ? Font.callout : .headline).weight(.bold))
+                        if !isCompact {
+                            Text("Juez")
+                                .font(.caption)
+                                .foregroundStyle(LevitTheme.muted)
+                        }
                     }
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.bold))
@@ -262,34 +314,34 @@ private struct DashboardView: View {
         }
     }
 
-    private var greeting: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func greeting(isPhoneLandscape: Bool) -> some View {
+        VStack(alignment: .leading, spacing: isPhoneLandscape ? 4 : 8) {
             Text("Buenos dias,")
-                .font(.title2.weight(.semibold))
+                .font((isPhoneLandscape ? Font.callout : .title2).weight(.semibold))
                 .foregroundStyle(LevitTheme.muted)
             Text(store.selectedJudge)
-                .font(.system(size: 58, weight: .black, design: .rounded))
+                .font(.system(size: isPhoneLandscape ? 36 : 58, weight: .black, design: .rounded))
                 .foregroundStyle(LevitTheme.pink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
             Text("Estas lista para calificar.\nQue comience el flow!")
-                .font(.title3.weight(.medium))
+                .font((isPhoneLandscape ? Font.callout : .title3).weight(.medium))
                 .foregroundStyle(LevitTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    private var metrics: some View {
-        HStack(spacing: 18) {
-            MetricCard(icon: "calendar.badge.checkmark", value: "\(completedCount)", label: "Calificadas", detail: "\(percentage(completedCount, store.routines.count))% del bloque")
-            MetricCard(icon: "clock", value: nextRoutine?.time.isEmpty == false ? nextRoutine!.time : "00:42", label: "Proxima rutina", detail: nextRoutine.map { "#\($0.id) \($0.name)" } ?? "Sin rutina")
-            MetricCard(icon: "star", value: averageScore, label: "Promedio actual", detail: "Tu promedio general")
-            MetricCard(icon: "checkmark.circle", value: "\(syncPercent)%", label: "Sincronizacion", detail: store.pendingSyncCount == 0 ? "Todo al dia" : "\(store.pendingSyncCount) pendiente")
+    private func metrics(isCompact: Bool) -> some View {
+        HStack(spacing: isCompact ? 10 : 18) {
+            MetricCard(icon: "calendar.badge.checkmark", value: "\(completedCount)", label: "Calificadas", detail: "\(percentage(completedCount, store.routines.count))% del bloque", isCompact: isCompact)
+            MetricCard(icon: "clock", value: nextRoutine?.time.isEmpty == false ? nextRoutine!.time : "00:42", label: "Proxima rutina", detail: nextRoutine.map { "#\($0.id) \($0.name)" } ?? "Sin rutina", isCompact: isCompact)
+            MetricCard(icon: "star", value: averageScore, label: "Promedio actual", detail: "Tu promedio general", isCompact: isCompact)
+            MetricCard(icon: "checkmark.circle", value: "\(syncPercent)%", label: "Sincronizacion", detail: store.pendingSyncCount == 0 ? "Todo al dia" : "\(store.pendingSyncCount) pendiente", isCompact: isCompact)
         }
     }
 
     private func pendingRoutinesCard(isCompact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: isCompact ? 10 : 13) {
+        VStack(alignment: .leading, spacing: isCompact ? 7 : 9) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Proximas coreografias")
@@ -315,37 +367,31 @@ private struct DashboardView: View {
                 .buttonStyle(.plain)
             }
 
-            VStack(spacing: isCompact ? 4 : 8) {
+            VStack(spacing: isCompact ? 6 : 8) {
                 ForEach(Array(pendingPreviewRoutines.enumerated()), id: \.element.id) { index, routine in
-                    DashboardRoutineRow(
+                    DashboardRoutineCard(
                         routine: routine,
                         position: index + 1,
-                        isPrimary: !isCompact && index == 0,
-                        isSelected: routine.id == nextRoutine?.id
+                        isSelected: routine.id == nextRoutine?.id,
+                        isCompact: isCompact
                     ) {
                         store.selectedRoutineID = routine.id
-                        section = .jueceo
                     }
                 }
             }
         }
-        .padding(isCompact ? 16 : 20)
-        .frame(height: isCompact ? 286 : 342, alignment: .top)
-        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(LevitTheme.cardStroke))
-        .shadow(color: .black.opacity(0.05), radius: 22, x: 0, y: 12)
     }
 
-    private var enterJudgingButton: some View {
+    private func enterJudgingButton(isCompact: Bool) -> some View {
         Button {
             section = .jueceo
         } label: {
             Label("Entrar al jueceo", systemImage: "play.fill")
-                .font(.system(size: 24, weight: .black, design: .rounded))
+                .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 22)
+                .padding(.vertical, isCompact ? 16 : 22)
                 .foregroundStyle(.white)
-                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 22))
+                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
                 .shadow(color: LevitTheme.pink.opacity(0.24), radius: 18, x: 0, y: 10)
         }
         .buttonStyle(.plain)
@@ -423,19 +469,23 @@ struct LevitTag: View {
 }
 
 struct LevitBrand: View {
+    var isCompact = false
+
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: isCompact ? 8 : 12) {
             Image(systemName: "figure.dance")
-                .font(.system(size: 30, weight: .bold))
+                .font(.system(size: isCompact ? 22 : 30, weight: .bold))
                 .foregroundStyle(LevitTheme.pink)
             VStack(alignment: .leading, spacing: 1) {
                 Text("LEVITATE")
-                    .font(.system(size: 20, weight: .black))
-                    .tracking(4)
-                Text("JUDGING SYSTEM")
-                    .font(.system(size: 8, weight: .bold))
-                    .tracking(3)
-                    .foregroundStyle(LevitTheme.muted)
+                    .font(.system(size: isCompact ? 15 : 20, weight: .black))
+                    .tracking(isCompact ? 2.5 : 4)
+                if !isCompact {
+                    Text("JUDGING SYSTEM")
+                        .font(.system(size: 8, weight: .bold))
+                        .tracking(3)
+                        .foregroundStyle(LevitTheme.muted)
+                }
             }
         }
         .foregroundStyle(LevitTheme.ink)
@@ -444,6 +494,7 @@ struct LevitBrand: View {
 
 struct EventPill: View {
     @EnvironmentObject private var store: JudgingStore
+    var isCompact = false
 
     var body: some View {
         Menu {
@@ -467,17 +518,20 @@ struct EventPill: View {
                 Label("Actualizar eventos", systemImage: "arrow.clockwise")
             }
         } label: {
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: isCompact ? 1 : 4) {
                 HStack(spacing: 6) {
                     Text(currentTitle)
-                        .font(.headline.weight(.bold))
+                        .font((isCompact ? Font.callout : .headline).weight(.bold))
+                        .lineLimit(1)
                     Image(systemName: "chevron.down")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LevitTheme.muted)
                 }
-                Text("\(store.routines.count) coreografias")
-                    .font(.caption)
-                    .foregroundStyle(LevitTheme.muted)
+                if !isCompact {
+                    Text("\(store.routines.count) coreografias")
+                        .font(.caption)
+                        .foregroundStyle(LevitTheme.muted)
+                }
             }
             .foregroundStyle(LevitTheme.ink)
         }
@@ -492,6 +546,7 @@ struct EventPill: View {
 struct SyncPill: View {
     let status: SyncStatus
     let pendingCount: Int
+    var isCompact = false
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -502,11 +557,13 @@ struct SyncPill: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(status.title)
-                    .font(.headline.weight(.bold))
+                    .font((isCompact ? Font.callout : .headline).weight(.bold))
                     .foregroundStyle(LevitTheme.ink)
-                Text(pendingCount > 0 ? "\(pendingCount) cambios pendientes" : "Sincronizado hace 30 seg")
-                    .font(.caption)
-                    .foregroundStyle(LevitTheme.muted)
+                if !isCompact {
+                    Text(pendingCount > 0 ? "\(pendingCount) cambios pendientes" : "Sincronizado hace 30 seg")
+                        .font(.caption)
+                        .foregroundStyle(LevitTheme.muted)
+                }
             }
         }
     }
@@ -526,18 +583,19 @@ struct MetricCard: View {
     let value: String
     let label: String
     let detail: String
+    var isCompact = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: isCompact ? 7 : 10) {
+            HStack(spacing: isCompact ? 8 : 12) {
                 Image(systemName: icon)
-                    .font(.headline.weight(.bold))
+                    .font((isCompact ? Font.callout : .headline).weight(.bold))
                     .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 34, height: 34)
+                    .frame(width: isCompact ? 28 : 34, height: isCompact ? 28 : 34)
                     .background(LevitTheme.palePink, in: Circle())
 
                 Text(value)
-                    .font(.title2.weight(.black))
+                    .font((isCompact ? Font.title3 : .title2).weight(.black))
                     .foregroundStyle(LevitTheme.ink)
                     .lineLimit(1)
                     .minimumScaleFactor(0.65)
@@ -554,70 +612,89 @@ struct MetricCard: View {
                     .minimumScaleFactor(0.72)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 116, maxHeight: 116, alignment: .leading)
-        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.cardStroke))
+        .padding(isCompact ? 12 : 16)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 92 : 116, maxHeight: isCompact ? 92 : 116, alignment: .leading)
+        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: isCompact ? 16 : 18))
+        .overlay(RoundedRectangle(cornerRadius: isCompact ? 16 : 18).stroke(LevitTheme.cardStroke))
         .shadow(color: .black.opacity(0.045), radius: 18, x: 0, y: 10)
     }
 }
 
-private struct DashboardRoutineRow: View {
+private struct DashboardRoutineCard: View {
     let routine: Routine
     let position: Int
-    let isPrimary: Bool
     let isSelected: Bool
+    let isCompact: Bool
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: isPrimary ? 16 : 14) {
+        HStack(spacing: isCompact ? 10 : 16) {
+            Button(action: action) {
                 Text("#\(routine.id)")
-                    .font(isPrimary ? .title3.monospacedDigit().weight(.black) : .callout.monospacedDigit().weight(.black))
-                    .foregroundStyle(isSelected || isPrimary ? LevitTheme.pink : LevitTheme.ink)
-                    .frame(width: isPrimary ? 68 : 58, height: isPrimary ? 54 : nil, alignment: .center)
-                    .background(isPrimary ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 14))
+                    .font((isCompact ? Font.callout : .headline).monospacedDigit().weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: isCompact ? 48 : 58, height: isCompact ? 42 : 48)
+                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 13))
+            }
+            .buttonStyle(.plain)
 
-                VStack(alignment: .leading, spacing: isPrimary ? 4 : 2) {
-                    Text(routine.name)
-                        .font(isPrimary ? .title3.weight(.black) : .callout.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                    Text(routine.academy)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(LevitTheme.muted)
-                        .lineLimit(1)
-                }
+            Button(action: action) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(routine.name)
+                            .font(.callout.weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                        if isSelected {
+                            Text("Proxima")
+                                .font(.system(size: 10, weight: .black, design: .rounded))
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 4)
+                                .foregroundStyle(LevitTheme.pink)
+                                .background(LevitTheme.palePink, in: Capsule())
+                        }
+                    }
 
-                Spacer()
+                    HStack(spacing: 7) {
+                        Text(routine.academy)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(LevitTheme.muted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
 
-                HStack(spacing: 6) {
-                    LevitTag(routine.category)
-                    LevitTag(routine.genre)
-                }
-                .frame(maxWidth: 190, alignment: .trailing)
-
-                if isPrimary {
-                    Label("Entrar", systemImage: "play.fill")
-                        .font(.caption.weight(.black))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .foregroundStyle(.white)
-                        .background(LevitTheme.pinkGradient, in: Capsule())
-                } else {
-                    Image(systemName: isSelected ? "play.fill" : "chevron.right")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted.opacity(0.65))
-                        .frame(width: 20)
+                        HStack(spacing: 5) {
+                            LevitTag(routine.division)
+                            LevitTag(routine.category)
+                        }
+                    }
                 }
             }
-            .padding(.horizontal, isPrimary ? 14 : 12)
-            .padding(.vertical, isPrimary ? 7 : 6)
-            .frame(height: isPrimary ? 68 : 36)
-            .background(isSelected ? LevitTheme.palePink.opacity(0.82) : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: isPrimary ? 16 : 12))
-            .overlay(RoundedRectangle(cornerRadius: isPrimary ? 16 : 12).stroke(isSelected ? LevitTheme.pink.opacity(0.16) : .clear))
+            .buttonStyle(.plain)
+
+            Spacer(minLength: isCompact ? 8 : 16)
+
+            Button(action: action) {
+                Label("Ver detalles", systemImage: "eye")
+                    .font(.caption.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 9)
+                    .foregroundStyle(LevitTheme.ink)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, isCompact ? 12 : 14)
+        .padding(.vertical, isCompact ? 6 : 7)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 54 : 62, maxHeight: isCompact ? 54 : 62, alignment: .leading)
+        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay {
+            RoundedRectangle(cornerRadius: 18)
+                .stroke(isSelected ? LevitTheme.pink.opacity(0.24) : LevitTheme.cardStroke, lineWidth: isSelected ? 1.4 : 1)
+        }
+        .shadow(color: .black.opacity(isSelected ? 0.07 : 0.045), radius: 18, x: 0, y: 10)
     }
 }
 
@@ -659,19 +736,21 @@ private struct DashboardBackground: View {
 }
 
 private struct DancerHero: View {
+    var isCompact = false
+
     var body: some View {
         ZStack {
             ForEach(0..<7) { index in
                 Capsule()
                     .fill(index.isMultiple(of: 2) ? LevitTheme.pink.opacity(0.09) : LevitTheme.softFill)
-                    .frame(width: 250 + CGFloat(index * 25), height: 12)
+                    .frame(width: (isCompact ? 155 : 250) + CGFloat(index * (isCompact ? 16 : 25)), height: isCompact ? 8 : 12)
                     .rotationEffect(.degrees(Double(index) * 16 - 52))
                     .offset(x: CGFloat(index * 6) - 20, y: CGFloat(index * 8) - 22)
                     .blur(radius: 5)
             }
 
             Image(systemName: "figure.dance")
-                .font(.system(size: 128, weight: .thin))
+                .font(.system(size: isCompact ? 82 : 128, weight: .thin))
                 .foregroundStyle(
                     LinearGradient(colors: [.gray.opacity(0.48), LevitTheme.pink.opacity(0.72)], startPoint: .top, endPoint: .bottom)
                 )

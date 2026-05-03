@@ -11,8 +11,8 @@ cd android_tablet_flutter
 flutter create . --platforms=android
 flutter pub get
 flutter run \
-  --dart-define=SUPABASE_URL=https://your-project-ref.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=your-anon-public-key
+  --dart-define=SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
 ```
 
 ## Current parity surface

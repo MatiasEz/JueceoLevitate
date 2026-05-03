@@ -50,7 +50,7 @@ class JudgingStore extends ChangeNotifier {
 
     if (!api.isConfigured) {
       syncState = SyncState.localOnly;
-      syncMessage = 'Configura SUPABASE_URL y SUPABASE_ANON_KEY con --dart-define.';
+      syncMessage = 'Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY con --dart-define.';
       notifyListeners();
       return;
     }

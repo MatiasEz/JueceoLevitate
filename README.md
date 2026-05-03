@@ -20,7 +20,7 @@ El importador ahora valida columnas obligatorias, rutinas duplicadas, generos si
 
 ```bash
 cp .env.example .env
-# Completa SUPABASE_URL, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY.
+# Completa SUPABASE_SERVICE_ROLE_KEY para importar datos admin.
 python3 scripts/import_excel_to_app_data.py "/ruta/al/bloque.xlsx" --supabase --event-slug "bloque-2-2024" --event-name "Bloque 2 2024"
 ```
 
@@ -28,7 +28,7 @@ python3 scripts/import_excel_to_app_data.py "/ruta/al/bloque.xlsx" --supabase --
 
 La migracion inicial esta en `supabase/migrations/0001_initial_schema.sql`. Crea las tablas `events`, `routines`, `judges`, `criteria_templates`, `criteria`, `scores` y `feedback`.
 
-La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_ANON_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback pendientes.
+La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback pendientes.
 
 ## Android tablets
 
@@ -39,8 +39,8 @@ cd android_tablet_flutter
 flutter create . --platforms=android
 flutter pub get
 flutter run \
-  --dart-define=SUPABASE_URL=https://your-project-ref.supabase.co \
-  --dart-define=SUPABASE_ANON_KEY=your-anon-public-key
+  --dart-define=SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co \
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
 ```
 
 ## Funciones

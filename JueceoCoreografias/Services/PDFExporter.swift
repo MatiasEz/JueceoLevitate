@@ -2,15 +2,20 @@ import Foundation
 import UIKit
 
 enum PDFExporter {
-    static func export(results: [RoutineResult], judges: [String], sourceName: String) -> URL? {
+    static func export(
+        results: [RoutineResult],
+        judges: [String],
+        sourceName: String,
+        title: String = "Calificaciones y Dictamen Final"
+    ) -> URL? {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("calificaciones-dictamen-final")
+            .appendingPathComponent(filename(for: title))
             .appendingPathExtension("pdf")
 
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
             kCGPDFContextCreator as String: "Jueceo Coreografias",
-            kCGPDFContextTitle as String: "Calificaciones y Dictamen Final"
+            kCGPDFContextTitle as String: title
         ]
 
         let page = CGRect(x: 0, y: 0, width: 842, height: 595)
@@ -20,7 +25,7 @@ enum PDFExporter {
             try renderer.writePDF(to: url) { context in
                 context.beginPage()
                 var y: CGFloat = 42
-                draw("Calificaciones y Dictamen Final", x: 36, y: y, size: 20, weight: .bold)
+                draw(title, x: 36, y: y, size: 20, weight: .bold)
                 y += 20
                 draw("Fuente: \(sourceName)", x: 36, y: y, size: 10, color: .darkGray)
                 y += 34
@@ -72,5 +77,19 @@ enum PDFExporter {
         let font = UIFont.systemFont(ofSize: size, weight: weight)
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: color]
         text.draw(at: CGPoint(x: x, y: y), withAttributes: attributes)
+    }
+
+    private static func filename(for title: String) -> String {
+        let allowed = title
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .lowercased()
+            .map { character -> Character in
+                character.isLetter || character.isNumber ? character : "-"
+            }
+        let compact = String(allowed)
+            .split(separator: "-")
+            .filter { !$0.isEmpty }
+            .joined(separator: "-")
+        return compact.isEmpty ? "dictamen-final" : compact
     }
 }

@@ -7,11 +7,13 @@ import 'models.dart';
 import 'supabase_api.dart';
 
 const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+const supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final store = JudgingStore(SupabaseApi(url: supabaseUrl, anonKey: supabaseAnonKey));
+  final supabaseApiKey = supabasePublishableKey.isNotEmpty ? supabasePublishableKey : supabaseAnonKey;
+  final store = JudgingStore(SupabaseApi(url: supabaseUrl, anonKey: supabaseApiKey));
   await store.initialize();
   runApp(JueceoTabletApp(store: store));
 }
