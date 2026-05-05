@@ -30,6 +30,7 @@ struct RemoteEventBundle: Sendable {
     let appData: AppData
     let scores: [RemoteScoreRow]
     let feedback: [RemoteFeedbackRow]
+    let favorites: [RemoteFavoriteRow]
 }
 
 struct RemoteScoreRow: Codable, Hashable, Sendable {
@@ -59,6 +60,22 @@ struct RemoteFeedbackRow: Codable, Hashable, Sendable {
         case routineID = "routine_id"
         case judgeID = "judge_id"
         case body
+    }
+}
+
+struct RemoteFavoriteRow: Codable, Hashable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String
+    let judgeID: String
+    let category: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case judgeID = "judge_id"
+        case category
     }
 }
 
@@ -96,6 +113,49 @@ struct FeedbackUpsertRow: Encodable, Sendable {
     }
 }
 
+struct FavoriteUpsertRow: Encodable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String
+    let judgeID: String
+    let category: String
+    let deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case judgeID = "judge_id"
+        case category
+        case deviceID = "device_id"
+    }
+}
+
+struct FavoriteDeleteRow: Sendable {
+    let eventID: String
+    let blockID: String
+    let judgeID: String
+    let category: String
+}
+
+struct ExcelImportUploadRow: Encodable, Sendable {
+    let eventSlug: String
+    let eventName: String
+    let filename: String
+    let fileSize: Int
+    let payloadBase64: String
+    let deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventSlug = "event_slug"
+        case eventName = "event_name"
+        case filename
+        case fileSize = "file_size"
+        case payloadBase64 = "payload_base64"
+        case deviceID = "device_id"
+    }
+}
+
 actor RemoteJudgingRepository {
     private let config: SupabaseConfig
     private let decoder = JSONDecoder()
@@ -106,10 +166,19 @@ actor RemoteJudgingRepository {
     }
 
     func fetchEvents() async throws -> [EventSummary] {
-        let rows: [EventRow] = try await get(
-            "events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc"
-        )
-        return rows.map(\.summary)
+        do {
+            let rows: [EventRow] = try await get(
+                "events?select=id,slug,name,source_name,is_active,event_type&or=(event_type.is.null,event_type.eq.event)&order=is_active.desc,created_at.desc"
+            )
+            return rows.map(\.summary)
+        } catch {
+            let rows: [EventRow] = try await get(
+                "events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc"
+            )
+            return rows
+                .filter { $0.eventType != "legacy_block" && $0.eventType != "archived" }
+                .map(\.summary)
+        }
     }
 
     func fetchEventBundle(eventID: String) async throws -> RemoteEventBundle {
@@ -121,13 +190,16 @@ actor RemoteJudgingRepository {
             throw RemoteJudgingError.missingEvent
         }
 
+        async let blocks: [BlockRow] = fetchBlocks(eventID: encodedEventID)
         async let routines: [RoutineRow] = get("routines?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let judges: [JudgeRow] = get("judges?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let templates: [TemplateRow] = get("criteria_templates?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let criteria: [CriterionRowDTO] = get("criteria?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let scores: [RemoteScoreRow] = get("scores?select=*&event_id=eq.\(encodedEventID)")
         async let feedback: [RemoteFeedbackRow] = get("feedback?select=*&event_id=eq.\(encodedEventID)")
+        async let favorites: [RemoteFavoriteRow] = fetchFavorites(eventID: encodedEventID)
 
+        let blockRows = try await blocks
         let routineRows = try await routines
         let judgeRows = try await judges
         let templateRows = try await templates
@@ -143,29 +215,47 @@ actor RemoteJudgingRepository {
             )
         }
         let appRoutines = routineRows.map(\.routine)
-        let blocks = Dictionary(grouping: routineRows, by: \.block)
+        let routinesByBlockID = Dictionary(grouping: routineRows) { row in
+            let blockID = row.blockID ?? ""
+            return blockID.isEmpty ? row.block.stableRemoteID : blockID
+        }
+        let remoteBlocks = blockRows.map { block in
+            let rows = (routinesByBlockID[block.blockID] ?? [])
+                .sorted { $0.sortOrder < $1.sortOrder }
+            return DanceBlock(
+                blockID: block.blockID,
+                name: block.name,
+                title: block.title,
+                sortOrder: block.sortOrder,
+                isActive: block.isActive,
+                routines: rows.map(\.routine)
+            )
+        }
+        let fallbackBlocks = Dictionary(grouping: routineRows, by: \.block)
             .map { block, rows in
                 let sortedRows = rows.sorted { $0.sortOrder < $1.sortOrder }
                 return DanceBlock(
+                    blockID: sortedRows.first?.blockID,
                     name: block,
                     title: sortedRows.first?.blockTitle ?? "",
+                    sortOrder: sortedRows.first?.sortOrder,
+                    isActive: nil,
                     routines: sortedRows.map(\.routine)
                 )
             }
             .sorted { lhs, rhs in
-                let left = routineRows.first { $0.block == lhs.name }?.sortOrder ?? 0
-                let right = routineRows.first { $0.block == rhs.name }?.sortOrder ?? 0
-                return left < right
+                (lhs.sortOrder ?? 0) < (rhs.sortOrder ?? 0)
             }
 
         let appData = AppData(
             sourceName: event.sourceName.isEmpty ? event.name : event.sourceName,
-            blocks: blocks,
+            blocks: remoteBlocks.isEmpty ? fallbackBlocks : remoteBlocks,
             routines: appRoutines,
             templates: judgingTemplates,
-            judges: judgeRows.map(\.name)
+            judges: judgeRows.map(\.name),
+            judgeProfiles: judgeRows.map(\.profile)
         )
-        return try await RemoteEventBundle(event: event, appData: appData, scores: scores, feedback: feedback)
+        return try await RemoteEventBundle(event: event, appData: appData, scores: scores, feedback: feedback, favorites: favorites)
     }
 
     func upsertScores(_ rows: [ScoreUpsertRow]) async throws {
@@ -184,14 +274,63 @@ actor RemoteJudgingRepository {
         )
     }
 
+    func upsertFavorites(_ rows: [FavoriteUpsertRow]) async throws {
+        try await post(
+            "routine_favorites?on_conflict=event_id,block_id,judge_id,category",
+            rows,
+            prefer: "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
+    func deleteFavorites(_ rows: [FavoriteDeleteRow]) async throws {
+        for row in rows {
+            try await delete(
+                "routine_favorites?event_id=eq.\(Self.queryValue(row.eventID))&block_id=eq.\(Self.queryValue(row.blockID))&judge_id=eq.\(Self.queryValue(row.judgeID))&category=eq.\(Self.queryValue(row.category))",
+                prefer: "return=minimal"
+            )
+        }
+    }
+
+    func uploadExcelImport(_ row: ExcelImportUploadRow) async throws {
+        try await post(
+            "excel_imports",
+            row,
+            prefer: "return=minimal"
+        )
+    }
+
     private func get<T: Decodable>(_ path: String) async throws -> T {
         let data = try await request(path: path, method: "GET")
         return try decoder.decode(T.self, from: data)
     }
 
+    private func fetchBlocks(eventID: String) async throws -> [BlockRow] {
+        do {
+            return try await get("blocks?select=*&event_id=eq.\(eventID)&order=sort_order.asc")
+        } catch {
+            return []
+        }
+    }
+
+    private func fetchFavorites(eventID: String) async throws -> [RemoteFavoriteRow] {
+        do {
+            return try await get("routine_favorites?select=*&event_id=eq.\(eventID)")
+        } catch {
+            return []
+        }
+    }
+
     private func post<T: Encodable>(_ path: String, _ body: T, prefer: String) async throws {
         let data = try encoder.encode(body)
         _ = try await request(path: path, method: "POST", body: data, prefer: prefer)
+    }
+
+    private func delete(_ path: String, prefer: String) async throws {
+        _ = try await request(path: path, method: "DELETE", prefer: prefer)
+    }
+
+    private static func queryValue(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
     }
 
     private func request(path: String, method: String, body: Data? = nil, prefer: String? = nil) async throws -> Data {
@@ -246,9 +385,10 @@ private struct EventRow: Codable, Sendable {
     let name: String
     let sourceName: String
     let isActive: Bool
+    let eventType: String?
 
     var summary: EventSummary {
-        EventSummary(id: id, slug: slug, name: name, sourceName: sourceName, isActive: isActive)
+        EventSummary(id: id, slug: slug, name: name, sourceName: sourceName, isActive: isActive, eventType: eventType)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -257,12 +397,30 @@ private struct EventRow: Codable, Sendable {
         case name
         case sourceName = "source_name"
         case isActive = "is_active"
+        case eventType = "event_type"
+    }
+}
+
+private struct BlockRow: Codable, Sendable {
+    let blockID: String
+    let name: String
+    let title: String
+    let sortOrder: Int
+    let isActive: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case blockID = "block_id"
+        case name
+        case title
+        case sortOrder = "sort_order"
+        case isActive = "is_active"
     }
 }
 
 private struct RoutineRow: Codable, Sendable {
     let eventID: String
     let routineID: String
+    let blockID: String?
     let block: String
     let blockTitle: String
     let sortOrder: Int
@@ -280,6 +438,7 @@ private struct RoutineRow: Codable, Sendable {
     var routine: Routine {
         Routine(
             id: routineID,
+            blockID: blockID,
             block: block,
             name: name,
             academy: academy,
@@ -297,6 +456,7 @@ private struct RoutineRow: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case eventID = "event_id"
         case routineID = "routine_id"
+        case blockID = "block_id"
         case block
         case blockTitle = "block_title"
         case sortOrder = "sort_order"
@@ -316,10 +476,20 @@ private struct RoutineRow: Codable, Sendable {
 private struct JudgeRow: Codable, Sendable {
     let judgeID: String
     let name: String
+    let role: String?
+
+    var profile: JudgeProfile {
+        JudgeProfile(
+            judgeID: judgeID,
+            name: name,
+            role: UserRole(rawValue: role ?? "") ?? (judgeID == "ati" ? .admin : .judge)
+        )
+    }
 
     enum CodingKeys: String, CodingKey {
         case judgeID = "judge_id"
         case name
+        case role
     }
 }
 

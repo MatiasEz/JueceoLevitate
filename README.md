@@ -24,11 +24,41 @@ cp .env.example .env
 python3 scripts/import_excel_to_app_data.py "/ruta/al/bloque.xlsx" --supabase --event-slug "bloque-2-2024" --event-name "Bloque 2 2024"
 ```
 
+Con el modelo nuevo, `event-slug` representa la competencia/evento padre y la hoja del Excel representa el bloque. Ejemplo:
+
+```bash
+python3 scripts/import_excel_to_app_data.py "/ruta/Bloque3.xlsx" --supabase --event-slug "levitate-segunda-edicion-2024" --event-name "Levitate Segunda Edicion 2024"
+```
+
+El importador reemplaza solo el bloque incluido en el Excel y corta si ese bloque ya tiene puntajes o feedback. Para un reset admin deliberado, usa `--force-replace`.
+
 ## Backend Supabase
 
 La migracion inicial esta en `supabase/migrations/0001_initial_schema.sql`. Crea las tablas `events`, `routines`, `judges`, `criteria_templates`, `criteria`, `scores` y `feedback`.
 
-La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback pendientes.
+El modelo de bloques esta en `supabase/migrations/0003_blocks_model.sql`. Agrega `blocks`, `events.event_type` y `block_id` en rutinas/puntajes/feedback para que la estructura quede:
+
+```text
+events -> blocks -> routines -> scores/feedback
+```
+
+Si la BD ya tiene `bloque-2` a `bloque-7` como eventos separados, despues de correr la migracion 0003 podes consolidarlos sin perder los legacy:
+
+```bash
+python3 scripts/migrate_legacy_blocks_to_event.py
+```
+
+Los roles de personas estan en `supabase/migrations/0004_judge_roles.sql`. `ATI` queda como `admin`; los demas quedan como `judge`. En la app, los jueces solo acceden a calificacion, mientras que admin puede entrar a bloques, ranking, dictamen e importacion Excel.
+
+Los favoritos de vestuario/coreografia/musica se guardan en `supabase/migrations/0005_routine_favorites.sql`. La tabla mantiene una seleccion por evento, bloque, juez y tipo de favorito.
+
+La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback/favoritos pendientes.
+
+La tab `Excel` sube archivos a `excel_imports` como importaciones pendientes. Para habilitarla, corre tambien `supabase/migrations/0002_excel_imports.sql`. Luego procesa esas cargas con una key admin:
+
+```bash
+python3 scripts/process_excel_imports.py --allow-errors
+```
 
 ## Android tablets
 

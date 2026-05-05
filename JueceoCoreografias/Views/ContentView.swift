@@ -6,25 +6,34 @@ import UIKit
 
 enum AppSection: String, CaseIterable, Identifiable {
     case inicio = "Inicio"
+    case admin = "Admin"
     case bloques = "Coreografias"
     case jueceo = "Jueceo"
     case calificaciones = "Ranking"
     case dictamen = "Dictamen"
+    case importar = "Excel"
 
     var id: String { rawValue }
 
     var symbol: String {
         switch self {
         case .inicio: "house"
+        case .admin: "person.crop.circle.fill"
         case .bloques: "list.bullet"
         case .jueceo: "checklist"
         case .calificaciones: "chart.bar.fill"
         case .dictamen: "trophy.fill"
+        case .importar: "square.and.arrow.up"
         }
     }
 
-    var isDark: Bool {
-        self == .jueceo || self == .calificaciones
+    var requiresAdmin: Bool {
+        switch self {
+        case .inicio, .jueceo:
+            false
+        case .admin, .bloques, .calificaciones, .dictamen, .importar:
+            true
+        }
     }
 }
 
@@ -80,29 +89,36 @@ struct ContentView: View {
     @State private var sharing = false
 
     var body: some View {
+        let activeSection = store.canAccess(section) ? section : .inicio
+
         ZStack {
-            section.isDark ? LevitTheme.dark.ignoresSafeArea() : LevitTheme.paper.ignoresSafeArea()
+            LevitTheme.paper.ignoresSafeArea()
 
             Group {
-                if section == .inicio {
+                if activeSection == .inicio {
                     DashboardView(
                         section: $section,
                         addingJudge: $addingJudge,
                         onExportPDF: exportPDF
                     )
-                } else if section == .jueceo {
-                    JudgingView(routines: store.routines, addingJudge: $addingJudge) {
-                        section = .bloques
+                } else if activeSection == .jueceo {
+                    JudgingView(routines: store.visibleRoutines, addingJudge: $addingJudge) {
+                        section = store.canAccess(.bloques) ? .bloques : .inicio
                     }
                 } else {
                     HStack(spacing: 0) {
                         LevitSidebar(section: $section)
 
-                        switch section {
+                        switch activeSection {
                         case .inicio:
                             EmptyView()
+                        case .admin:
+                            AdminView(section: $section, onExportPDF: exportPDF)
                         case .bloques:
-                            BlocksView(blocks: store.blocks, routines: store.routines) { routine in
+                            BlocksView(
+                                blocks: store.selectedBlock.map { [$0] } ?? store.blocks,
+                                routines: store.visibleRoutines
+                            ) { routine in
                                 store.selectedRoutineID = routine.id
                                 section = .jueceo
                             }
@@ -114,11 +130,20 @@ struct ContentView: View {
                             DictamenView(results: store.rankings) { results, title in
                                 exportPDF(results: results, title: title)
                             }
+                        case .importar:
+                            ExcelImportView()
                         }
                     }
                 }
             }
+
+            if store.isLoadingBackendData {
+                BackendLoadingOverlay(message: store.backendLoadingMessage)
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .zIndex(10)
+            }
         }
+        .animation(.easeInOut(duration: 0.18), value: store.isLoadingBackendData)
         .alert("Nuevo juez", isPresented: $addingJudge) {
             TextField("Nombre", text: $newJudgeName)
             Button("Agregar") {
@@ -137,6 +162,11 @@ struct ContentView: View {
         .task {
             await store.startRemoteSyncIfAvailable()
         }
+        .onChange(of: store.selectedJudge) { _, _ in
+            if !store.canAccess(section) {
+                section = .inicio
+            }
+        }
     }
 
     private func exportPDF() {
@@ -146,6 +176,40 @@ struct ContentView: View {
     private func exportPDF(results: [RoutineResult]?, title: String) {
         store.exportPDF(results: results, title: title)
         sharing = store.lastPDFURL != nil
+    }
+}
+
+private struct BackendLoadingOverlay: View {
+    let message: String
+
+    var body: some View {
+        ZStack {
+            LevitTheme.paper.opacity(0.82)
+                .ignoresSafeArea()
+
+            VStack(spacing: 18) {
+                ProgressView()
+                    .controlSize(.large)
+                    .tint(LevitTheme.pink)
+
+                VStack(spacing: 6) {
+                    Text("Cargando datos")
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(LevitTheme.ink)
+                    Text(message)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(LevitTheme.muted)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                }
+            }
+            .padding(.horizontal, 34)
+            .padding(.vertical, 28)
+            .frame(width: 360)
+            .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.line))
+            .shadow(color: .black.opacity(0.10), radius: 28, x: 0, y: 14)
+        }
     }
 }
 
@@ -160,7 +224,7 @@ private struct DashboardView: View {
     }
 
     private var orderedRoutines: [Routine] {
-        store.routines.sorted { lhs, rhs in
+        store.visibleRoutines.sorted { lhs, rhs in
             let lhsNumber = Int(lhs.id) ?? Int.max
             let rhsNumber = Int(rhs.id) ?? Int.max
             if lhsNumber == rhsNumber {
@@ -284,33 +348,12 @@ private struct DashboardView: View {
 
             Spacer()
 
-            EventPill(isCompact: isCompact)
-            SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount, isCompact: isCompact)
-
-            Button {
-                addingJudge = true
-            } label: {
-                HStack(spacing: isCompact ? 8 : 12) {
-                    Text(String(store.selectedJudge.prefix(2)))
-                        .font(.caption.weight(.bold))
-                        .frame(width: isCompact ? 34 : 42, height: isCompact ? 34 : 42)
-                        .background(LevitTheme.softFill, in: Circle())
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(store.selectedJudge)
-                            .font((isCompact ? Font.callout : .headline).weight(.bold))
-                        if !isCompact {
-                            Text("Juez")
-                                .font(.caption)
-                                .foregroundStyle(LevitTheme.muted)
-                        }
-                    }
-                    Image(systemName: "chevron.down")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                }
-                .foregroundStyle(LevitTheme.ink)
+            if store.isAdmin {
+                EventPill(isCompact: isCompact)
+                BlockPill(isCompact: isCompact)
             }
-            .buttonStyle(.plain)
+            SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount, isCompact: isCompact)
+            JudgePill(addingJudge: $addingJudge, isCompact: isCompact)
         }
     }
 
@@ -333,7 +376,7 @@ private struct DashboardView: View {
 
     private func metrics(isCompact: Bool) -> some View {
         HStack(spacing: isCompact ? 10 : 18) {
-            MetricCard(icon: "calendar.badge.checkmark", value: "\(completedCount)", label: "Calificadas", detail: "\(percentage(completedCount, store.routines.count))% del bloque", isCompact: isCompact)
+            MetricCard(icon: "calendar.badge.checkmark", value: "\(completedCount)", label: "Calificadas", detail: "\(percentage(completedCount, store.visibleRoutines.count))% del bloque", isCompact: isCompact)
             MetricCard(icon: "clock", value: nextRoutine?.time.isEmpty == false ? nextRoutine!.time : "00:42", label: "Proxima rutina", detail: nextRoutine.map { "#\($0.id) \($0.name)" } ?? "Sin rutina", isCompact: isCompact)
             MetricCard(icon: "star", value: averageScore, label: "Promedio actual", detail: "Tu promedio general", isCompact: isCompact)
             MetricCard(icon: "checkmark.circle", value: "\(syncPercent)%", label: "Sincronizacion", detail: store.pendingSyncCount == 0 ? "Todo al dia" : "\(store.pendingSyncCount) pendiente", isCompact: isCompact)
@@ -354,17 +397,19 @@ private struct DashboardView: View {
 
                 Spacer()
 
-                Button {
-                    section = .bloques
-                } label: {
-                    Label("Ver todas", systemImage: "eye")
-                        .font(.callout.weight(.bold))
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 11)
-                        .foregroundStyle(LevitTheme.ink)
-                        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                if store.canAccess(.bloques) {
+                    Button {
+                        section = .bloques
+                    } label: {
+                        Label("Ver todas", systemImage: "eye")
+                            .font(.callout.weight(.bold))
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 11)
+                            .foregroundStyle(LevitTheme.ink)
+                            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
             VStack(spacing: isCompact ? 6 : 8) {
@@ -383,20 +428,44 @@ private struct DashboardView: View {
     }
 
     private func enterJudgingButton(isCompact: Bool) -> some View {
-        Button {
-            section = .jueceo
-        } label: {
-            Label("Entrar al jueceo", systemImage: "play.fill")
-                .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, isCompact ? 16 : 22)
-                .foregroundStyle(.white)
-                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
-                .shadow(color: LevitTheme.pink.opacity(0.24), radius: 18, x: 0, y: 10)
+        HStack(spacing: isCompact ? 10 : 14) {
+            Button {
+                section = .jueceo
+            } label: {
+                Label("Entrar al jueceo", systemImage: "play.fill")
+                    .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .frame(maxWidth: .infinity)
+                    .frame(minWidth: 0)
+                    .padding(.vertical, isCompact ? 16 : 22)
+                    .foregroundStyle(.white)
+                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
+                    .shadow(color: LevitTheme.pink.opacity(0.24), radius: 18, x: 0, y: 10)
+            }
+            .buttonStyle(.plain)
+            .disabled(nextRoutine == nil)
+            .opacity(nextRoutine == nil ? 0.45 : 1)
+
+            if store.isAdmin {
+                Button {
+                    section = .admin
+                } label: {
+                    Label("Menu general", systemImage: "square.grid.2x2")
+                        .font(.system(size: isCompact ? 17 : 21, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity)
+                        .frame(minWidth: 0)
+                        .padding(.vertical, isCompact ? 16 : 22)
+                        .foregroundStyle(LevitTheme.ink)
+                        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
+                        .overlay(RoundedRectangle(cornerRadius: isCompact ? 18 : 22).stroke(LevitTheme.line))
+                        .shadow(color: .black.opacity(0.04), radius: 18, x: 0, y: 10)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .buttonStyle(.plain)
-        .disabled(nextRoutine == nil)
-        .opacity(nextRoutine == nil ? 0.45 : 1)
     }
 
     private var averageScore: String {
@@ -413,6 +482,7 @@ private struct DashboardView: View {
 }
 
 struct LevitSidebar: View {
+    @EnvironmentObject private var store: JudgingStore
     @Binding var section: AppSection
 
     var body: some View {
@@ -423,17 +493,14 @@ struct LevitSidebar: View {
                 .frame(width: 42, height: 42)
 
             VStack(spacing: 18) {
-                ForEach(AppSection.allCases) { item in
+                ForEach(AppSection.allCases.filter { store.canAccess($0) }) { item in
                     Button {
                         section = item
                     } label: {
-                        Image(systemName: item.symbol)
-                            .font(.system(size: 17, weight: .semibold))
-                            .frame(width: 44, height: 44)
-                            .foregroundStyle(section == item ? LevitTheme.pink : LevitTheme.muted)
-                            .background(section == item ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 14))
+                        SidebarItemIcon(item: item, isSelected: section == item)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(item.rawValue)
                 }
             }
 
@@ -445,6 +512,30 @@ struct LevitSidebar: View {
         .overlay(alignment: .trailing) {
             Rectangle().fill(LevitTheme.line).frame(width: 1)
         }
+    }
+}
+
+private struct SidebarItemIcon: View {
+    let item: AppSection
+    let isSelected: Bool
+
+    var body: some View {
+        ZStack {
+            Image(systemName: item.symbol)
+                .font(.system(size: 17, weight: .semibold))
+
+            if item == .admin {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(isSelected ? .white : LevitTheme.pink)
+                    .frame(width: 16, height: 16)
+                    .background(isSelected ? LevitTheme.pink : LevitTheme.palePink, in: Circle())
+                    .offset(x: 12, y: 12)
+            }
+        }
+        .frame(width: 44, height: 44)
+        .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
+        .background(isSelected ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -540,6 +631,98 @@ struct EventPill: View {
     private var currentTitle: String {
         store.availableEvents.first { $0.id == store.selectedEventID }?.name
             ?? (store.blocks.first?.name.capitalized ?? "Bloque")
+    }
+}
+
+struct BlockPill: View {
+    @EnvironmentObject private var store: JudgingStore
+    var isCompact = false
+
+    var body: some View {
+        Menu {
+            if store.blocks.isEmpty {
+                Text("Sin bloques")
+            } else {
+                ForEach(store.blocks) { block in
+                    Button {
+                        store.selectBlock(block)
+                    } label: {
+                        Label(block.name, systemImage: block.id == store.selectedBlock?.id ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: isCompact ? 1 : 4) {
+                HStack(spacing: 6) {
+                    Text(store.selectedBlock?.name ?? "Bloque")
+                        .font((isCompact ? Font.callout : .headline).weight(.bold))
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
+                if !isCompact {
+                    Text("\(store.visibleRoutines.count) coreografias")
+                        .font(.caption)
+                        .foregroundStyle(LevitTheme.muted)
+                }
+            }
+            .foregroundStyle(LevitTheme.ink)
+        }
+    }
+}
+
+struct JudgePill: View {
+    @EnvironmentObject private var store: JudgingStore
+    @Binding var addingJudge: Bool
+    var isCompact = false
+
+    var body: some View {
+        Menu {
+            if store.judges.isEmpty {
+                Text("Sin jueces")
+            } else {
+                ForEach(store.judges, id: \.self) { judge in
+                    Button {
+                        store.selectJudge(judge)
+                    } label: {
+                        Label(judge, systemImage: judge == store.selectedJudge ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                addingJudge = true
+            } label: {
+                Label("Nuevo juez", systemImage: "person.badge.plus")
+            }
+        } label: {
+            HStack(spacing: isCompact ? 8 : 12) {
+                Text(String(store.selectedJudge.prefix(2)))
+                    .font(.caption.weight(.bold))
+                    .frame(width: isCompact ? 34 : 42, height: isCompact ? 34 : 42)
+                    .background(LevitTheme.softFill, in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(store.selectedJudge)
+                        .font((isCompact ? Font.callout : .headline).weight(.bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                    if !isCompact {
+                        Text(store.roleTitle(for: store.selectedJudge))
+                            .font(.caption)
+                            .foregroundStyle(LevitTheme.muted)
+                    }
+                }
+
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+            .foregroundStyle(LevitTheme.ink)
+        }
     }
 }
 
@@ -687,8 +870,8 @@ private struct DashboardRoutineCard: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, isCompact ? 12 : 14)
-        .padding(.vertical, isCompact ? 6 : 7)
-        .frame(maxWidth: .infinity, minHeight: isCompact ? 54 : 62, maxHeight: isCompact ? 54 : 62, alignment: .leading)
+        .padding(.vertical, isCompact ? 14 : 15)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 70 : 78, maxHeight: isCompact ? 70 : 78, alignment: .leading)
         .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 18))
         .overlay {
             RoundedRectangle(cornerRadius: 18)

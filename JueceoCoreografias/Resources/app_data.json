@@ -2,11 +2,15 @@
   "sourceName": "Bloque2.xlsx",
   "blocks": [
     {
+      "blockID": "bloque-2",
       "name": "BLOQUE 2",
       "title": "SEGUNDA EDICIÓN 2024 · BLOQUE 2 · DANZAS NO AÉREAS · DOMINGO 6 DE OCTUBRE",
+      "sortOrder": 51,
+      "isActive": false,
       "routines": [
         {
           "id": "51",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Sembrando Vida",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -21,6 +25,7 @@
         },
         {
           "id": "52",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Pintoras",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -35,6 +40,7 @@
         },
         {
           "id": "53",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Sirenas",
           "academy": "MARAN’S DANZA",
@@ -49,6 +55,7 @@
         },
         {
           "id": "54",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Haciendo Mis Sueños Realidad",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -63,6 +70,7 @@
         },
         {
           "id": "55",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Lilo",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -77,6 +85,7 @@
         },
         {
           "id": "56",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Merlina",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -91,6 +100,7 @@
         },
         {
           "id": "57",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Mi Viaje",
           "academy": "MARAN’S DANZA",
@@ -105,6 +115,7 @@
         },
         {
           "id": "58",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Vals Mexicano",
           "academy": "MAGIC BALLET",
@@ -119,6 +130,7 @@
         },
         {
           "id": "59",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Trauma",
           "academy": "MARAN’S DANZA",
@@ -133,6 +145,7 @@
         },
         {
           "id": "60",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Gotitas",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -147,6 +160,7 @@
         },
         {
           "id": "61",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Old Party",
           "academy": "MARAN’S DANZA",
@@ -161,6 +175,7 @@
         },
         {
           "id": "62",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Ritmo Coqueto",
           "academy": "BALLET&KIDS",
@@ -175,6 +190,7 @@
         },
         {
           "id": "63",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Lazo",
           "academy": "MARAN’S DANZA",
@@ -189,6 +205,7 @@
         },
         {
           "id": "64",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Por Siempre",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -203,6 +220,7 @@
         },
         {
           "id": "65",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Solo De Derbake Mix",
           "academy": "CON LOS PIES EN EL AIRE",
@@ -217,6 +235,7 @@
         },
         {
           "id": "66",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Catrinas",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -231,6 +250,7 @@
         },
         {
           "id": "67",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Camino Inevitbale Hacia El Final De Mi Vida",
           "academy": "MARAN’S DANZA",
@@ -245,6 +265,7 @@
         },
         {
           "id": "68",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Te Olvidaré",
           "academy": "MITOTIA CENTRO DE ARTE",
@@ -259,6 +280,7 @@
         },
         {
           "id": "69",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Love Runs Out",
           "academy": "MARAN’S DANZA",
@@ -273,6 +295,7 @@
         },
         {
           "id": "70",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Dolls",
           "academy": "RELEASE ESCUELA DE DANZA",
@@ -287,6 +310,7 @@
         },
         {
           "id": "71",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Inspectoras",
           "academy": "MARAN’S DANZA",
@@ -301,6 +325,7 @@
         },
         {
           "id": "72",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Zozobra",
           "academy": "SPIRALIS ARTES ESCÉNICAS",
@@ -315,6 +340,7 @@
         },
         {
           "id": "73",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "El Dolor De Las Mascaras",
           "academy": "MARAN’S DANZA",
@@ -329,6 +355,7 @@
         },
         {
           "id": "74",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Ethereal",
           "academy": "CUERPOS EN VUELO",
@@ -343,6 +370,7 @@
         },
         {
           "id": "75",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Mi Declive",
           "academy": "MARAN’S DANZA",
@@ -357,6 +385,7 @@
         },
         {
           "id": "76",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Sirio",
           "academy": "SPIRALIS ARTES ESCÉNICAS",
@@ -371,6 +400,7 @@
         },
         {
           "id": "77",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Madre Tierra",
           "academy": "MARAN’S DANZA",
@@ -385,6 +415,7 @@
         },
         {
           "id": "78",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Saki Saki",
           "academy": "CON LOS PIES EN EL AIRE",
@@ -399,6 +430,7 @@
         },
         {
           "id": "79",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Run",
           "academy": "MARAN’S DANZA",
@@ -413,6 +445,7 @@
         },
         {
           "id": "80",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Conciente",
           "academy": "CON LOS PIES EN EL AIRE",
@@ -427,6 +460,7 @@
         },
         {
           "id": "81",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Raqs Al Sayf",
           "academy": "ACADEMIA MERAKI",
@@ -441,6 +475,7 @@
         },
         {
           "id": "82",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Oriental Fan Veils",
           "academy": "ARTI AITY STUDIO",
@@ -455,6 +490,7 @@
         },
         {
           "id": "83",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "This Is Me - Grand Show Man",
           "academy": "MAGIC BALLET",
@@ -469,6 +505,7 @@
         },
         {
           "id": "84",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Ying-Yang",
           "academy": "FUSIÓNARTE DANZA",
@@ -483,6 +520,7 @@
         },
         {
           "id": "85",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Graduados",
           "academy": "MARAN’S DANZA",
@@ -497,6 +535,7 @@
         },
         {
           "id": "86",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Vals Mexicano",
           "academy": "MAGIC BALLET",
@@ -511,6 +550,7 @@
         },
         {
           "id": "87",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Anhelo",
           "academy": "MARAN’S DANZA",
@@ -525,6 +565,7 @@
         },
         {
           "id": "88",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Carmen Habanera",
           "academy": "MAGIC BALLET",
@@ -539,6 +580,7 @@
         },
         {
           "id": "89",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Algo De Mi Se Quedara Con Tigo",
           "academy": "MARAN’S DANZA",
@@ -553,6 +595,7 @@
         },
         {
           "id": "90",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "Brilla",
           "academy": "MARAN’S DANZA",
@@ -567,6 +610,7 @@
         },
         {
           "id": "91",
+          "blockID": "bloque-2",
           "block": "BLOQUE 2",
           "name": "De Mi Enamorate",
           "academy": "MARAN’S DANZA",
@@ -585,6 +629,7 @@
   "routines": [
     {
       "id": "51",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Sembrando Vida",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -599,6 +644,7 @@
     },
     {
       "id": "52",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Pintoras",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -613,6 +659,7 @@
     },
     {
       "id": "53",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Sirenas",
       "academy": "MARAN’S DANZA",
@@ -627,6 +674,7 @@
     },
     {
       "id": "54",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Haciendo Mis Sueños Realidad",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -641,6 +689,7 @@
     },
     {
       "id": "55",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Lilo",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -655,6 +704,7 @@
     },
     {
       "id": "56",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Merlina",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -669,6 +719,7 @@
     },
     {
       "id": "57",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Mi Viaje",
       "academy": "MARAN’S DANZA",
@@ -683,6 +734,7 @@
     },
     {
       "id": "58",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Vals Mexicano",
       "academy": "MAGIC BALLET",
@@ -697,6 +749,7 @@
     },
     {
       "id": "59",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Trauma",
       "academy": "MARAN’S DANZA",
@@ -711,6 +764,7 @@
     },
     {
       "id": "60",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Gotitas",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -725,6 +779,7 @@
     },
     {
       "id": "61",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Old Party",
       "academy": "MARAN’S DANZA",
@@ -739,6 +794,7 @@
     },
     {
       "id": "62",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Ritmo Coqueto",
       "academy": "BALLET&KIDS",
@@ -753,6 +809,7 @@
     },
     {
       "id": "63",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Lazo",
       "academy": "MARAN’S DANZA",
@@ -767,6 +824,7 @@
     },
     {
       "id": "64",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Por Siempre",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -781,6 +839,7 @@
     },
     {
       "id": "65",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Solo De Derbake Mix",
       "academy": "CON LOS PIES EN EL AIRE",
@@ -795,6 +854,7 @@
     },
     {
       "id": "66",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Catrinas",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -809,6 +869,7 @@
     },
     {
       "id": "67",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Camino Inevitbale Hacia El Final De Mi Vida",
       "academy": "MARAN’S DANZA",
@@ -823,6 +884,7 @@
     },
     {
       "id": "68",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Te Olvidaré",
       "academy": "MITOTIA CENTRO DE ARTE",
@@ -837,6 +899,7 @@
     },
     {
       "id": "69",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Love Runs Out",
       "academy": "MARAN’S DANZA",
@@ -851,6 +914,7 @@
     },
     {
       "id": "70",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Dolls",
       "academy": "RELEASE ESCUELA DE DANZA",
@@ -865,6 +929,7 @@
     },
     {
       "id": "71",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Inspectoras",
       "academy": "MARAN’S DANZA",
@@ -879,6 +944,7 @@
     },
     {
       "id": "72",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Zozobra",
       "academy": "SPIRALIS ARTES ESCÉNICAS",
@@ -893,6 +959,7 @@
     },
     {
       "id": "73",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "El Dolor De Las Mascaras",
       "academy": "MARAN’S DANZA",
@@ -907,6 +974,7 @@
     },
     {
       "id": "74",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Ethereal",
       "academy": "CUERPOS EN VUELO",
@@ -921,6 +989,7 @@
     },
     {
       "id": "75",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Mi Declive",
       "academy": "MARAN’S DANZA",
@@ -935,6 +1004,7 @@
     },
     {
       "id": "76",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Sirio",
       "academy": "SPIRALIS ARTES ESCÉNICAS",
@@ -949,6 +1019,7 @@
     },
     {
       "id": "77",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Madre Tierra",
       "academy": "MARAN’S DANZA",
@@ -963,6 +1034,7 @@
     },
     {
       "id": "78",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Saki Saki",
       "academy": "CON LOS PIES EN EL AIRE",
@@ -977,6 +1049,7 @@
     },
     {
       "id": "79",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Run",
       "academy": "MARAN’S DANZA",
@@ -991,6 +1064,7 @@
     },
     {
       "id": "80",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Conciente",
       "academy": "CON LOS PIES EN EL AIRE",
@@ -1005,6 +1079,7 @@
     },
     {
       "id": "81",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Raqs Al Sayf",
       "academy": "ACADEMIA MERAKI",
@@ -1019,6 +1094,7 @@
     },
     {
       "id": "82",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Oriental Fan Veils",
       "academy": "ARTI AITY STUDIO",
@@ -1033,6 +1109,7 @@
     },
     {
       "id": "83",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "This Is Me - Grand Show Man",
       "academy": "MAGIC BALLET",
@@ -1047,6 +1124,7 @@
     },
     {
       "id": "84",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Ying-Yang",
       "academy": "FUSIÓNARTE DANZA",
@@ -1061,6 +1139,7 @@
     },
     {
       "id": "85",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Graduados",
       "academy": "MARAN’S DANZA",
@@ -1075,6 +1154,7 @@
     },
     {
       "id": "86",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Vals Mexicano",
       "academy": "MAGIC BALLET",
@@ -1089,6 +1169,7 @@
     },
     {
       "id": "87",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Anhelo",
       "academy": "MARAN’S DANZA",
@@ -1103,6 +1184,7 @@
     },
     {
       "id": "88",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Carmen Habanera",
       "academy": "MAGIC BALLET",
@@ -1117,6 +1199,7 @@
     },
     {
       "id": "89",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Algo De Mi Se Quedara Con Tigo",
       "academy": "MARAN’S DANZA",
@@ -1131,6 +1214,7 @@
     },
     {
       "id": "90",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "Brilla",
       "academy": "MARAN’S DANZA",
@@ -1145,6 +1229,7 @@
     },
     {
       "id": "91",
+      "blockID": "bloque-2",
       "block": "BLOQUE 2",
       "name": "De Mi Enamorate",
       "academy": "MARAN’S DANZA",
@@ -1842,6 +1927,29 @@
   "judges": [
     "DAVE",
     "EVA",
-    "DANIEL"
+    "DANIEL",
+    "ATI"
+  ],
+  "judgeProfiles": [
+    {
+      "judgeID": "dave",
+      "name": "DAVE",
+      "role": "judge"
+    },
+    {
+      "judgeID": "eva",
+      "name": "EVA",
+      "role": "judge"
+    },
+    {
+      "judgeID": "daniel",
+      "name": "DANIEL",
+      "role": "judge"
+    },
+    {
+      "judgeID": "ati",
+      "name": "ATI",
+      "role": "admin"
+    }
   ]
 }

@@ -34,13 +34,9 @@ struct ScoresView: View {
             rankingTable
         }
         .padding(30)
-        .background(
-            LinearGradient(
-                colors: [LevitTheme.dark, Color(red: 0.065, green: 0.075, blue: 0.095)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LevitTheme.paper.ignoresSafeArea())
     }
 
     private var header: some View {
@@ -49,7 +45,7 @@ struct ScoresView: View {
                 HStack(spacing: 12) {
                     Text("Ranking en vivo")
                         .font(.system(size: 31, weight: .black, design: .rounded))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(LevitTheme.ink)
                     Text("En vivo")
                         .font(.caption.weight(.black))
                         .padding(.horizontal, 10)
@@ -59,7 +55,7 @@ struct ScoresView: View {
                 }
                 Text("Actualizado hace 15 seg")
                     .font(.callout.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.48))
+                    .foregroundStyle(LevitTheme.muted)
             }
 
             Spacer()
@@ -89,11 +85,12 @@ struct ScoresView: View {
                 }
             }
             .pickerStyle(.menu)
-            .tint(.white)
+            .tint(LevitTheme.ink)
             .frame(maxWidth: 260)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(.white.opacity(0.08), in: Capsule())
+            .background(LevitTheme.softFill, in: Capsule())
+            .overlay(Capsule().stroke(LevitTheme.line))
 
             Picker("Genero", selection: $selectedGenre) {
                 ForEach(genres, id: \.self) { genre in
@@ -101,11 +98,12 @@ struct ScoresView: View {
                 }
             }
             .pickerStyle(.menu)
-            .tint(.white)
+            .tint(LevitTheme.ink)
             .frame(maxWidth: 220)
             .padding(.horizontal, 12)
             .padding(.vertical, 9)
-            .background(.white.opacity(0.08), in: Capsule())
+            .background(LevitTheme.softFill, in: Capsule())
+            .overlay(Capsule().stroke(LevitTheme.line))
 
             Spacer()
 
@@ -117,8 +115,9 @@ struct ScoresView: View {
                     .font(.callout.weight(.bold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 12)
-                    .foregroundStyle(.white.opacity(0.82))
-                    .background(.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 13))
+                    .foregroundStyle(LevitTheme.ink)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                    .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
             }
             .buttonStyle(.plain)
         }
@@ -141,19 +140,19 @@ struct ScoresView: View {
                     HStack(spacing: 16) {
                         Text("\(index + 1)")
                             .font(.callout.weight(.black))
-                            .foregroundStyle(index < 3 ? LevitTheme.pink : .white.opacity(0.72))
+                            .foregroundStyle(index < 3 ? LevitTheme.pink : LevitTheme.muted)
                             .frame(width: 34, height: 34)
-                            .background(.white.opacity(index < 3 ? 0.13 : 0.08), in: Circle())
+                            .background(index < 3 ? LevitTheme.palePink : LevitTheme.softFill, in: Circle())
                             .frame(width: 58)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(result.routine.academy.isEmpty ? result.routine.name : result.routine.academy)
                                 .font(.headline.weight(.black))
-                                .foregroundStyle(.white)
+                                .foregroundStyle(LevitTheme.ink)
                                 .lineLimit(1)
                             Text("#\(result.routine.id) \(result.routine.name)")
                                 .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.45))
+                                .foregroundStyle(LevitTheme.muted)
                                 .lineLimit(1)
                         }
                         .frame(width: 330, alignment: .leading)
@@ -162,18 +161,18 @@ struct ScoresView: View {
 
                         Text(result.totalScore.formatted(.number.precision(.fractionLength(1))))
                             .font(.headline.monospacedDigit().weight(.bold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(LevitTheme.ink)
                             .frame(width: 120)
 
                         Text(result.total > 0 ? result.total.formatted(.number.precision(.fractionLength(1))) : "-")
                             .font(.headline.monospacedDigit().weight(.bold))
-                            .foregroundStyle(.white.opacity(0.82))
+                            .foregroundStyle(LevitTheme.muted)
                             .frame(width: 120)
                     }
                     .padding(.horizontal, 18)
                     .padding(.vertical, 14)
-                    .background(.white.opacity(index == 0 ? 0.10 : 0.055), in: RoundedRectangle(cornerRadius: 15))
-                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(.white.opacity(0.04)))
+                    .background(index == 0 ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 15))
+                    .overlay(RoundedRectangle(cornerRadius: 15).stroke(LevitTheme.line))
                 }
             }
             .padding(.bottom, 24)
@@ -183,7 +182,7 @@ struct ScoresView: View {
     private func tableHeader(_ title: String, width: CGFloat, alignment: Alignment = .center) -> some View {
         Text(title)
             .font(.caption.weight(.black))
-            .foregroundStyle(.white.opacity(0.43))
+            .foregroundStyle(LevitTheme.muted)
             .frame(width: width, alignment: alignment)
     }
 
@@ -204,8 +203,9 @@ private struct FilterCapsule: View {
                 .font(.callout.weight(.black))
                 .padding(.horizontal, 18)
                 .padding(.vertical, 11)
-                .foregroundStyle(isSelected ? LevitTheme.dark : .white.opacity(0.72))
-                .background(isSelected ? .white : .white.opacity(0.08), in: Capsule())
+                .foregroundStyle(isSelected ? .white : LevitTheme.muted)
+                .background(isSelected ? LevitTheme.pink : LevitTheme.softFill, in: Capsule())
+                .overlay(Capsule().stroke(isSelected ? LevitTheme.pink.opacity(0.22) : LevitTheme.line))
         }
         .buttonStyle(.plain)
     }

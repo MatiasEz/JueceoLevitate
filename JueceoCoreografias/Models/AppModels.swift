@@ -6,17 +6,58 @@ struct AppData: Codable, Sendable {
     var routines: [Routine]
     var templates: [JudgingTemplate]
     var judges: [String]
+    var judgeProfiles: [JudgeProfile]?
+}
+
+enum UserRole: String, Codable, Sendable {
+    case judge
+    case admin
+}
+
+enum FavoriteCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+    case costume
+    case choreography
+    case music
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .costume: "Vestuario favorito"
+        case .choreography: "Coreografia favorita"
+        case .music: "Musica favorita"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .costume: "tshirt.fill"
+        case .choreography: "figure.dance"
+        case .music: "music.note"
+        }
+    }
+}
+
+struct JudgeProfile: Codable, Identifiable, Hashable, Sendable {
+    var id: String { judgeID }
+    let judgeID: String
+    let name: String
+    let role: UserRole
 }
 
 struct DanceBlock: Codable, Identifiable, Sendable {
-    var id: String { name }
+    var id: String { blockID ?? name.stableRemoteID }
+    let blockID: String?
     let name: String
     let title: String
+    let sortOrder: Int?
+    let isActive: Bool?
     let routines: [Routine]
 }
 
 struct Routine: Codable, Identifiable, Hashable, Sendable {
     let id: String
+    let blockID: String?
     let block: String
     let name: String
     let academy: String
@@ -59,6 +100,31 @@ struct EventSummary: Identifiable, Codable, Hashable, Sendable {
     let name: String
     let sourceName: String
     let isActive: Bool
+    let eventType: String?
+}
+
+struct ExcelImportSummary: Sendable {
+    let fileName: String
+    let eventName: String
+    let eventSlug: String
+    let fileSize: Int
+}
+
+enum ExcelImportError: LocalizedError {
+    case missingRemoteConfiguration
+    case invalidFile
+    case fileTooLarge(maxMegabytes: Int)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no esta configurado."
+        case .invalidFile:
+            "No se pudo leer el Excel seleccionado."
+        case let .fileTooLarge(maxMegabytes):
+            "El archivo supera el maximo de \(maxMegabytes) MB."
+        }
+    }
 }
 
 enum SyncStatus: Equatable, Sendable {
@@ -88,6 +154,15 @@ enum SyncStatus: Equatable, Sendable {
         case .syncing: "arrow.triangle.2.circlepath.icloud"
         case .pending: "icloud.and.arrow.up"
         case .offline: "icloud.slash"
+        }
+    }
+
+    var isBackendLoading: Bool {
+        switch self {
+        case .connecting:
+            true
+        case .localOnly, .online, .syncing, .pending, .offline:
+            false
         }
     }
 }

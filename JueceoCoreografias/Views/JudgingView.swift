@@ -23,7 +23,7 @@ struct JudgingView: View {
             )
         } else {
             ContentUnavailableView("Sin coreografias", systemImage: "tray")
-                .foregroundStyle(.white)
+                .foregroundStyle(LevitTheme.ink)
         }
     }
 }
@@ -64,7 +64,7 @@ private struct JudgeSelectionView: View {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)], spacing: 18) {
                     ForEach(store.judges, id: \.self) { judge in
                         Button {
-                            store.selectedJudge = judge
+                            store.selectJudge(judge)
                             onContinue()
                         } label: {
                             VStack(spacing: 16) {
@@ -95,6 +95,9 @@ private struct JudgeSelectionView: View {
             .frame(maxWidth: 1040, alignment: .leading)
         }
         .background(LevitTheme.paper)
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LevitTheme.paper.ignoresSafeArea())
     }
 }
 
@@ -133,10 +136,14 @@ private struct ScoreSheet: View {
         return routines.indices.contains(next) ? routines[next] : nil
     }
 
+    private var scoringJudge: String {
+        store.scoringJudge
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topHeader
-            Divider().overlay(.white.opacity(0.08))
+            Divider().overlay(LevitTheme.line)
 
             HStack(alignment: .top, spacing: 28) {
                 ScrollView {
@@ -145,7 +152,7 @@ private struct ScoreSheet: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 Text(group.section.uppercased())
                                     .font(.caption.weight(.black))
-                                    .foregroundStyle(.white.opacity(0.48))
+                                    .foregroundStyle(LevitTheme.muted)
                                     .tracking(0.6)
 
                                 VStack(spacing: 0) {
@@ -182,17 +189,12 @@ private struct ScoreSheet: View {
             }
             .padding(.horizontal, 34)
         }
-        .foregroundStyle(.white)
-        .background(
-            LinearGradient(
-                colors: [LevitTheme.dark, Color(red: 0.035, green: 0.043, blue: 0.060)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LevitTheme.paper.ignoresSafeArea())
         .onAppear(perform: loadDraft)
         .onChange(of: routine.id) { _, _ in loadDraft() }
-        .onChange(of: store.selectedJudge) { _, _ in loadDraft() }
+        .onChange(of: scoringJudge) { _, _ in loadDraft() }
     }
 
     private var topHeader: some View {
@@ -200,7 +202,7 @@ private struct ScoreSheet: View {
             Button(action: onBack) {
                 Label("Volver", systemImage: "chevron.left")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.74))
+                    .foregroundStyle(LevitTheme.muted)
             }
             .buttonStyle(.plain)
 
@@ -216,11 +218,11 @@ private struct ScoreSheet: View {
                     .minimumScaleFactor(0.62)
                 Text(routine.academy)
                     .font(.callout.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.48))
+                    .foregroundStyle(LevitTheme.muted)
                 HStack(spacing: 6) {
-                    LevitTag(routine.division, dark: true)
-                    LevitTag(routine.category, dark: true)
-                    LevitTag(routine.genre, dark: true)
+                    LevitTag(routine.division)
+                    LevitTag(routine.category)
+                    LevitTag(routine.genre)
                 }
             }
             .frame(maxWidth: 520)
@@ -232,7 +234,7 @@ private struct ScoreSheet: View {
                     .font(.title2.monospacedDigit().weight(.black))
                 Text("Calificadas")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.58))
+                    .foregroundStyle(LevitTheme.muted)
                 ProgressView(value: Double(routineIndex), total: Double(max(routines.count, 1)))
                     .tint(LevitTheme.pink)
                     .frame(width: 190)
@@ -245,90 +247,61 @@ private struct ScoreSheet: View {
 
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
+            if store.isAdminEditingAsJudge {
+                Label("Editando como \(scoringJudge)", systemImage: "person.fill.viewfinder")
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 15))
+            }
+
             VStack(alignment: .leading, spacing: 22) {
                 Text("PUNTAJE TOTAL")
                     .font(.caption.weight(.black))
-                    .foregroundStyle(.white.opacity(0.52))
+                    .foregroundStyle(LevitTheme.muted)
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(subtotal.formatted(.number.precision(.fractionLength(0...1))))
                         .font(.system(size: 72, weight: .black, design: .rounded))
                         .foregroundStyle(LevitTheme.hotPink)
                     Text("/ \(maxTotal.formatted(.number.precision(.fractionLength(0...1))))")
                         .font(.title.weight(.black))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(LevitTheme.muted)
                 }
 
                 Label(didSubmit ? "Sincronizado" : store.syncStatus.title, systemImage: didSubmit ? "checkmark.circle.fill" : store.syncStatus.systemImage)
                     .font(.callout.weight(.bold))
-                    .foregroundStyle(didSubmit ? .green : .white.opacity(0.65))
+                    .foregroundStyle(didSubmit ? Color.green : LevitTheme.muted)
             }
             .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(LevitTheme.darkPanel2.opacity(0.92), in: RoundedRectangle(cornerRadius: 20))
+            .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 20))
+            .overlay(RoundedRectangle(cornerRadius: 20).stroke(LevitTheme.line))
+
+            favoriteButtons
 
             Button {
-                submitScores(advance: false)
-            } label: {
-                Label("Guardar", systemImage: "square.and.arrow.down")
-                    .font(.headline.weight(.black))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 17)
-                    .foregroundStyle(.white)
-                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                submitScores(advance: true)
+                saveScores(advance: true)
             } label: {
                 HStack {
-                    Text("Guardar y siguiente")
+                    Text("Guardar y continuar")
                     Spacer()
                     Image(systemName: "arrow.right")
                 }
                 .font(.headline.weight(.black))
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
-                .foregroundStyle(.white)
+                .foregroundStyle(LevitTheme.ink)
                 .background(.clear, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.75), lineWidth: 1.4))
             }
             .buttonStyle(.plain)
 
-            if let nextRoutine {
-                Divider().overlay(.white.opacity(0.08))
-                Button {
-                    store.selectedRoutineID = nextRoutine.id
-                } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "figure.dance")
-                            .font(.title3.weight(.bold))
-                            .foregroundStyle(LevitTheme.pink)
-                            .frame(width: 48, height: 48)
-                            .background(LevitTheme.pink.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+            if !routines.isEmpty {
+                Divider().overlay(LevitTheme.line)
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Siguiente:")
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white.opacity(0.42))
-                            Text("#\(nextRoutine.id) \(nextRoutine.name)")
-                                .font(.callout.weight(.black))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Text(nextRoutine.academy)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white.opacity(0.48))
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .foregroundStyle(.white.opacity(0.68))
-                    }
-                    .padding(18)
-                    .background(LevitTheme.darkPanel2.opacity(0.82), in: RoundedRectangle(cornerRadius: 18))
-                }
-                .buttonStyle(.plain)
+                routinePicker
             }
 
             if let errorMessage {
@@ -342,11 +315,93 @@ private struct ScoreSheet: View {
         }
     }
 
+    private var favoriteButtons: some View {
+        VStack(spacing: 10) {
+            ForEach(FavoriteCategory.allCases) { category in
+                favoriteButton(category)
+            }
+        }
+    }
+
+    private func favoriteButton(_ category: FavoriteCategory) -> some View {
+        let isSelected = store.isFavorite(routine, category: category, judge: scoringJudge)
+        return Button {
+            store.toggleFavorite(category, routine: routine, judge: scoringJudge)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: category.systemImage)
+                    .font(.headline.weight(.bold))
+                    .frame(width: 28)
+
+                Text(category.title)
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Spacer()
+
+                Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.ink)
+            .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(isSelected ? LevitTheme.pink.opacity(0.45) : LevitTheme.line, lineWidth: isSelected ? 1.4 : 1))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var routinePicker: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "figure.dance")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(LevitTheme.pink)
+                .frame(width: 48, height: 48)
+                .background(LevitTheme.pink.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Coreografia del bloque")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+
+                Picker(
+                    "Coreografia del bloque",
+                    selection: Binding(
+                        get: { selectedRoutineIDForPicker },
+                        set: { store.selectedRoutineID = $0 }
+                    )
+                ) {
+                    ForEach(routines) { routine in
+                        Text("#\(routine.id) \(routine.name)")
+                            .tag(routine.id)
+                    }
+                }
+                .buttonStyle(.plain)
+                .pickerStyle(.menu)
+                .tint(LevitTheme.ink)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Image(systemName: "chevron.down")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(LevitTheme.muted)
+        }
+        .padding(18)
+        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+
+    private var selectedRoutineIDForPicker: String {
+        routines.contains { $0.id == store.selectedRoutineID } ? store.selectedRoutineID : routine.id
+    }
+
     private var penaltyControl: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("PENALIZACION")
                 .font(.caption.weight(.black))
-                .foregroundStyle(.white.opacity(0.48))
+                .foregroundStyle(LevitTheme.muted)
             HStack(spacing: 10) {
                 ForEach(["0", "-1", "-2", "Otro"], id: \.self) { item in
                     Button {
@@ -355,9 +410,9 @@ private struct ScoreSheet: View {
                         Text(item)
                             .font(.callout.weight(.black))
                             .frame(width: item == "Otro" ? 116 : 92, height: 42)
-                            .foregroundStyle(penalty == item ? .white : .white.opacity(0.66))
-                            .background(penalty == item ? LevitTheme.pink.opacity(0.22) : .white.opacity(0.06), in: RoundedRectangle(cornerRadius: 10))
-                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(penalty == item ? LevitTheme.pink : .clear))
+                            .foregroundStyle(penalty == item ? LevitTheme.pink : LevitTheme.ink)
+                            .background(penalty == item ? LevitTheme.palePink : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 10))
+                            .overlay(RoundedRectangle(cornerRadius: 10).stroke(penalty == item ? LevitTheme.pink : LevitTheme.line))
                     }
                     .buttonStyle(.plain)
                 }
@@ -366,34 +421,34 @@ private struct ScoreSheet: View {
     }
 
     private var feedbackEditor: some View {
-        let key = store.feedbackKey(routineID: routine.id, judge: store.selectedJudge)
+        let key = store.feedbackKey(routineID: routine.id, judge: scoringJudge)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("RETROALIMENTACION")
                     .font(.caption.weight(.black))
-                    .foregroundStyle(.white.opacity(0.48))
+                    .foregroundStyle(LevitTheme.muted)
                 Spacer()
                 Text("\((store.feedback[key] ?? "").count) / 300")
                     .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(.white.opacity(0.44))
+                    .foregroundStyle(LevitTheme.muted)
             }
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: Binding(
                     get: { store.feedback[key] ?? "" },
-                    set: { store.setFeedback(String($0.prefix(300)), routine: routine, judge: store.selectedJudge) }
+                    set: { store.setFeedback(String($0.prefix(300)), routine: routine, judge: scoringJudge) }
                 ))
                 .frame(minHeight: 96)
                 .padding(8)
                 .scrollContentBackground(.hidden)
-                .foregroundStyle(.white)
-                .background(LevitTheme.darkPanel, in: RoundedRectangle(cornerRadius: 13))
-                .overlay(RoundedRectangle(cornerRadius: 13).stroke(.white.opacity(0.08)))
+                .foregroundStyle(LevitTheme.ink)
+                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 13))
+                .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
 
                 if (store.feedback[key] ?? "").isEmpty {
                     Text("Excelente ejecucion tecnica y limpieza en las transiciones.")
                         .font(.callout.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.35))
+                        .foregroundStyle(LevitTheme.muted.opacity(0.75))
                         .padding(16)
                         .allowsHitTesting(false)
                 }
@@ -411,7 +466,7 @@ private struct ScoreSheet: View {
 
     private func loadDraft() {
         draftScores = Dictionary(uniqueKeysWithValues: template.criteria.map { criterion in
-            let saved = store.score(for: routine, judge: store.selectedJudge, criterion: criterion)
+            let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
             return (criterion.id, saved > 0 ? saved.formatted(.number.precision(.fractionLength(0...1))) : "")
         })
         didSubmit = false
@@ -419,25 +474,33 @@ private struct ScoreSheet: View {
         focusedCriterionID = nil
     }
 
-    private func submitScores(advance: Bool) {
+    private func saveScores(advance: Bool) {
+        guard validateScoresBeforeSaving() else { return }
+
+        let values = template.criteria.map { criterion in
+            let value = Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
+            return (criterion: criterion, value: value)
+        }
+
+        store.submitScores(values, routine: routine, judge: scoringJudge)
+        didSubmit = true
+        errorMessage = nil
+        focusedCriterionID = nil
+
+        if advance, let nextRoutine {
+            store.selectedRoutineID = nextRoutine.id
+        }
+    }
+
+    private func validateScoresBeforeSaving() -> Bool {
         guard let missingOrInvalid = template.criteria.first(where: { !isValidScoreText(draftScores[$0.id] ?? "", maxScore: $0.maxScore) }) else {
-            let values = template.criteria.map { criterion in
-                let value = Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
-                return (criterion: criterion, value: value)
-            }
-            store.submitScores(values, routine: routine, judge: store.selectedJudge)
-            didSubmit = true
-            errorMessage = nil
-            focusedCriterionID = nil
-            if advance, let nextRoutine {
-                store.selectedRoutineID = nextRoutine.id
-            }
-            return
+            return true
         }
 
         didSubmit = false
         errorMessage = "Completa todas las notas entre 0 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
         focusedCriterionID = missingOrInvalid.id
+        return false
     }
 
     private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {
@@ -483,11 +546,11 @@ private struct DarkCriterionRow: View {
             VStack(alignment: .leading, spacing: 5) {
                 Text("\(criterion.id). \(criterion.label)")
                     .font(.callout.weight(.black))
-                    .foregroundStyle(.white.opacity(0.92))
+                    .foregroundStyle(LevitTheme.ink)
                     .lineLimit(1)
                 Text("0 a \(criterion.maxScore.formatted(.number.precision(.fractionLength(0...1)))) puntos")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.42))
+                    .foregroundStyle(LevitTheme.muted)
             }
 
             Spacer()
@@ -496,8 +559,8 @@ private struct DarkCriterionRow: View {
                 Image(systemName: "minus")
                     .font(.headline.weight(.black))
                     .frame(width: 40, height: 40)
-                    .foregroundStyle(.white.opacity(0.78))
-                    .background(.white.opacity(0.10), in: Circle())
+                    .foregroundStyle(LevitTheme.ink)
+                    .background(LevitTheme.softFill, in: Circle())
             }
             .buttonStyle(.plain)
 
@@ -505,7 +568,7 @@ private struct DarkCriterionRow: View {
                 .keyboardType(.decimalPad)
                 .multilineTextAlignment(.center)
                 .font(.system(size: 26, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(.white)
+                .foregroundStyle(LevitTheme.ink)
                 .frame(width: 54, height: 42)
                 .focused(focusedCriterionID, equals: criterion.id)
 
@@ -513,16 +576,16 @@ private struct DarkCriterionRow: View {
                 Image(systemName: "plus")
                     .font(.headline.weight(.black))
                     .frame(width: 40, height: 40)
-                    .foregroundStyle(.white.opacity(0.78))
-                    .background(.white.opacity(0.10), in: Circle())
+                    .foregroundStyle(LevitTheme.ink)
+                    .background(LevitTheme.softFill, in: Circle())
             }
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
-        .background(LevitTheme.darkPanel2.opacity(0.68))
+        .background(LevitTheme.elevatedSurface)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(.black.opacity(0.22)).frame(height: 1)
+            Rectangle().fill(LevitTheme.line).frame(height: 1)
         }
     }
 }
