@@ -34,8 +34,10 @@ struct BlocksView: View {
             let result = store.result(for: routine)
             let matchesFilter: Bool
             switch selectedFilter {
-            case .all, .favorites:
+            case .all:
                 matchesFilter = true
+            case .favorites:
+                matchesFilter = store.hasFavorite(routine)
             case .pending:
                 matchesFilter = result.total == 0
             case .scored:
@@ -74,7 +76,9 @@ struct BlocksView: View {
                 .padding(.bottom, 28)
             }
         }
-        .background(LevitTheme.paper)
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LevitTheme.paper.ignoresSafeArea())
     }
 
     private var header: some View {
@@ -96,6 +100,7 @@ struct BlocksView: View {
                 TextField("Buscar coreografia", text: $searchText)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
+                    .foregroundStyle(LevitTheme.ink)
             }
             .font(.callout.weight(.semibold))
             .padding(.horizontal, 14)

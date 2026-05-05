@@ -6,26 +6,38 @@ final class JudgingStore: ObservableObject {
     @Published private(set) var appData: AppData
     @Published private(set) var availableEvents: [EventSummary] = []
     @Published private(set) var selectedEventID: String?
+    @Published private(set) var selectedBlockID: String?
     @Published private(set) var syncStatus: SyncStatus = .localOnly
     @Published private(set) var syncMessage: String?
     @Published var selectedRoutineID: String
-    @Published var selectedJudge: String
+    @Published var selectedJudge: String {
+        didSet { persistSelectedJudge() }
+    }
+    @Published private(set) var adminScoringJudge: String?
     @Published var scores: [String: Double] = [:] {
         didSet { persistScores() }
     }
     @Published var feedback: [String: String] = [:] {
         didSet { persistFeedback() }
     }
+    @Published var favoriteSelections: [String: String] = [:] {
+        didSet { persistFavoriteSelections() }
+    }
     @Published var lastPDFURL: URL?
 
     private let scoresKey = "jueceo.scores.v1"
     private let feedbackKey = "jueceo.feedback.v1"
+    private let favoriteSelectionsKey = "jueceo.favoriteSelections.v1"
     private let pendingScoreKeysKey = "jueceo.pendingScoreKeys.v1"
     private let pendingFeedbackKeysKey = "jueceo.pendingFeedbackKeys.v1"
+    private let pendingFavoriteKeysKey = "jueceo.pendingFavoriteKeys.v1"
     private let selectedEventKey = "jueceo.selectedEventID.v1"
+    private let selectedBlockKey = "jueceo.selectedBlockID.v1"
+    private let selectedJudgeKey = "jueceo.selectedJudge.v1"
     private let deviceIDKey = "jueceo.deviceID.v1"
     private var pendingScoreKeys: Set<String> = []
     private var pendingFeedbackKeys: Set<String> = []
+    private var pendingFavoriteKeys: Set<String> = []
     private let remoteRepository: RemoteJudgingRepository?
     private var didStartRemote = false
 
@@ -33,12 +45,18 @@ final class JudgingStore: ObservableObject {
         let data = Self.loadBundledData()
         appData = data
         selectedRoutineID = data.routines.first?.id ?? ""
-        selectedJudge = data.judges.first ?? "JUEZ"
+        let savedJudge = UserDefaults.standard.string(forKey: selectedJudgeKey)
+        selectedJudge = savedJudge.flatMap { data.judges.contains($0) ? $0 : nil }
+            ?? data.judges.first
+            ?? "JUEZ"
         scores = Self.loadDictionary(scoresKey) ?? [:]
         feedback = Self.loadDictionary(feedbackKey) ?? [:]
+        favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? [:]
         pendingScoreKeys = Self.loadSet(pendingScoreKeysKey)
         pendingFeedbackKeys = Self.loadSet(pendingFeedbackKeysKey)
+        pendingFavoriteKeys = Self.loadSet(pendingFavoriteKeysKey)
         selectedEventID = UserDefaults.standard.string(forKey: selectedEventKey)
+        selectedBlockID = UserDefaults.standard.string(forKey: selectedBlockKey)
         if let config = SupabaseConfig.load() {
             remoteRepository = RemoteJudgingRepository(config: config)
             syncStatus = pendingSyncCount > 0 ? .pending : .connecting
@@ -50,12 +68,58 @@ final class JudgingStore: ObservableObject {
 
     var routines: [Routine] { appData.routines }
     var judges: [String] { appData.judges }
+    var judgeProfiles: [JudgeProfile] {
+        let profilesByID = Dictionary(uniqueKeysWithValues: (appData.judgeProfiles ?? []).map { ($0.judgeID, $0) })
+        return appData.judges.map { judge in
+            let judgeID = judge.stableRemoteID
+            return profilesByID[judgeID] ?? JudgeProfile(
+                judgeID: judgeID,
+                name: judge,
+                role: judgeID == "ati" ? .admin : .judge
+            )
+        }
+    }
+    var selectedRole: UserRole { role(for: selectedJudge) }
+    var isAdmin: Bool { selectedRole == .admin }
+    var scoringJudge: String {
+        isAdmin ? (adminScoringJudge ?? selectedJudge) : selectedJudge
+    }
+    var isAdminEditingAsJudge: Bool {
+        isAdmin && adminScoringJudge != nil && adminScoringJudge != selectedJudge
+    }
+    var editableJudges: [String] {
+        judges.filter { role(for: $0) == .judge }
+    }
     var blocks: [DanceBlock] { appData.blocks }
+    var selectedBlock: DanceBlock? {
+        if let selectedBlockID,
+           let block = blocks.first(where: { $0.id == selectedBlockID || $0.name == selectedBlockID }) {
+            return block
+        }
+        return blocks.first(where: { $0.isActive == true }) ?? blocks.first
+    }
+    var visibleRoutines: [Routine] {
+        guard let selectedBlock else { return routines }
+        let blockRoutineIDs = Set(selectedBlock.routines.map(\.id))
+        let blockID = selectedBlock.id
+        let visible = routines.filter { routine in
+            blockRoutineIDs.contains(routine.id)
+                || routine.blockID == blockID
+                || routine.block == selectedBlock.name
+        }
+        return visible.isEmpty ? routines : visible
+    }
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
-    var pendingSyncCount: Int { pendingScoreKeys.count + pendingFeedbackKeys.count }
+    var pendingSyncCount: Int { pendingScoreKeys.count + pendingFeedbackKeys.count + pendingFavoriteKeys.count }
+    var isLoadingBackendData: Bool { hasRemoteConfiguration && syncStatus.isBackendLoading }
+    var backendLoadingMessage: String {
+        syncMessage ?? "Cargando informacion del backend..."
+    }
 
     var selectedRoutine: Routine? {
-        routines.first { $0.id == selectedRoutineID } ?? routines.first
+        visibleRoutines.first { $0.id == selectedRoutineID }
+            ?? visibleRoutines.first
+            ?? routines.first
     }
 
     func template(for routine: Routine) -> JudgingTemplate {
@@ -68,7 +132,58 @@ final class JudgingStore: ObservableObject {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !cleanName.isEmpty, !appData.judges.contains(cleanName) else { return }
         appData.judges.append(cleanName)
-        selectedJudge = cleanName
+        appendOrUpdateJudgeProfile(name: cleanName, role: cleanName.stableRemoteID == "ati" ? .admin : .judge)
+        selectJudge(cleanName)
+    }
+
+    func selectJudge(_ judge: String) {
+        guard appData.judges.contains(judge) else { return }
+        selectedJudge = judge
+        if role(for: judge) != .admin {
+            adminScoringJudge = nil
+        }
+    }
+
+    func beginAdminScoring(judge: String, routine: Routine) {
+        guard isAdmin, appData.judges.contains(judge), role(for: judge) == .judge else { return }
+        adminScoringJudge = judge
+        selectedRoutineID = routine.id
+        if let block = block(containing: routine) {
+            selectedBlockID = block.id
+            UserDefaults.standard.set(block.id, forKey: selectedBlockKey)
+        }
+    }
+
+    func clearAdminScoringOverride() {
+        adminScoringJudge = nil
+    }
+
+    func role(for judge: String) -> UserRole {
+        let judgeID = judge.stableRemoteID
+        if judgeID == "ati" {
+            return .admin
+        }
+        return appData.judgeProfiles?.first { $0.judgeID == judgeID || $0.name.normalizedKey == judge.normalizedKey }?.role ?? .judge
+    }
+
+    func roleTitle(for judge: String) -> String {
+        switch role(for: judge) {
+        case .admin: "Admin"
+        case .judge: "Juez"
+        }
+    }
+
+    func canAccess(_ section: AppSection) -> Bool {
+        isAdmin || !section.requiresAdmin
+    }
+
+    func selectBlock(_ block: DanceBlock) {
+        selectedBlockID = block.id
+        UserDefaults.standard.set(block.id, forKey: selectedBlockKey)
+        let nextRoutine = block.routines.first
+            ?? routines.first { $0.blockID == block.id || $0.block == block.name }
+            ?? routines.first
+        selectedRoutineID = nextRoutine?.id ?? ""
     }
 
     func scoreKey(routineID: String, judge: String, criterionID: Int) -> String {
@@ -107,6 +222,24 @@ final class JudgingStore: ObservableObject {
         markFeedbackPending(key)
     }
 
+    func isFavorite(_ routine: Routine, category: FavoriteCategory, judge: String? = nil) -> Bool {
+        favoriteSelections[favoriteKey(category: category, judge: judge ?? scoringJudge)] == routine.id
+    }
+
+    func hasFavorite(_ routine: Routine, judge: String? = nil) -> Bool {
+        FavoriteCategory.allCases.contains { isFavorite(routine, category: $0, judge: judge) }
+    }
+
+    func toggleFavorite(_ category: FavoriteCategory, routine: Routine, judge: String? = nil) {
+        let key = favoriteKey(category: category, judge: judge ?? scoringJudge)
+        if favoriteSelections[key] == routine.id {
+            favoriteSelections.removeValue(forKey: key)
+        } else {
+            favoriteSelections[key] = routine.id
+        }
+        markFavoritePending(key)
+    }
+
     func startRemoteSyncIfAvailable() async {
         guard !didStartRemote else { return }
         didStartRemote = true
@@ -120,6 +253,7 @@ final class JudgingStore: ObservableObject {
             return
         }
         syncStatus = .connecting
+        syncMessage = "Buscando eventos en Supabase..."
         do {
             let events = try await remoteRepository.fetchEvents()
             availableEvents = events
@@ -141,7 +275,7 @@ final class JudgingStore: ObservableObject {
     func selectEvent(_ event: EventSummary) async {
         guard let remoteRepository else { return }
         syncStatus = .connecting
-        syncMessage = "Cargando \(event.name)..."
+        syncMessage = "Cargando \(event.name) desde Supabase..."
         do {
             let bundle = try await remoteRepository.fetchEventBundle(eventID: event.id)
             selectedEventID = bundle.event.id
@@ -212,6 +346,50 @@ final class JudgingStore: ObservableObject {
                 persistPendingFeedbackKeys()
             }
 
+            let favoriteKeys = pendingFavoriteKeys
+            let favoriteUpsertRows = favoriteKeys.compactMap { key -> FavoriteUpsertRow? in
+                guard
+                    let parsed = parseFavoriteKey(key),
+                    let routineID = favoriteSelections[key],
+                    let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
+                else {
+                    return nil
+                }
+                return FavoriteUpsertRow(
+                    eventID: eventID,
+                    blockID: parsed.blockID,
+                    routineID: routineID,
+                    judgeID: judgeName.stableRemoteID,
+                    category: parsed.category.rawValue,
+                    deviceID: deviceID
+                )
+            }
+            let favoriteDeleteRows = favoriteKeys.compactMap { key -> FavoriteDeleteRow? in
+                guard
+                    favoriteSelections[key] == nil,
+                    let parsed = parseFavoriteKey(key),
+                    let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
+                else {
+                    return nil
+                }
+                return FavoriteDeleteRow(
+                    eventID: eventID,
+                    blockID: parsed.blockID,
+                    judgeID: judgeName.stableRemoteID,
+                    category: parsed.category.rawValue
+                )
+            }
+            if !favoriteUpsertRows.isEmpty {
+                try await remoteRepository.upsertFavorites(favoriteUpsertRows)
+            }
+            if !favoriteDeleteRows.isEmpty {
+                try await remoteRepository.deleteFavorites(favoriteDeleteRows)
+            }
+            if !favoriteKeys.isEmpty {
+                pendingFavoriteKeys.subtract(favoriteKeys)
+                persistPendingFavoriteKeys()
+            }
+
             syncStatus = pendingSyncCount > 0 ? .pending : .online
             syncMessage = pendingSyncCount > 0 ? "\(pendingSyncCount) cambios pendientes." : "Datos sincronizados."
         } catch {
@@ -234,7 +412,7 @@ final class JudgingStore: ObservableObject {
     }
 
     var rankings: [RoutineResult] {
-        routines
+        visibleRoutines
             .map(result)
             .sorted {
                 if $0.total == $1.total {
@@ -253,13 +431,75 @@ final class JudgingStore: ObservableObject {
         )
     }
 
+    func uploadExcelImport(fileURL: URL, eventName: String, eventSlug: String) async throws -> ExcelImportSummary {
+        guard let remoteRepository else {
+            throw ExcelImportError.missingRemoteConfiguration
+        }
+
+        let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if didStartAccessing {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        guard let data = try? Data(contentsOf: fileURL) else {
+            throw ExcelImportError.invalidFile
+        }
+
+        let maxMegabytes = 20
+        let maxBytes = maxMegabytes * 1024 * 1024
+        guard data.count <= maxBytes else {
+            throw ExcelImportError.fileTooLarge(maxMegabytes: maxMegabytes)
+        }
+
+        let cleanEventName = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanSlug = eventSlug.stableRemoteID
+        let summary = ExcelImportSummary(
+            fileName: fileURL.lastPathComponent,
+            eventName: cleanEventName,
+            eventSlug: cleanSlug,
+            fileSize: data.count
+        )
+        let row = ExcelImportUploadRow(
+            eventSlug: cleanSlug,
+            eventName: cleanEventName,
+            filename: summary.fileName,
+            fileSize: summary.fileSize,
+            payloadBase64: data.base64EncodedString(),
+            deviceID: deviceID
+        )
+
+        syncStatus = .syncing
+        syncMessage = "Subiendo \(summary.fileName)..."
+        try await remoteRepository.uploadExcelImport(row)
+        syncStatus = .online
+        syncMessage = "Excel subido: \(summary.eventName)."
+        return summary
+    }
+
     private func applyRemoteBundle(_ bundle: RemoteEventBundle) {
         appData = bundle.appData
-        if !appData.routines.contains(where: { $0.id == selectedRoutineID }) {
-            selectedRoutineID = appData.routines.first?.id ?? ""
+        if let selectedBlockID,
+           !appData.blocks.contains(where: { $0.id == selectedBlockID || $0.name == selectedBlockID }) {
+            self.selectedBlockID = nil
+            UserDefaults.standard.removeObject(forKey: selectedBlockKey)
+        }
+        if selectedBlockID == nil, let defaultBlock = appData.blocks.first(where: { $0.isActive == true }) ?? appData.blocks.first {
+            selectedBlockID = defaultBlock.id
+            UserDefaults.standard.set(defaultBlock.id, forKey: selectedBlockKey)
+        }
+        if !visibleRoutines.contains(where: { $0.id == selectedRoutineID }) {
+            selectedRoutineID = visibleRoutines.first?.id ?? appData.routines.first?.id ?? ""
         }
         if !appData.judges.contains(selectedJudge) {
             selectedJudge = appData.judges.first ?? "JUEZ"
+        }
+        if let adminScoringJudge, !appData.judges.contains(adminScoringJudge) || role(for: adminScoringJudge) != .judge {
+            self.adminScoringJudge = nil
+        }
+        if !isAdmin, selectedBlockID == nil, let activeBlock = appData.blocks.first(where: { $0.isActive == true }) {
+            selectBlock(activeBlock)
         }
 
         let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
@@ -275,6 +515,31 @@ final class JudgingStore: ObservableObject {
             let key = feedbackKey(routineID: remoteFeedback.routineID, judge: judge)
             if !pendingFeedbackKeys.contains(key) {
                 feedback[key] = remoteFeedback.body
+            }
+        }
+
+        let eventPrefix = "\(bundle.event.id)::"
+        let staleFavoriteKeys = favoriteSelections.keys.filter { key in
+            key.hasPrefix(eventPrefix) && !pendingFavoriteKeys.contains(key)
+        }
+        for key in staleFavoriteKeys {
+            favoriteSelections.removeValue(forKey: key)
+        }
+        for remoteFavorite in bundle.favorites {
+            guard
+                let judge = judgeNamesByID[remoteFavorite.judgeID],
+                let category = FavoriteCategory(rawValue: remoteFavorite.category)
+            else {
+                continue
+            }
+            let key = favoriteKey(
+                eventID: remoteFavorite.eventID,
+                blockID: remoteFavorite.blockID,
+                category: category,
+                judge: judge
+            )
+            if !pendingFavoriteKeys.contains(key) {
+                favoriteSelections[key] = remoteFavorite.routineID
             }
         }
         syncStatus = pendingSyncCount > 0 ? .pending : .online
@@ -301,6 +566,14 @@ final class JudgingStore: ObservableObject {
         Task { await syncPending() }
     }
 
+    private func markFavoritePending(_ key: String) {
+        guard remoteRepository != nil, selectedEventID != nil else { return }
+        pendingFavoriteKeys.insert(key)
+        persistPendingFavoriteKeys()
+        syncStatus = .pending
+        Task { await syncPending() }
+    }
+
     private func persistScores() {
         Self.saveDictionary(scores, key: scoresKey)
     }
@@ -309,12 +582,24 @@ final class JudgingStore: ObservableObject {
         Self.saveDictionary(feedback, key: feedbackKey)
     }
 
+    private func persistFavoriteSelections() {
+        Self.saveDictionary(favoriteSelections, key: favoriteSelectionsKey)
+    }
+
     private func persistPendingScoreKeys() {
         Self.saveSet(pendingScoreKeys, key: pendingScoreKeysKey)
     }
 
     private func persistPendingFeedbackKeys() {
         Self.saveSet(pendingFeedbackKeys, key: pendingFeedbackKeysKey)
+    }
+
+    private func persistPendingFavoriteKeys() {
+        Self.saveSet(pendingFavoriteKeys, key: pendingFavoriteKeysKey)
+    }
+
+    private func persistSelectedJudge() {
+        UserDefaults.standard.set(selectedJudge, forKey: selectedJudgeKey)
     }
 
     private var deviceID: String {
@@ -338,8 +623,43 @@ final class JudgingStore: ObservableObject {
         return (parts[0], parts[1])
     }
 
+    private func parseFavoriteKey(_ key: String) -> (eventID: String, blockID: String, judgeKey: String, category: FavoriteCategory)? {
+        let parts = key.components(separatedBy: "::")
+        guard parts.count == 4, let category = FavoriteCategory(rawValue: parts[3]) else { return nil }
+        return (parts[0], parts[1], parts[2], category)
+    }
+
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
         appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
+    }
+
+    private func favoriteKey(category: FavoriteCategory, judge: String) -> String {
+        favoriteKey(eventID: selectedEventID, blockID: selectedBlock?.id, category: category, judge: judge)
+    }
+
+    private func favoriteKey(eventID: String?, blockID: String?, category: FavoriteCategory, judge: String) -> String {
+        let eventKey = eventID ?? appData.sourceName.stableRemoteID
+        let blockKey = blockID ?? "sin-bloque"
+        return "\(eventKey)::\(blockKey)::\(judge.normalizedKey)::\(category.rawValue)"
+    }
+
+    private func block(containing routine: Routine) -> DanceBlock? {
+        blocks.first { block in
+            block.routines.contains { $0.id == routine.id }
+                || routine.blockID == block.id
+                || routine.block == block.name
+        }
+    }
+
+    private func appendOrUpdateJudgeProfile(name: String, role: UserRole) {
+        let profile = JudgeProfile(judgeID: name.stableRemoteID, name: name, role: role)
+        var profiles = appData.judgeProfiles ?? []
+        if let index = profiles.firstIndex(where: { $0.judgeID == profile.judgeID }) {
+            profiles[index] = profile
+        } else {
+            profiles.append(profile)
+        }
+        appData.judgeProfiles = profiles
     }
 
     private static func loadBundledData() -> AppData {
@@ -347,7 +667,7 @@ final class JudgingStore: ObservableObject {
               let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(AppData.self, from: data)
         else {
-            return AppData(sourceName: "Sin datos", blocks: [], routines: [], templates: [], judges: ["JUEZ"])
+            return AppData(sourceName: "Sin datos", blocks: [], routines: [], templates: [], judges: ["JUEZ"], judgeProfiles: nil)
         }
         return decoded
     }

@@ -44,7 +44,9 @@ struct DictamenView: View {
             groupsGrid
         }
         .padding(30)
-        .background(LevitTheme.paper)
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(LevitTheme.paper.ignoresSafeArea())
     }
 
     private var header: some View {
