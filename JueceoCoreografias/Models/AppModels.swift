@@ -94,6 +94,14 @@ struct RoutineResult: Identifiable, Sendable {
     let maxScore: Double
 }
 
+struct FavoriteSelectionSummary: Identifiable, Hashable, Sendable {
+    let id: String
+    let category: FavoriteCategory
+    let judge: String
+    let blockName: String
+    let routine: Routine
+}
+
 struct EventSummary: Identifiable, Codable, Hashable, Sendable {
     let id: String
     let slug: String

@@ -122,6 +122,44 @@ final class JudgingStore: ObservableObject {
             ?? routines.first
     }
 
+    var favoriteSummaries: [FavoriteSelectionSummary] {
+        let currentEventKey = selectedEventID ?? appData.sourceName.stableRemoteID
+        let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
+        return favoriteSelections.compactMap { key, routineID in
+            guard
+                let parsed = parseFavoriteKey(key),
+                parsed.eventID == currentEventKey,
+                let routine = routinesByID[routineID]
+            else {
+                return nil
+            }
+
+            return FavoriteSelectionSummary(
+                id: key,
+                category: parsed.category,
+                judge: judgeName(forNormalizedKey: parsed.judgeKey) ?? parsed.judgeKey.uppercased(),
+                blockName: blockName(for: parsed.blockID),
+                routine: routine
+            )
+        }
+        .sorted { lhs, rhs in
+            let lhsBlockOrder = blockSortOrder(named: lhs.blockName)
+            let rhsBlockOrder = blockSortOrder(named: rhs.blockName)
+            if lhsBlockOrder != rhsBlockOrder {
+                return lhsBlockOrder < rhsBlockOrder
+            }
+            let lhsCategoryOrder = FavoriteCategory.allCases.firstIndex(of: lhs.category) ?? Int.max
+            let rhsCategoryOrder = FavoriteCategory.allCases.firstIndex(of: rhs.category) ?? Int.max
+            if lhsCategoryOrder != rhsCategoryOrder {
+                return lhsCategoryOrder < rhsCategoryOrder
+            }
+            if lhs.judge != rhs.judge {
+                return lhs.judge.localizedStandardCompare(rhs.judge) == .orderedAscending
+            }
+            return (Int(lhs.routine.id) ?? Int.max) < (Int(rhs.routine.id) ?? Int.max)
+        }
+    }
+
     func template(for routine: Routine) -> JudgingTemplate {
         appData.templates.first { $0.genre.normalizedKey == routine.genre.normalizedKey }
             ?? appData.templates.first
@@ -641,6 +679,14 @@ final class JudgingStore: ObservableObject {
         let eventKey = eventID ?? appData.sourceName.stableRemoteID
         let blockKey = blockID ?? "sin-bloque"
         return "\(eventKey)::\(blockKey)::\(judge.normalizedKey)::\(category.rawValue)"
+    }
+
+    private func blockName(for blockID: String) -> String {
+        blocks.first { $0.id == blockID || $0.name == blockID }?.name ?? blockID
+    }
+
+    private func blockSortOrder(named blockName: String) -> Int {
+        blocks.first { $0.name == blockName || $0.id == blockName }?.sortOrder ?? Int.max
     }
 
     private func block(containing routine: Routine) -> DanceBlock? {
