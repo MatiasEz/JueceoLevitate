@@ -125,6 +125,9 @@ struct AdminView: View {
             AdminActionButton(title: "Dictamen", icon: "trophy.fill") {
                 section = .dictamen
             }
+            AdminActionButton(title: "Favoritos", icon: "star.fill") {
+                section = .favoritos
+            }
             AdminActionButton(title: "Exportar PDF", icon: "doc.richtext") {
                 onExportPDF(store.rankings, "Calificaciones y Dictamen Final")
             }
