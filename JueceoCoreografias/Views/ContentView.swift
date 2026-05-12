@@ -7,6 +7,7 @@ import UIKit
 enum AppSection: String, CaseIterable, Identifiable {
     case inicio = "Inicio"
     case admin = "Admin"
+    case favoritos = "Favoritos"
     case bloques = "Coreografias"
     case jueceo = "Jueceo"
     case calificaciones = "Ranking"
@@ -19,6 +20,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .inicio: "house"
         case .admin: "person.crop.circle.fill"
+        case .favoritos: "star.fill"
         case .bloques: "list.bullet"
         case .jueceo: "checklist"
         case .calificaciones: "chart.bar.fill"
@@ -31,7 +33,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .inicio, .jueceo:
             false
-        case .admin, .bloques, .calificaciones, .dictamen, .importar:
+        case .admin, .favoritos, .bloques, .calificaciones, .dictamen, .importar:
             true
         }
     }
@@ -114,6 +116,8 @@ struct ContentView: View {
                             EmptyView()
                         case .admin:
                             AdminView(section: $section, onExportPDF: exportPDF)
+                        case .favoritos:
+                            FavoritesView()
                         case .bloques:
                             BlocksView(
                                 blocks: store.selectedBlock.map { [$0] } ?? store.blocks,

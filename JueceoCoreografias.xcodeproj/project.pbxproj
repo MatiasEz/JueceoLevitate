@@ -23,6 +23,7 @@
 		010000000000000000000016 /* ExcelImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ExcelImportView.swift */; };
 		010000000000000000000017 /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* AdminView.swift */; };
 		010000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* Assets.xcassets */; };
+		010000000000000000000019 /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* FavoritesView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -44,6 +45,7 @@
 		020000000000000000000016 /* ExcelImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExcelImportView.swift; sourceTree = "<group>"; };
 		020000000000000000000017 /* AdminView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminView.swift; sourceTree = "<group>"; };
 		020000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		020000000000000000000019 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -97,6 +99,7 @@
 				020000000000000000000008 /* DictamenView.swift */,
 				020000000000000000000016 /* ExcelImportView.swift */,
 				020000000000000000000017 /* AdminView.swift */,
+				020000000000000000000019 /* FavoritesView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -210,6 +213,7 @@
 				010000000000000000000008 /* DictamenView.swift in Sources */,
 				010000000000000000000016 /* ExcelImportView.swift in Sources */,
 				010000000000000000000017 /* AdminView.swift in Sources */,
+				010000000000000000000019 /* FavoritesView.swift in Sources */,
 				010000000000000000000009 /* PDFExporter.swift in Sources */,
 				010000000000000000000010 /* ShareSheet.swift in Sources */,
 				010000000000000000000015 /* RemoteJudgingRepository.swift in Sources */,

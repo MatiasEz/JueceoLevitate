@@ -461,11 +461,19 @@ final class JudgingStore: ObservableObject {
     }
 
     func exportPDF(results exportResults: [RoutineResult]? = nil, title: String = "Calificaciones y Dictamen Final") {
+        let exportJudges = editableJudges.isEmpty ? judges : editableJudges
+        let sourceName = selectedBlock?.name ?? appData.sourceName
         lastPDFURL = PDFExporter.export(
             results: exportResults ?? rankings,
-            judges: judges,
-            sourceName: appData.sourceName,
-            title: title
+            judges: exportJudges,
+            sourceName: sourceName,
+            title: title,
+            templateForRoutine: { [weak self] routine in
+                self?.template(for: routine) ?? JudgingTemplate(genre: "General", title: "Hoja de jueceo", maxScore: 0, criteria: [])
+            },
+            scoreForCriterion: { [weak self] routine, judge, criterion in
+                self?.score(for: routine, judge: judge, criterion: criterion) ?? 0
+            }
         )
     }
 

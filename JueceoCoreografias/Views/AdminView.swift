@@ -69,7 +69,6 @@ struct AdminView: View {
                 metrics
                 quickActions
                 blockSelector
-                favoritesPanel
                 editAsJudgePanel
             }
             .padding(.horizontal, 34)
@@ -126,6 +125,9 @@ struct AdminView: View {
             AdminActionButton(title: "Dictamen", icon: "trophy.fill") {
                 section = .dictamen
             }
+            AdminActionButton(title: "Favoritos", icon: "star.fill") {
+                section = .favoritos
+            }
             AdminActionButton(title: "Exportar PDF", icon: "doc.richtext") {
                 onExportPDF(store.rankings, "Calificaciones y Dictamen Final")
             }
@@ -170,61 +172,6 @@ struct AdminView: View {
             }
             .scrollIndicators(.hidden)
         }
-    }
-
-    private var favoritesPanel: some View {
-        let favorites = store.favoriteSummaries
-        return VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Favoritos de jueces")
-                        .font(.title2.weight(.black))
-                    Text("ATI puede revisar que coreografia marco cada juez en vestuario, coreografia y musica.")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(LevitTheme.muted)
-                }
-
-                Spacer()
-
-                Text("\(favorites.count)")
-                    .font(.title3.monospacedDigit().weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 52, height: 42)
-                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 13))
-            }
-
-            if favorites.isEmpty {
-                HStack(spacing: 12) {
-                    Image(systemName: "star.slash")
-                        .font(.title3.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                        .frame(width: 46, height: 46)
-                        .background(LevitTheme.softFill, in: Circle())
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Todavia no hay favoritos")
-                            .font(.headline.weight(.black))
-                        Text("Apareceran aca cuando los jueces marquen favoritos desde la hoja de jueceo.")
-                            .font(.callout.weight(.semibold))
-                            .foregroundStyle(LevitTheme.muted)
-                    }
-                }
-                .padding(18)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
-                .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
-            } else {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 330), spacing: 12)], spacing: 12) {
-                    ForEach(favorites) { favorite in
-                        AdminFavoriteCard(favorite: favorite)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 22))
-        .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.cardStroke))
-        .shadow(color: .black.opacity(0.045), radius: 22, x: 0, y: 12)
     }
 
     private var editAsJudgePanel: some View {
@@ -412,67 +359,6 @@ private struct AdminActionButton: View {
                 .overlay(RoundedRectangle(cornerRadius: 15).stroke(LevitTheme.line))
         }
         .buttonStyle(.plain)
-    }
-}
-
-private struct AdminFavoriteCard: View {
-    let favorite: FavoriteSelectionSummary
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: favorite.category.systemImage)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 40, height: 40)
-                    .background(LevitTheme.palePink, in: Circle())
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(favorite.category.title)
-                        .font(.callout.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                    Text(favorite.blockName)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                }
-
-                Spacer()
-
-                Label(favorite.judge, systemImage: "person.fill")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(LevitTheme.palePink, in: Capsule())
-            }
-
-            Divider().overlay(LevitTheme.line)
-
-            HStack(spacing: 12) {
-                Text("#\(favorite.routine.id)")
-                    .font(.callout.monospacedDigit().weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 54, height: 44)
-                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(favorite.routine.name)
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                    Text(favorite.routine.academy)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                        .lineLimit(1)
-                }
-
-                Spacer()
-            }
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
-        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
     }
 }
 
