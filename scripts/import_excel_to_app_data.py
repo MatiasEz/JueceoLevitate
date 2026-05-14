@@ -127,6 +127,7 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
         warnings.append(f"{sheet.title}: parece una hoja auxiliar, se omite como bloque; faltan {', '.join(missing)}.")
         return None, warnings, errors
 
+    block_id = stable_id(sheet.title)
     routines: list[dict[str, Any]] = []
     for row_number, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
         if not row or not str(row[0]).strip():
@@ -142,6 +143,7 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
         routines.append(
             {
                 "id": routine_id,
+                "blockID": block_id,
                 "block": sheet.title,
                 "name": name.title(),
                 "academy": str(row[column_map.get("academy", 0)] or "").strip(),
@@ -159,8 +161,19 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     if not routines:
         return None, warnings, errors
 
+    try:
+        sort_order = int(str(routines[0]["id"]).strip())
+    except (IndexError, ValueError):
+        sort_order = 0
     title = " · ".join(str(value) for row in rows[:header_index] for value in row if value)
-    return {"name": sheet.title, "title": title, "routines": routines}, warnings, errors
+    return {
+        "blockID": block_id,
+        "name": sheet.title,
+        "title": title,
+        "sortOrder": sort_order,
+        "isActive": False,
+        "routines": routines,
+    }, warnings, errors
 
 
 def parse_template(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
@@ -240,6 +253,17 @@ def parse_judges(workbook) -> tuple[list[str], list[str], list[str]]:
     return judges, warnings, errors
 
 
+def with_required_people(judges: list[str]) -> list[str]:
+    result = list(judges)
+    if not any(stable_id(judge) == "ati" for judge in result):
+        result.append("ATI")
+    return result
+
+
+def role_for_person(name: str) -> str:
+    return "admin" if stable_id(name) == "ati" else "judge"
+
+
 def parse_workbook(source: Path) -> ImportResult:
     workbook = load_workbook(source, data_only=False)
     warnings: list[str] = []
@@ -262,6 +286,7 @@ def parse_workbook(source: Path) -> ImportResult:
 
     routines = [routine for block in blocks for routine in block["routines"]]
     judges, judge_warnings, judge_errors = parse_judges(workbook)
+    judges = with_required_people(judges)
     warnings.extend(judge_warnings)
     errors.extend(judge_errors)
 
@@ -282,6 +307,10 @@ def parse_workbook(source: Path) -> ImportResult:
         "routines": routines,
         "templates": templates,
         "judges": judges,
+        "judgeProfiles": [
+            {"judgeID": stable_id(judge), "name": judge, "role": role_for_person(judge)}
+            for judge in judges
+        ],
     }
     return ImportResult(app_data=app_data, warnings=warnings, errors=errors)
 
@@ -333,21 +362,79 @@ def upsert_rows(table: str, rows: list[dict[str, Any]], conflict: str) -> None:
         return
     query = urllib.parse.urlencode({"on_conflict": conflict})
     for chunk in chunked(rows):
-        supabase_request(
-            "POST",
-            f"{table}?{query}",
-            chunk,
-            prefer="resolution=merge-duplicates,return=minimal",
-        )
+        try:
+            supabase_request(
+                "POST",
+                f"{table}?{query}",
+                chunk,
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+        except RuntimeError as error:
+            if table != "judges" or "role" not in str(error):
+                raise
+            fallback_chunk = [{key: value for key, value in row.items() if key != "role"} for row in chunk]
+            supabase_request(
+                "POST",
+                f"{table}?{query}",
+                fallback_chunk,
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
 
 
 def delete_event_rows(event_id: str) -> None:
     encoded = urllib.parse.quote(event_id)
-    for table in ["feedback", "scores", "criteria", "criteria_templates", "judges", "routines"]:
+    for table in ["feedback", "scores", "criteria", "criteria_templates", "judges", "routines", "blocks"]:
         supabase_request("DELETE", f"{table}?event_id=eq.{encoded}", prefer="return=minimal")
 
 
-def upload_to_supabase(app_data: dict[str, Any], *, slug: str, name: str, activate: bool) -> str:
+def rows_exist(table: str, event_id: str, block_ids: list[str]) -> bool:
+    if not block_ids:
+        return False
+    encoded_event_id = urllib.parse.quote(event_id)
+    encoded_block_ids = ",".join(urllib.parse.quote(block_id) for block_id in block_ids)
+    rows = supabase_request(
+        "GET",
+        f"{table}?select=event_id&event_id=eq.{encoded_event_id}&block_id=in.({encoded_block_ids})&limit=1",
+    )
+    return bool(rows)
+
+
+def event_rows_exist(table: str, event_id: str) -> bool:
+    encoded_event_id = urllib.parse.quote(event_id)
+    rows = supabase_request(
+        "GET",
+        f"{table}?select=event_id&event_id=eq.{encoded_event_id}&limit=1",
+    )
+    return bool(rows)
+
+
+def delete_block_rows(event_id: str, block_ids: list[str], *, force_replace: bool) -> None:
+    if not block_ids:
+        return
+    if not force_replace and (
+        rows_exist("scores", event_id, block_ids) or rows_exist("feedback", event_id, block_ids)
+    ):
+        raise RuntimeError(
+            "El bloque ya tiene puntajes o feedback. Usa --force-replace para reemplazarlo."
+        )
+    encoded_event_id = urllib.parse.quote(event_id)
+    encoded_block_ids = ",".join(urllib.parse.quote(block_id) for block_id in block_ids)
+    supabase_request(
+        "DELETE",
+        f"routines?event_id=eq.{encoded_event_id}&block_id=in.({encoded_block_ids})",
+        prefer="return=minimal",
+    )
+
+
+def upload_to_supabase(
+    app_data: dict[str, Any],
+    *,
+    slug: str,
+    name: str,
+    activate: bool,
+    replace_event: bool = False,
+    force_replace: bool = False,
+) -> str:
     if activate:
         supabase_request(
             "PATCH",
@@ -365,6 +452,7 @@ def upload_to_supabase(app_data: dict[str, Any], *, slug: str, name: str, activa
                 "name": name,
                 "source_name": app_data["sourceName"],
                 "is_active": activate,
+                "event_type": "event",
             }
         ],
         prefer="resolution=merge-duplicates,return=representation",
@@ -372,13 +460,34 @@ def upload_to_supabase(app_data: dict[str, Any], *, slug: str, name: str, activa
     if not event_rows:
         raise RuntimeError("Supabase no devolvio el evento importado.")
     event_id = event_rows[0]["id"]
-    delete_event_rows(event_id)
+    imported_block_ids = [block.get("blockID") or stable_id(block["name"]) for block in app_data["blocks"]]
+    if replace_event:
+        if not force_replace and (event_rows_exist("scores", event_id) or event_rows_exist("feedback", event_id)):
+            raise RuntimeError(
+                "El evento ya tiene puntajes o feedback. Usa --force-replace para reemplazarlo."
+            )
+        delete_event_rows(event_id)
+    else:
+        delete_block_rows(event_id, imported_block_ids, force_replace=force_replace)
 
     block_titles = {block["name"]: block.get("title", "") for block in app_data["blocks"]}
+    block_ids = {block["name"]: block.get("blockID") or stable_id(block["name"]) for block in app_data["blocks"]}
+    block_rows = [
+        {
+            "event_id": event_id,
+            "block_id": block.get("blockID") or stable_id(block["name"]),
+            "name": block["name"],
+            "title": block.get("title", ""),
+            "sort_order": block.get("sortOrder", index),
+            "is_active": bool(block.get("isActive", index == 1)),
+        }
+        for index, block in enumerate(app_data["blocks"], start=1)
+    ]
     routine_rows = [
         {
             "event_id": event_id,
             "routine_id": routine["id"],
+            "block_id": routine.get("blockID") or block_ids.get(routine["block"], stable_id(routine["block"])),
             "block": routine["block"],
             "block_title": block_titles.get(routine["block"], ""),
             "sort_order": index,
@@ -396,7 +505,13 @@ def upload_to_supabase(app_data: dict[str, Any], *, slug: str, name: str, activa
         for index, routine in enumerate(app_data["routines"], start=1)
     ]
     judge_rows = [
-        {"event_id": event_id, "judge_id": stable_id(judge), "name": judge, "sort_order": index}
+        {
+            "event_id": event_id,
+            "judge_id": stable_id(judge),
+            "name": judge,
+            "role": role_for_person(judge),
+            "sort_order": index,
+        }
         for index, judge in enumerate(app_data["judges"], start=1)
     ]
     template_rows = []
@@ -426,6 +541,7 @@ def upload_to_supabase(app_data: dict[str, Any], *, slug: str, name: str, activa
                 }
             )
 
+    upsert_rows("blocks", block_rows, "event_id,block_id")
     upsert_rows("routines", routine_rows, "event_id,routine_id")
     upsert_rows("judges", judge_rows, "event_id,judge_id")
     upsert_rows("criteria_templates", template_rows, "event_id,template_id")
@@ -443,6 +559,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-activate", action="store_true", help="No marcar este evento como activo.")
     parser.add_argument("--allow-errors", action="store_true", help="Escribe/sube aunque haya errores de validacion.")
     parser.add_argument("--strict", action="store_true", help="Cancela tambien la salida JSON local si hay errores.")
+    parser.add_argument("--replace-event", action="store_true", help="Reemplaza todo el evento remoto en vez de solo los bloques importados.")
+    parser.add_argument("--force-replace", action="store_true", help="Permite reemplazar bloques/eventos que ya tienen puntajes o feedback.")
     return parser
 
 
@@ -476,7 +594,14 @@ def main() -> int:
     )
 
     if args.supabase:
-        event_id = upload_to_supabase(result.app_data, slug=slug, name=name, activate=not args.no_activate)
+        event_id = upload_to_supabase(
+            result.app_data,
+            slug=slug,
+            name=name,
+            activate=not args.no_activate,
+            replace_event=args.replace_event,
+            force_replace=args.force_replace,
+        )
         print(f"Uploaded Supabase event '{name}' ({slug}) with id {event_id}.")
     return 0
 

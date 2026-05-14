@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct JueceoCoreografiasApp: App {
@@ -6,8 +7,13 @@ struct JueceoCoreografiasApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(store)
+            if UIDevice.current.userInterfaceIdiom == .phone {
+                PhoneContentView()
+                    .environmentObject(store)
+            } else {
+                ContentView()
+                    .environmentObject(store)
+            }
         }
     }
 }

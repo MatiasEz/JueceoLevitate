@@ -1,6 +1,17 @@
 import Foundation
 import SwiftUI
 
+private enum DriveExportError: LocalizedError {
+    case pdfGenerationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .pdfGenerationFailed:
+            "No se pudo generar el PDF de calificaciones."
+        }
+    }
+}
+
 @MainActor
 final class JudgingStore: ObservableObject {
     @Published private(set) var appData: AppData
@@ -24,6 +35,9 @@ final class JudgingStore: ObservableObject {
         didSet { persistFavoriteSelections() }
     }
     @Published var lastPDFURL: URL?
+    @Published private(set) var driveExportStatus: DriveExportStatus = .idle
+    @Published private(set) var driveExportMessage: String?
+    @Published private(set) var lastDriveExportSummary: GoogleDriveExportSummary?
 
     private let scoresKey = "jueceo.scores.v1"
     private let feedbackKey = "jueceo.feedback.v1"
@@ -110,6 +124,7 @@ final class JudgingStore: ObservableObject {
         return visible.isEmpty ? routines : visible
     }
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
+    var hasGoogleDriveConfiguration: Bool { GoogleDriveConfig.load() != nil }
     var pendingSyncCount: Int { pendingScoreKeys.count + pendingFeedbackKeys.count + pendingFavoriteKeys.count }
     var isLoadingBackendData: Bool { hasRemoteConfiguration && syncStatus.isBackendLoading }
     var backendLoadingMessage: String {
@@ -449,6 +464,21 @@ final class JudgingStore: ObservableObject {
         return RoutineResult(routine: routine, judgeTotals: judgeTotals, total: average, maxScore: template.maxScore)
     }
 
+    func routines(in block: DanceBlock) -> [Routine] {
+        let blockRoutineIDs = Set(block.routines.map(\.id))
+        return routines
+            .filter { routine in
+                blockRoutineIDs.contains(routine.id)
+                    || routine.blockID == block.id
+                    || routine.block == block.name
+            }
+            .sorted(by: routineOrder)
+    }
+
+    func results(in block: DanceBlock) -> [RoutineResult] {
+        routines(in: block).map(result)
+    }
+
     var rankings: [RoutineResult] {
         visibleRoutines
             .map(result)
@@ -475,6 +505,72 @@ final class JudgingStore: ObservableObject {
                 self?.score(for: routine, judge: judge, criterion: criterion) ?? 0
             }
         )
+    }
+
+    func exportSelectedBlockToDrive() async {
+        guard let block = selectedBlock else {
+            driveExportStatus = .failed("No hay bloque seleccionado.")
+            driveExportMessage = "No hay bloque seleccionado."
+            return
+        }
+
+        let exportJudges = editableJudges
+        guard !exportJudges.isEmpty else {
+            driveExportStatus = .failed("No hay jueces para exportar.")
+            driveExportMessage = "No hay jueces para exportar."
+            return
+        }
+
+        driveExportStatus = .exporting
+        driveExportMessage = "Preparando PDFs de \(block.name)..."
+        lastDriveExportSummary = nil
+
+        do {
+            let drive = try GoogleDriveService.configured()
+            let blockRoutines = routines(in: block)
+            let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
+            var uploadedFiles: [GoogleDriveUploadedFile] = []
+
+            for academy in uniqueAcademies(in: blockRoutines) {
+                let academyRoutines = blockRoutines.filter {
+                    driveAcademyName(for: $0).normalizedKey == academy.normalizedKey
+                }
+                let academyFolderName = driveSafeName(academy, fallback: "Academia")
+                for routine in academyRoutines {
+                    let routineFolderName = driveSafeName("#\(routine.id) \(routine.name)", fallback: "Coreografia \(routine.id)")
+                    for judge in exportJudges {
+                        let fileName = "\(routineFolderName) - \(driveSafeName(judge, fallback: "Juez")).pdf"
+                        guard let pdfURL = exportJudgingSheetPDF(
+                            routine: routine,
+                            judge: judge,
+                            blockName: block.name,
+                            fileName: fileName,
+                            rootFolderName: drive.rootFolderName
+                        ) else {
+                            throw DriveExportError.pdfGenerationFailed
+                        }
+
+                        driveExportMessage = "Subiendo \(routineFolderName) - \(judge)..."
+                        let uploaded = try await drive.uploadPDF(
+                            fileURL: pdfURL,
+                            fileName: fileName,
+                            folderPath: [drive.rootFolderName, blockFolderName, academyFolderName, routineFolderName]
+                        )
+                        uploadedFiles.append(uploaded)
+                    }
+                }
+            }
+
+            lastDriveExportSummary = GoogleDriveExportSummary(
+                rootFolderName: drive.rootFolderName,
+                uploadedFiles: uploadedFiles
+            )
+            driveExportStatus = .completed(uploadedFiles.count)
+            driveExportMessage = "\(uploadedFiles.count) PDFs exportados a \(drive.rootFolderName)."
+        } catch {
+            driveExportStatus = .failed(error.localizedDescription)
+            driveExportMessage = error.localizedDescription
+        }
     }
 
     func uploadExcelImport(fileURL: URL, eventName: String, eventSlug: String) async throws -> ExcelImportSummary {
@@ -695,6 +791,105 @@ final class JudgingStore: ObservableObject {
 
     private func blockSortOrder(named blockName: String) -> Int {
         blocks.first { $0.name == blockName || $0.id == blockName }?.sortOrder ?? Int.max
+    }
+
+    private func exportJudgingSheetPDF(
+        routine: Routine,
+        judge: String,
+        blockName: String,
+        fileName: String,
+        rootFolderName: String
+    ) -> URL? {
+        let template = template(for: routine)
+        let feedbackBody = feedback[feedbackKey(routineID: routine.id, judge: judge)] ?? ""
+        return JudgingSheetPDFExporter.export(
+            routine: routine,
+            judge: judge,
+            template: template,
+            sourceName: rootFolderName,
+            blockName: blockName,
+            fileName: fileName,
+            feedback: feedbackBody,
+            scoreForCriterion: { [weak self] criterion in
+                self?.score(for: routine, judge: judge, criterion: criterion) ?? 0
+            }
+        )
+    }
+
+    private func uniqueAcademies(in routines: [Routine]) -> [String] {
+        Array(Set(routines.map(driveAcademyName)))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func driveAcademyName(for routine: Routine) -> String {
+        let academy = routine.academy.trimmingCharacters(in: .whitespacesAndNewlines)
+        return academy.isEmpty ? "Sin academia" : academy
+    }
+
+    private func scoreSheetPositions(for results: [RoutineResult], judges: [String]) -> [String: Int] {
+        let grouped = Dictionary(grouping: results) { result in
+            [
+                result.routine.genre,
+                result.routine.division,
+                result.routine.category
+            ]
+            .map(\.normalizedKey)
+            .joined(separator: "|")
+        }
+        var positions: [String: Int] = [:]
+
+        for items in grouped.values {
+            let rankedItems = items
+                .map { result in (result: result, total: aggregateScore(for: result, judges: judges)) }
+                .filter { $0.total > 0 }
+                .sorted { lhs, rhs in
+                    if abs(lhs.total - rhs.total) < 0.0001 {
+                        return routineOrder(lhs.result.routine, rhs.result.routine)
+                    }
+                    return lhs.total > rhs.total
+                }
+
+            var currentRank = 0
+            var previousTotal: Double?
+            for (index, item) in rankedItems.enumerated() {
+                if previousTotal == nil || abs(item.total - (previousTotal ?? 0)) >= 0.0001 {
+                    currentRank = index + 1
+                    previousTotal = item.total
+                }
+                positions[item.result.routine.id] = currentRank
+            }
+        }
+        return positions
+    }
+
+    private func aggregateScore(for result: RoutineResult, judges: [String]) -> Double {
+        let totalsByJudge = Dictionary(uniqueKeysWithValues: result.judgeTotals.map { ($0.judge, $0.total) })
+        return judges.reduce(0) { sum, judge in
+            sum + (totalsByJudge[judge] ?? 0)
+        }
+    }
+
+    private func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
+        let lhsNumber = Int(lhs.id) ?? Int.max
+        let rhsNumber = Int(rhs.id) ?? Int.max
+        if lhsNumber == rhsNumber {
+            return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+        }
+        return lhsNumber < rhsNumber
+    }
+
+    private func driveSafeName(_ name: String, fallback: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = trimmed
+            .map { character -> Character in
+                let forbidden: Set<Character> = ["/", "\\", ":", "*", "?", "\"", "<", ">", "|"]
+                return forbidden.contains(character) ? "-" : character
+            }
+        let compact = String(cleaned)
+            .split(separator: " ")
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return compact.isEmpty ? fallback : compact
     }
 
     private func block(containing routine: Routine) -> DanceBlock? {
