@@ -14,17 +14,6 @@ struct AdminView: View {
             ?? store.appData.sourceName
     }
 
-    private var sortedBlocks: [DanceBlock] {
-        store.blocks.sorted {
-            let lhsOrder = $0.sortOrder ?? Int.max
-            let rhsOrder = $1.sortOrder ?? Int.max
-            if lhsOrder == rhsOrder {
-                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
-            }
-            return lhsOrder < rhsOrder
-        }
-    }
-
     private var sortedRoutines: [Routine] {
         store.visibleRoutines.sorted { lhs, rhs in
             let lhsNumber = Int(lhs.id) ?? Int.max
@@ -67,8 +56,8 @@ struct AdminView: View {
             VStack(alignment: .leading, spacing: 22) {
                 header
                 metrics
-                quickActions
-                blockSelector
+                adminActions
+                driveExportPanel
                 editAsJudgePanel
             }
             .padding(.horizontal, 34)
@@ -114,64 +103,65 @@ struct AdminView: View {
         }
     }
 
-    private var quickActions: some View {
+    private var adminActions: some View {
         HStack(spacing: 12) {
-            AdminActionButton(title: "Importar Excel", icon: "square.and.arrow.up") {
-                section = .importar
-            }
-            AdminActionButton(title: "Ranking", icon: "chart.bar.fill") {
-                section = .calificaciones
-            }
-            AdminActionButton(title: "Dictamen", icon: "trophy.fill") {
-                section = .dictamen
-            }
-            AdminActionButton(title: "Favoritos", icon: "star.fill") {
-                section = .favoritos
-            }
             AdminActionButton(title: "Exportar PDF", icon: "doc.richtext") {
                 onExportPDF(store.rankings, "Calificaciones y Dictamen Final")
             }
-            AdminActionButton(title: "Actualizar", icon: "arrow.clockwise") {
+            AdminActionButton(title: "Actualizar datos", icon: "arrow.clockwise") {
                 Task { await store.refreshEvents() }
             }
         }
     }
 
-    private var blockSelector: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Bloques")
-                .font(.title3.weight(.black))
-            ScrollView(.horizontal) {
-                HStack(spacing: 10) {
-                    ForEach(sortedBlocks) { block in
-                        Button {
-                            store.selectBlock(block)
-                            selectedRoutineIDForEdit = store.selectedRoutine?.id ?? sortedRoutines.first?.id ?? ""
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: block.id == store.selectedBlock?.id ? "checkmark.circle.fill" : "circle")
-                                    .font(.headline.weight(.bold))
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(block.name)
-                                        .font(.callout.weight(.black))
-                                    Text("\(routineCount(for: block)) coreografias")
-                                        .font(.caption.weight(.semibold))
-                                        .foregroundStyle(LevitTheme.muted)
-                                }
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 13)
-                            .foregroundStyle(block.id == store.selectedBlock?.id ? LevitTheme.pink : LevitTheme.ink)
-                            .background(block.id == store.selectedBlock?.id ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
-                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(block.id == store.selectedBlock?.id ? LevitTheme.pink.opacity(0.26) : LevitTheme.line))
-                        }
-                        .buttonStyle(.plain)
-                    }
+    private var driveExportPanel: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(driveStatusColor.opacity(0.14))
+                    .frame(width: 42, height: 42)
+                if store.driveExportStatus.isExporting {
+                    ProgressView()
+                        .tint(LevitTheme.pink)
+                } else {
+                    Image(systemName: store.driveExportStatus.systemImage)
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(driveStatusColor)
                 }
-                .padding(.bottom, 2)
             }
-            .scrollIndicators(.hidden)
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(store.driveExportStatus.title)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                Text(driveStatusMessage)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button {
+                guard !store.driveExportStatus.isExporting else { return }
+                Task { await store.exportSelectedBlockToDrive() }
+            } label: {
+                Label("Exportar Drive", systemImage: "icloud.and.arrow.up")
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(.white)
+                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .disabled(store.driveExportStatus.isExporting)
+            .opacity(store.driveExportStatus.isExporting ? 0.58 : 1)
         }
+        .padding(18)
+        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
     }
 
     private var editAsJudgePanel: some View {
@@ -288,17 +278,33 @@ struct AdminView: View {
         }
     }
 
-    private func routineCount(for block: DanceBlock) -> Int {
-        let routineIDs = Set(block.routines.map(\.id))
-        return store.routines.filter { routine in
-            routineIDs.contains(routine.id) || routine.blockID == block.id || routine.block == block.name
-        }.count
-    }
-
     private func judgeTotal(for routine: Routine, judge: String) -> Double {
         guard !judge.isEmpty else { return 0 }
         return store.template(for: routine).criteria.reduce(0) { sum, criterion in
             sum + store.score(for: routine, judge: judge, criterion: criterion)
+        }
+    }
+
+    private var driveStatusMessage: String {
+        if let message = store.driveExportMessage {
+            return message
+        }
+        if store.hasGoogleDriveConfiguration {
+            return "Crea carpetas por bloque, academia y coreografia; sube una hoja de jueceo por juez."
+        }
+        return "Faltan GOOGLE_CLIENT_ID y GOOGLE_REVERSED_CLIENT_ID para habilitar Drive."
+    }
+
+    private var driveStatusColor: Color {
+        switch store.driveExportStatus {
+        case .idle:
+            store.hasGoogleDriveConfiguration ? .green : .orange
+        case .exporting:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
         }
     }
 }

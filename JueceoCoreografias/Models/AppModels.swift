@@ -175,6 +175,46 @@ enum SyncStatus: Equatable, Sendable {
     }
 }
 
+enum DriveExportStatus: Equatable, Sendable {
+    case idle
+    case exporting
+    case completed(Int)
+    case failed(String)
+
+    var title: String {
+        switch self {
+        case .idle:
+            "Drive listo"
+        case .exporting:
+            "Exportando a Drive"
+        case let .completed(count):
+            "\(count) PDFs en Drive"
+        case .failed:
+            "Error en Drive"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .idle:
+            "externaldrive"
+        case .exporting:
+            "arrow.triangle.2.circlepath"
+        case .completed:
+            "checkmark.icloud"
+        case .failed:
+            "exclamationmark.icloud"
+        }
+    }
+
+    var isExporting: Bool {
+        if case .exporting = self {
+            return true
+        }
+        return false
+    }
+}
+
 extension String {
     var normalizedKey: String {
         folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)

@@ -24,6 +24,10 @@
 		010000000000000000000017 /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* AdminView.swift */; };
 		010000000000000000000018 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* Assets.xcassets */; };
 		010000000000000000000019 /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* FavoritesView.swift */; };
+		010000000000000000000020 /* GoogleDriveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000020 /* GoogleDriveService.swift */; };
+		010000000000000000000021 /* ScoreSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000021 /* ScoreSheetPDFExporter.swift */; };
+		010000000000000000000022 /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
+		010000000000000000000023 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +50,10 @@
 		020000000000000000000017 /* AdminView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminView.swift; sourceTree = "<group>"; };
 		020000000000000000000018 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		020000000000000000000019 /* FavoritesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FavoritesView.swift; sourceTree = "<group>"; };
+		020000000000000000000020 /* GoogleDriveService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GoogleDriveService.swift; sourceTree = "<group>"; };
+		020000000000000000000021 /* ScoreSheetPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSheetPDFExporter.swift; sourceTree = "<group>"; };
+		020000000000000000000022 /* PhoneContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneContentView.swift; sourceTree = "<group>"; };
+		020000000000000000000023 /* JudgingSheetPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgingSheetPDFExporter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -100,6 +108,7 @@
 				020000000000000000000016 /* ExcelImportView.swift */,
 				020000000000000000000017 /* AdminView.swift */,
 				020000000000000000000019 /* FavoritesView.swift */,
+				020000000000000000000022 /* PhoneContentView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -117,8 +126,11 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000009 /* PDFExporter.swift */,
+				020000000000000000000021 /* ScoreSheetPDFExporter.swift */,
+				020000000000000000000023 /* JudgingSheetPDFExporter.swift */,
 				020000000000000000000010 /* ShareSheet.swift */,
 				020000000000000000000015 /* RemoteJudgingRepository.swift */,
+				020000000000000000000020 /* GoogleDriveService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -214,9 +226,13 @@
 				010000000000000000000016 /* ExcelImportView.swift in Sources */,
 				010000000000000000000017 /* AdminView.swift in Sources */,
 				010000000000000000000019 /* FavoritesView.swift in Sources */,
+				010000000000000000000022 /* PhoneContentView.swift in Sources */,
 				010000000000000000000009 /* PDFExporter.swift in Sources */,
+				010000000000000000000021 /* ScoreSheetPDFExporter.swift in Sources */,
+				010000000000000000000023 /* JudgingSheetPDFExporter.swift in Sources */,
 				010000000000000000000010 /* ShareSheet.swift in Sources */,
 				010000000000000000000015 /* RemoteJudgingRepository.swift in Sources */,
+				010000000000000000000020 /* GoogleDriveService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -345,6 +361,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
 				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -369,6 +387,8 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
 				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (

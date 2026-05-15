@@ -60,6 +60,17 @@ La tab `Excel` sube archivos a `excel_imports` como importaciones pendientes. Pa
 python3 scripts/process_excel_imports.py --allow-errors
 ```
 
+## Exportar a Google Drive
+
+El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `Levitate CDMX 2026`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` queda en `0`.
+
+Para habilitarlo:
+
+1. En Google Cloud habilita Google Drive API.
+2. Crea un OAuth Client tipo iOS con bundle id `com.goldencrowvs.jueceolevitate`.
+3. En Xcode reemplaza los build settings `GOOGLE_CLIENT_ID` y `GOOGLE_REVERSED_CLIENT_ID` con los valores de Google.
+4. Si el OAuth consent screen esta en testing, agrega la cuenta que usara la app como test user.
+
 ## Android tablets
 
 La base Flutter esta en `android_tablet_flutter`. En esta maquina no esta instalado Flutter, asi que primero completa los archivos host de Android en una maquina con Flutter:

@@ -567,23 +567,13 @@ struct LevitBrand: View {
     var isCompact = false
 
     var body: some View {
-        HStack(spacing: isCompact ? 8 : 12) {
-            Image(systemName: "figure.dance")
-                .font(.system(size: isCompact ? 22 : 30, weight: .bold))
-                .foregroundStyle(LevitTheme.pink)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("LEVITATE")
-                    .font(.system(size: isCompact ? 15 : 20, weight: .black))
-                    .tracking(isCompact ? 2.5 : 4)
-                if !isCompact {
-                    Text("JUDGING SYSTEM")
-                        .font(.system(size: 8, weight: .bold))
-                        .tracking(3)
-                        .foregroundStyle(LevitTheme.muted)
-                }
-            }
-        }
-        .foregroundStyle(LevitTheme.ink)
+        Image("LevitateLogo")
+            .renderingMode(.template)
+            .resizable()
+            .scaledToFit()
+            .frame(width: isCompact ? 136 : 204, height: isCompact ? 40 : 60, alignment: .leading)
+            .foregroundStyle(LevitTheme.ink)
+            .accessibilityLabel("Levitate")
     }
 }
 

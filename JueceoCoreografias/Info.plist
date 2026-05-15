@@ -18,8 +18,23 @@
 	<string>$(PRODUCT_BUNDLE_PACKAGE_TYPE)</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>GOOGLE_CLIENT_ID</key>
+	<string>$(GOOGLE_CLIENT_ID)</string>
+	<key>GOOGLE_DRIVE_ROOT_FOLDER</key>
+	<string>Levitate CDMX 2026</string>
+	<key>GOOGLE_REVERSED_CLIENT_ID</key>
+	<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>SUPABASE_PUBLISHABLE_KEY</key>
@@ -35,6 +50,7 @@
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
+		<string>UIInterfaceOrientationPortrait</string>
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
