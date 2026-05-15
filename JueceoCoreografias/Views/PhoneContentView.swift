@@ -1,13 +1,15 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct PhoneContentView: View {
     @EnvironmentObject private var store: JudgingStore
     @State private var selectedTab: PhoneTab = .home
     @State private var addingJudge = false
     @State private var newJudgeName = ""
+    @State private var isAdminJudgingPresented = false
 
     private var availableTabs: [PhoneTab] {
-        store.isAdmin ? PhoneTab.allCases : [.home, .routines, .judging]
+        store.isAdmin ? [.home, .routines, .favorites, .ranking, .dictamen, .excel, .admin] : [.home, .routines, .judging]
     }
 
     var body: some View {
@@ -44,6 +46,12 @@ struct PhoneContentView: View {
         .task {
             await store.startRemoteSyncIfAvailable()
         }
+        .fullScreenCover(isPresented: $isAdminJudgingPresented) {
+            PhoneJudgingView(selectedTab: $selectedTab) {
+                isAdminJudgingPresented = false
+            }
+            .environmentObject(store)
+        }
         .onChange(of: store.isAdmin) { _, _ in
             if !availableTabs.contains(selectedTab) {
                 selectedTab = .home
@@ -55,15 +63,30 @@ struct PhoneContentView: View {
     private func tabContent(_ tab: PhoneTab) -> some View {
         switch tab {
         case .home:
-            PhoneHomeView(selectedTab: $selectedTab, addingJudge: $addingJudge)
+            PhoneHomeView(
+                selectedTab: $selectedTab,
+                addingJudge: $addingJudge,
+                isAdminJudgingPresented: $isAdminJudgingPresented
+            )
         case .routines:
-            PhoneRoutinesView(selectedTab: $selectedTab)
+            PhoneRoutinesView(
+                selectedTab: $selectedTab,
+                isAdminJudgingPresented: $isAdminJudgingPresented
+            )
         case .judging:
             PhoneJudgingView(selectedTab: $selectedTab)
+        case .favorites:
+            PhoneFavoritesView()
         case .ranking:
             PhoneRankingView()
+        case .dictamen:
+            PhoneDictamenView()
+        case .excel:
+            PhoneExcelImportView()
         case .admin:
-            PhoneAdminView(selectedTab: $selectedTab)
+            PhoneAdminView(
+                isAdminJudgingPresented: $isAdminJudgingPresented
+            )
         }
     }
 }
@@ -72,7 +95,10 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
     case home
     case routines
     case judging
+    case favorites
     case ranking
+    case dictamen
+    case excel
     case admin
 
     var id: String { rawValue }
@@ -82,7 +108,10 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
         case .home: "Inicio"
         case .routines: "Rutinas"
         case .judging: "Jueceo"
+        case .favorites: "Favoritos"
         case .ranking: "Ranking"
+        case .dictamen: "Dictamen"
+        case .excel: "Excel"
         case .admin: "Admin"
         }
     }
@@ -92,7 +121,10 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
         case .home: "house.fill"
         case .routines: "list.bullet"
         case .judging: "checklist"
+        case .favorites: "star.fill"
         case .ranking: "chart.bar.fill"
+        case .dictamen: "trophy.fill"
+        case .excel: "square.and.arrow.up"
         case .admin: "gearshape.fill"
         }
     }
@@ -102,6 +134,7 @@ private struct PhoneHomeView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var selectedTab: PhoneTab
     @Binding var addingJudge: Bool
+    @Binding var isAdminJudgingPresented: Bool
 
     private var orderedRoutines: [Routine] {
         store.visibleRoutines.sorted(by: routineOrder)
@@ -112,24 +145,12 @@ private struct PhoneHomeView: View {
         return pending.isEmpty ? Array(orderedRoutines.prefix(4)) : Array(pending.prefix(4))
     }
 
-    private var completedCount: Int {
-        store.visibleRoutines.filter { store.result(for: $0).total > 0 }.count
-    }
-
-    private var averageScore: String {
-        let scored = store.visibleRoutines.map(store.result).filter { $0.total > 0 }
-        guard !scored.isEmpty else { return "0.0" }
-        let average = scored.reduce(0) { $0 + $1.total } / Double(scored.count)
-        return average.formatted(.number.precision(.fractionLength(1)))
-    }
-
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     topBar
                     hero
-                    metricsGrid
                     nextRoutines
                     primaryActions
                 }
@@ -170,14 +191,7 @@ private struct PhoneHomeView: View {
             }
 
             if store.isAdmin {
-                HStack(spacing: 10) {
-                    EventPill(isCompact: true)
-                    Spacer()
-                    BlockPill(isCompact: true)
-                }
-                .padding(14)
-                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+                adminSelectors
             }
         }
         .padding(18)
@@ -185,13 +199,25 @@ private struct PhoneHomeView: View {
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(LevitTheme.line))
     }
 
-    private var metricsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-            PhoneMetricCard(icon: "checkmark.circle.fill", value: "\(completedCount)", label: "Calificadas")
-            PhoneMetricCard(icon: "figure.dance", value: "\(store.visibleRoutines.count)", label: "Rutinas")
-            PhoneMetricCard(icon: "chart.bar.fill", value: averageScore, label: "Promedio")
-            PhoneMetricCard(icon: "icloud.fill", value: store.pendingSyncCount == 0 ? "OK" : "\(store.pendingSyncCount)", label: "Sync")
+    private var adminSelectors: some View {
+        VStack(spacing: 10) {
+            selectorRow {
+                EventPill(isCompact: true)
+            }
+
+            selectorRow {
+                BlockPill(isCompact: true)
+            }
         }
+    }
+
+    private func selectorRow<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        content()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 50, alignment: .leading)
+            .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
     }
 
     private var nextRoutines: some View {
@@ -214,7 +240,15 @@ private struct PhoneHomeView: View {
                 ForEach(pendingRoutines) { routine in
                     PhoneRoutineRow(routine: routine, total: store.result(for: routine).total) {
                         store.selectedRoutineID = routine.id
-                        selectedTab = .judging
+                        if store.isAdmin {
+                            if store.isAdminEditingAsJudge {
+                                isAdminJudgingPresented = true
+                            } else {
+                                selectedTab = .admin
+                            }
+                        } else {
+                            selectedTab = .judging
+                        }
                     }
                 }
             }
@@ -227,7 +261,15 @@ private struct PhoneHomeView: View {
                 if let next = pendingRoutines.first ?? orderedRoutines.first {
                     store.selectedRoutineID = next.id
                 }
-                selectedTab = .judging
+                if store.isAdmin {
+                    if store.isAdminEditingAsJudge {
+                        isAdminJudgingPresented = true
+                    } else {
+                        selectedTab = .admin
+                    }
+                } else {
+                    selectedTab = .judging
+                }
             } label: {
                 Label("Juecear", systemImage: "play.fill")
                     .font(.headline.weight(.black))
@@ -267,6 +309,7 @@ private struct PhoneHomeView: View {
 private struct PhoneRoutinesView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var selectedTab: PhoneTab
+    @Binding var isAdminJudgingPresented: Bool
     @State private var searchText = ""
     @State private var filter: PhoneRoutineFilter = .all
 
@@ -293,7 +336,15 @@ private struct PhoneRoutinesView: View {
                         ForEach(filteredRoutines) { routine in
                             PhoneRoutineRow(routine: routine, total: store.result(for: routine).total) {
                                 store.selectedRoutineID = routine.id
-                                selectedTab = .judging
+                                if store.isAdmin {
+                                    if store.isAdminEditingAsJudge {
+                                        isAdminJudgingPresented = true
+                                    } else {
+                                        selectedTab = .admin
+                                    }
+                                } else {
+                                    selectedTab = .judging
+                                }
                             }
                         }
                     }
@@ -389,11 +440,17 @@ private enum PhoneRoutineFilter: String, CaseIterable, Identifiable {
 private struct PhoneJudgingView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var selectedTab: PhoneTab
+    var onClose: (() -> Void)?
 
     var body: some View {
         NavigationStack {
             if let routine = store.selectedRoutine {
-                PhoneScoreSheet(routine: routine, routines: sortedRoutines, selectedTab: $selectedTab)
+                PhoneScoreSheet(
+                    routine: routine,
+                    routines: sortedRoutines,
+                    selectedTab: $selectedTab,
+                    onClose: onClose
+                )
             } else {
                 ContentUnavailableView("Sin rutinas", systemImage: "tray")
                     .background(LevitTheme.paper)
@@ -418,6 +475,7 @@ private struct PhoneScoreSheet: View {
     let routine: Routine
     let routines: [Routine]
     @Binding var selectedTab: PhoneTab
+    var onClose: (() -> Void)?
 
     @State private var draftScores: [Int: String] = [:]
     @State private var didSubmit = false
@@ -473,9 +531,18 @@ private struct PhoneScoreSheet: View {
         .navigationTitle("Jueceo")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let onClose {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cerrar", action: onClose)
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    selectedTab = .routines
+                    if let onClose {
+                        onClose()
+                    } else {
+                        selectedTab = .routines
+                    }
                 } label: {
                     Image(systemName: "list.bullet")
                 }
@@ -789,8 +856,575 @@ private struct PhoneScoreSheet: View {
     }
 }
 
+private struct PhoneFavoritesView: View {
+    @EnvironmentObject private var store: JudgingStore
+
+    private var favorites: [FavoriteSelectionSummary] {
+        store.favoriteSummaries
+    }
+
+    private var groupedFavorites: [(category: FavoriteCategory, favorites: [FavoriteSelectionSummary])] {
+        FavoriteCategory.allCases.compactMap { category in
+            let items = favorites.filter { $0.category == category }
+            return items.isEmpty ? nil : (category, items)
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        PhoneMetricCard(icon: "star.fill", value: "\(favorites.count)", label: "Total")
+                        PhoneMetricCard(icon: "icloud.fill", value: store.pendingSyncCount == 0 ? "OK" : "\(store.pendingSyncCount)", label: "Sync")
+                    }
+
+                    if favorites.isEmpty {
+                        PhoneEmptyState(
+                            icon: "star.slash",
+                            title: "Sin favoritos",
+                            detail: "Las marcas de vestuario, coreografia y musica aparecen aca."
+                        )
+                    } else {
+                        ForEach(groupedFavorites, id: \.category) { group in
+                            PhoneFavoriteCategoryBlock(category: group.category, favorites: group.favorites)
+                        }
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+            .background(LevitTheme.paper)
+            .navigationTitle("Favoritos")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    BlockPill(isCompact: true)
+                }
+            }
+        }
+    }
+}
+
+private struct PhoneFavoriteCategoryBlock: View {
+    let category: FavoriteCategory
+    let favorites: [FavoriteSelectionSummary]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(category.title, systemImage: category.systemImage)
+                .font(.headline.weight(.black))
+                .foregroundStyle(LevitTheme.pink)
+
+            VStack(spacing: 10) {
+                ForEach(favorites) { favorite in
+                    PhoneFavoriteRow(favorite: favorite)
+                }
+            }
+        }
+        .padding(16)
+        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneFavoriteRow: View {
+    let favorite: FavoriteSelectionSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Text("#\(favorite.routine.id)")
+                    .font(.callout.monospacedDigit().weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 58, height: 40)
+                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 12))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(favorite.routine.name)
+                        .font(.callout.weight(.black))
+                        .lineLimit(1)
+                    Text(favorite.routine.academy)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LevitTheme.muted)
+                        .lineLimit(1)
+                }
+            }
+
+            HStack(spacing: 8) {
+                PhoneChip(icon: "person.fill", text: favorite.judge)
+                PhoneChip(icon: "square.stack.3d.up.fill", text: favorite.blockName)
+            }
+        }
+        .padding(14)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneDictamenView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @State private var selectedGroupID: String?
+    @State private var sharing = false
+
+    private var groups: [PhoneDictamenGroup] {
+        Dictionary(grouping: store.rankings) { result in
+            PhoneDictamenGroup.id(
+                genre: emptyFallback(result.routine.genre),
+                division: emptyFallback(result.routine.division),
+                category: emptyFallback(result.routine.category)
+            )
+        }
+        .compactMap { _, items -> PhoneDictamenGroup? in
+            guard let sample = items.first?.routine else { return nil }
+            return PhoneDictamenGroup(
+                genre: emptyFallback(sample.genre),
+                division: emptyFallback(sample.division),
+                category: emptyFallback(sample.category),
+                results: sortedResults(items)
+            )
+        }
+        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+
+    private var selectedGroup: PhoneDictamenGroup? {
+        if let selectedGroupID,
+           let group = groups.first(where: { $0.id == selectedGroupID }) {
+            return group
+        }
+        return groups.first
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let selectedGroup {
+                        selectedSummary(selectedGroup)
+                        podium(selectedGroup)
+                        exportButton(selectedGroup)
+                    } else {
+                        PhoneEmptyState(
+                            icon: "trophy",
+                            title: "Sin dictamen",
+                            detail: "Cuando haya calificaciones, las categorias apareceran aca."
+                        )
+                    }
+
+                    groupsList
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+            .background(LevitTheme.paper)
+            .navigationTitle("Dictamen")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    BlockPill(isCompact: true)
+                }
+            }
+            .sheet(isPresented: $sharing) {
+                if let url = store.lastPDFURL {
+                    ShareSheet(items: [url])
+                }
+            }
+        }
+    }
+
+    private func selectedSummary(_ group: PhoneDictamenGroup) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "trophy.fill")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(LevitTheme.pink)
+                .frame(width: 38, height: 38)
+                .background(LevitTheme.palePink, in: Circle())
+            VStack(alignment: .leading, spacing: 3) {
+                Text(group.title)
+                    .font(.headline.weight(.black))
+                    .lineLimit(2)
+                Text("\(group.completedCount) / \(group.results.count) calificadas")
+                    .font(.caption.monospacedDigit().weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+        }
+        .padding(16)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+
+    private func podium(_ group: PhoneDictamenGroup) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Podio")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            VStack(spacing: 10) {
+                ForEach(Array(group.podium.enumerated()), id: \.element.id) { index, result in
+                    PhoneRankingRow(position: index + 1, result: result)
+                }
+            }
+        }
+    }
+
+    private func exportButton(_ group: PhoneDictamenGroup) -> some View {
+        Button {
+            store.exportPDF(results: group.results, title: "Dictamen final - \(group.title)")
+            sharing = store.lastPDFURL != nil
+        } label: {
+            Label("Exportar dictamen", systemImage: "doc.richtext")
+                .font(.headline.weight(.black))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .foregroundStyle(.white)
+                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var groupsList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Categorias")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            VStack(spacing: 10) {
+                ForEach(groups) { group in
+                    Button {
+                        selectedGroupID = group.id
+                    } label: {
+                        PhoneDictamenGroupRow(group: group, isSelected: group.id == selectedGroup?.id)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func sortedResults(_ items: [RoutineResult]) -> [RoutineResult] {
+        items.sorted {
+            if $0.total == $1.total {
+                return (Int($0.routine.id) ?? 0) < (Int($1.routine.id) ?? 0)
+            }
+            return $0.total > $1.total
+        }
+    }
+
+    private func emptyFallback(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "SIN DATO" : value
+    }
+}
+
+private struct PhoneDictamenGroup: Identifiable {
+    let genre: String
+    let division: String
+    let category: String
+    let results: [RoutineResult]
+
+    var id: String { Self.id(genre: genre, division: division, category: category) }
+    var title: String { "\(genre) · \(division) · \(category)" }
+    var completedCount: Int { results.filter { $0.total > 0 }.count }
+    var podium: [RoutineResult] { Array(results.filter { $0.total > 0 }.prefix(3)) }
+
+    static func id(genre: String, division: String, category: String) -> String {
+        [genre, division, category].map(\.normalizedKey).joined(separator: "|")
+    }
+}
+
+private struct PhoneDictamenGroupRow: View {
+    let group: PhoneDictamenGroup
+    let isSelected: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: isSelected ? "trophy.fill" : "circle")
+                .font(.headline.weight(.bold))
+                .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
+                .frame(width: 32, height: 32)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(group.genre)
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    LevitTag(group.division)
+                    LevitTag(group.category)
+                }
+            }
+
+            Spacer()
+
+            Text("\(group.completedCount)/\(group.results.count)")
+                .font(.caption.monospacedDigit().weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+        }
+        .padding(14)
+        .foregroundStyle(LevitTheme.ink)
+        .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(isSelected ? LevitTheme.pink.opacity(0.34) : LevitTheme.line))
+    }
+}
+
+private struct PhoneExcelImportView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @State private var eventName = ""
+    @State private var eventSlug = ""
+    @State private var selectedFileURL: URL?
+    @State private var isPickingFile = false
+    @State private var isUploading = false
+    @State private var lastUpload: ExcelImportSummary?
+    @State private var errorMessage: String?
+
+    private var canUpload: Bool {
+        store.hasRemoteConfiguration
+            && selectedFileURL != nil
+            && !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !eventSlug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !isUploading
+    }
+
+    private var excelTypes: [UTType] {
+        [UTType(filenameExtension: "xlsx"), UTType(filenameExtension: "xls")].compactMap { $0 }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    eventFields
+                    filePicker
+                    uploadButton
+                    statusPanel
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+            .background(LevitTheme.paper)
+            .navigationTitle("Excel")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    PhoneSyncBadge()
+                }
+            }
+            .fileImporter(
+                isPresented: $isPickingFile,
+                allowedContentTypes: excelTypes,
+                allowsMultipleSelection: false,
+                onCompletion: handleFileSelection
+            )
+        }
+    }
+
+    private var eventFields: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Evento")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            TextField("Nombre del evento", text: $eventName)
+                .textInputAutocapitalization(.words)
+                .onChange(of: eventName) { oldValue, newValue in
+                    if eventSlug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || eventSlug == slug(for: oldValue) {
+                        eventSlug = slug(for: newValue)
+                    }
+                }
+                .modifier(PhoneImportFieldStyle())
+
+            TextField("Slug", text: $eventSlug)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .onChange(of: eventSlug) { _, newValue in
+                    let clean = slug(for: newValue)
+                    if clean != newValue {
+                        eventSlug = clean
+                    }
+                }
+                .modifier(PhoneImportFieldStyle())
+        }
+    }
+
+    private var filePicker: some View {
+        Button {
+            isPickingFile = true
+        } label: {
+            HStack(spacing: 13) {
+                Image(systemName: "doc.badge.plus")
+                    .font(.headline.weight(.bold))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 38, height: 38)
+                    .background(LevitTheme.palePink, in: Circle())
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(selectedFileURL?.lastPathComponent ?? "Seleccionar Excel")
+                        .font(.headline.weight(.black))
+                        .lineLimit(1)
+                    Text(selectedFileURL.map(fileSizeText) ?? ".xlsx o .xls")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+            .padding(16)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var uploadButton: some View {
+        Button {
+            Task { await uploadSelectedFile() }
+        } label: {
+            HStack(spacing: 10) {
+                if isUploading {
+                    ProgressView()
+                        .tint(.white)
+                } else {
+                    Image(systemName: "icloud.and.arrow.up.fill")
+                }
+                Text(isUploading ? "Subiendo" : "Subir Excel")
+            }
+            .font(.headline.weight(.black))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .foregroundStyle(.white)
+            .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .disabled(!canUpload)
+        .opacity(canUpload ? 1 : 0.45)
+    }
+
+    private var statusPanel: some View {
+        VStack(spacing: 10) {
+            PhoneImportStatusRow(
+                icon: store.hasRemoteConfiguration ? "checkmark.icloud.fill" : "icloud.slash",
+                title: store.hasRemoteConfiguration ? "Supabase conectado" : "Modo local",
+                detail: store.syncMessage ?? store.syncStatus.title,
+                tint: store.hasRemoteConfiguration ? .green : LevitTheme.muted
+            )
+
+            if let lastUpload {
+                PhoneImportStatusRow(
+                    icon: "checkmark.circle.fill",
+                    title: lastUpload.eventName,
+                    detail: "\(lastUpload.fileName) enviado",
+                    tint: .green
+                )
+            }
+
+            if let errorMessage {
+                PhoneImportStatusRow(
+                    icon: "exclamationmark.triangle.fill",
+                    title: "No se pudo subir",
+                    detail: errorMessage,
+                    tint: .red
+                )
+            }
+        }
+    }
+
+    private func handleFileSelection(_ result: Result<[URL], Error>) {
+        errorMessage = nil
+        switch result {
+        case let .success(urls):
+            guard let url = urls.first else { return }
+            selectedFileURL = url
+            let name = url.deletingPathExtension().lastPathComponent
+            if eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                eventName = name
+            }
+            if eventSlug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                eventSlug = slug(for: name)
+            }
+        case let .failure(error):
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func uploadSelectedFile() async {
+        guard let selectedFileURL else { return }
+        isUploading = true
+        errorMessage = nil
+        defer { isUploading = false }
+
+        do {
+            lastUpload = try await store.uploadExcelImport(
+                fileURL: selectedFileURL,
+                eventName: eventName,
+                eventSlug: eventSlug
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func slug(for value: String) -> String {
+        value.stableRemoteID
+    }
+
+    private func fileSizeText(for url: URL) -> String {
+        guard
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey]),
+            let size = values.fileSize
+        else {
+            return "Excel seleccionado"
+        }
+        return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
+    }
+}
+
+private struct PhoneImportStatusRow: View {
+    let icon: String
+    let title: String
+    let detail: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: icon)
+                .font(.headline.weight(.black))
+                .foregroundStyle(tint)
+                .frame(width: 38, height: 38)
+                .background(tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+        }
+        .padding(14)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneImportFieldStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .font(.headline.weight(.bold))
+            .padding(.horizontal, 14)
+            .frame(height: 50)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 15))
+            .overlay(RoundedRectangle(cornerRadius: 15).stroke(LevitTheme.line))
+    }
+}
+
 private struct PhoneRankingView: View {
     @EnvironmentObject private var store: JudgingStore
+    @State private var sharing = false
 
     private var completedResults: [RoutineResult] {
         store.rankings.filter { $0.total > 0 }
@@ -811,8 +1445,21 @@ private struct PhoneRankingView: View {
             .background(LevitTheme.paper)
             .navigationTitle("Ranking")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        store.exportPDF(results: store.rankings, title: "Calificaciones y Dictamen Final")
+                        sharing = store.lastPDFURL != nil
+                    } label: {
+                        Image(systemName: "doc.richtext")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     BlockPill(isCompact: true)
+                }
+            }
+            .sheet(isPresented: $sharing) {
+                if let url = store.lastPDFURL {
+                    ShareSheet(items: [url])
                 }
             }
         }
@@ -821,7 +1468,7 @@ private struct PhoneRankingView: View {
 
 private struct PhoneAdminView: View {
     @EnvironmentObject private var store: JudgingStore
-    @Binding var selectedTab: PhoneTab
+    @Binding var isAdminJudgingPresented: Bool
 
     var body: some View {
         NavigationStack {
@@ -892,7 +1539,7 @@ private struct PhoneAdminView: View {
                     Button {
                         if let routine = store.selectedRoutine ?? store.visibleRoutines.first {
                             store.beginAdminScoring(judge: judge, routine: routine)
-                            selectedTab = .judging
+                            isAdminJudgingPresented = true
                         }
                     } label: {
                         Label(judge, systemImage: judge == store.scoringJudge ? "checkmark.circle.fill" : "person")
@@ -1061,6 +1708,36 @@ private struct PhoneSyncBadge: View {
     }
 }
 
+private struct PhoneEmptyState: View {
+    let icon: String
+    let title: String
+    let detail: String
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(LevitTheme.muted)
+                .frame(width: 44, height: 44)
+                .background(LevitTheme.softFill, in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.headline.weight(.black))
+                Text(detail)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .foregroundStyle(LevitTheme.ink)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
 private struct PhoneMetricCard: View {
     let icon: String
     let value: String
@@ -1083,6 +1760,22 @@ private struct PhoneMetricCard: View {
         .frame(maxWidth: .infinity, minHeight: 104, alignment: .leading)
         .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneChip: View {
+    let icon: String
+    let text: String
+
+    var body: some View {
+        Label(text, systemImage: icon)
+            .font(.caption.weight(.black))
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .foregroundStyle(LevitTheme.pink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .background(LevitTheme.palePink, in: Capsule())
     }
 }
 
