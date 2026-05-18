@@ -8,7 +8,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case inicio = "Inicio"
     case admin = "Admin"
     case favoritos = "Favoritos"
-    case bloques = "Coreografias"
+    case bloques = "Rutinas"
     case jueceo = "Jueceo"
     case calificaciones = "Ranking"
     case dictamen = "Dictamen"
@@ -19,7 +19,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .inicio: "house"
-        case .admin: "person.crop.circle.fill"
+        case .admin: "gearshape.fill"
         case .favoritos: "star.fill"
         case .bloques: "list.bullet"
         case .jueceo: "checklist"
@@ -31,12 +31,28 @@ enum AppSection: String, CaseIterable, Identifiable {
 
     var requiresAdmin: Bool {
         switch self {
-        case .inicio, .jueceo:
+        case .inicio, .bloques, .jueceo:
             false
-        case .admin, .favoritos, .bloques, .calificaciones, .dictamen, .importar:
+        case .admin, .favoritos, .calificaciones, .dictamen, .importar:
             true
         }
     }
+
+    static let adminNavigation: [AppSection] = [
+        .inicio,
+        .bloques,
+        .favoritos,
+        .calificaciones,
+        .dictamen,
+        .importar,
+        .admin
+    ]
+
+    static let judgeNavigation: [AppSection] = [
+        .inicio,
+        .bloques,
+        .jueceo
+    ]
 }
 
 enum LevitTheme {
@@ -91,7 +107,7 @@ struct ContentView: View {
     @State private var sharing = false
 
     var body: some View {
-        let activeSection = store.canAccess(section) ? section : .inicio
+        let activeSection = routedSection(for: section)
 
         ZStack {
             LevitTheme.paper.ignoresSafeArea()
@@ -110,6 +126,8 @@ struct ContentView: View {
                 } else {
                     HStack(spacing: 0) {
                         LevitSidebar(section: $section)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .layoutPriority(10)
 
                         switch activeSection {
                         case .inicio:
@@ -123,8 +141,7 @@ struct ContentView: View {
                                 blocks: store.selectedBlock.map { [$0] } ?? store.blocks,
                                 routines: store.visibleRoutines
                             ) { routine in
-                                store.selectedRoutineID = routine.id
-                                section = .jueceo
+                                openJudging(for: routine)
                             }
                         case .jueceo:
                             EmptyView()
@@ -169,6 +186,13 @@ struct ContentView: View {
         .onChange(of: store.selectedJudge) { _, _ in
             if !store.canAccess(section) {
                 section = .inicio
+            } else if shouldRouteAdminToJudgePicker {
+                section = .admin
+            }
+        }
+        .onChange(of: store.isAdminEditingAsJudge) { _, _ in
+            if shouldRouteAdminToJudgePicker {
+                section = .admin
             }
         }
     }
@@ -180,6 +204,25 @@ struct ContentView: View {
     private func exportPDF(results: [RoutineResult]?, title: String) {
         store.exportPDF(results: results, title: title)
         sharing = store.lastPDFURL != nil
+    }
+
+    private var shouldRouteAdminToJudgePicker: Bool {
+        section == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge
+    }
+
+    private func routedSection(for requestedSection: AppSection) -> AppSection {
+        let allowedSection = store.canAccess(requestedSection) ? requestedSection : .inicio
+        if allowedSection == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge {
+            return .admin
+        }
+        return allowedSection
+    }
+
+    private func openJudging(for routine: Routine? = nil) {
+        if let routine {
+            store.selectedRoutineID = routine.id
+        }
+        section = store.isAdmin && !store.isAdminEditingAsJudge ? .admin : .jueceo
     }
 }
 
@@ -424,7 +467,7 @@ private struct DashboardView: View {
                         isSelected: routine.id == nextRoutine?.id,
                         isCompact: isCompact
                     ) {
-                        store.selectedRoutineID = routine.id
+                        openJudging(for: routine)
                     }
                 }
             }
@@ -434,7 +477,10 @@ private struct DashboardView: View {
     private func enterJudgingButton(isCompact: Bool) -> some View {
         HStack(spacing: isCompact ? 10 : 14) {
             Button {
-                section = .jueceo
+                if let nextRoutine {
+                    store.selectedRoutineID = nextRoutine.id
+                }
+                section = store.isAdmin && !store.isAdminEditingAsJudge ? .admin : .jueceo
             } label: {
                 Label("Entrar al jueceo", systemImage: "play.fill")
                     .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
@@ -453,9 +499,9 @@ private struct DashboardView: View {
 
             if store.isAdmin {
                 Button {
-                    section = .admin
+                    section = .bloques
                 } label: {
-                    Label("Menu general", systemImage: "square.grid.2x2")
+                    Label("Rutinas", systemImage: "list.bullet")
                         .font(.system(size: isCompact ? 17 : 21, weight: .black, design: .rounded))
                         .lineLimit(1)
                         .minimumScaleFactor(0.72)
@@ -470,6 +516,11 @@ private struct DashboardView: View {
                 .buttonStyle(.plain)
             }
         }
+    }
+
+    private func openJudging(for routine: Routine) {
+        store.selectedRoutineID = routine.id
+        section = store.isAdmin && !store.isAdminEditingAsJudge ? .admin : .jueceo
     }
 
     private var averageScore: String {
@@ -497,24 +548,45 @@ struct LevitSidebar: View {
                 .frame(width: 42, height: 42)
 
             VStack(spacing: 18) {
-                ForEach(AppSection.allCases.filter { store.canAccess($0) }) { item in
+                ForEach(visibleSections) { item in
                     Button {
-                        section = item
+                        section = item == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge ? .admin : item
                     } label: {
                         SidebarItemIcon(item: item, isSelected: section == item)
                     }
+                    .frame(
+                        minWidth: 44,
+                        idealWidth: 44,
+                        maxWidth: 44,
+                        minHeight: 44,
+                        idealHeight: 44,
+                        maxHeight: 44
+                    )
+                    .fixedSize()
                     .buttonStyle(.plain)
                     .accessibilityLabel(item.rawValue)
                 }
             }
+            .layoutPriority(1)
+            .fixedSize(horizontal: false, vertical: true)
 
             Spacer()
         }
         .padding(.vertical, 22)
-        .frame(width: 74)
+        .frame(minWidth: 74, idealWidth: 74, maxWidth: 74)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .fixedSize(horizontal: true, vertical: false)
         .background(LevitTheme.sidebarSurface)
         .overlay(alignment: .trailing) {
             Rectangle().fill(LevitTheme.line).frame(width: 1)
+        }
+    }
+
+    private var visibleSections: [AppSection] {
+        let orderedSections = store.isAdmin ? AppSection.adminNavigation : AppSection.judgeNavigation
+        return orderedSections.filter { item in
+            guard store.canAccess(item) else { return false }
+            return item != .jueceo || !store.isAdmin
         }
     }
 }
@@ -526,20 +598,14 @@ private struct SidebarItemIcon: View {
     var body: some View {
         ZStack {
             Image(systemName: item.symbol)
-                .font(.system(size: 17, weight: .semibold))
-
-            if item == .admin {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(isSelected ? .white : LevitTheme.pink)
-                    .frame(width: 16, height: 16)
-                    .background(isSelected ? LevitTheme.pink : LevitTheme.palePink, in: Circle())
-                    .offset(x: 12, y: 12)
-            }
+                .font(.system(size: 18, weight: .semibold))
+                .frame(width: 24, height: 24)
         }
         .frame(width: 44, height: 44)
+        .fixedSize(horizontal: true, vertical: true)
         .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
         .background(isSelected ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 14))
+        .contentShape(RoundedRectangle(cornerRadius: 14))
     }
 }
 

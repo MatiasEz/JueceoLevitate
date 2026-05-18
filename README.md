@@ -6,6 +6,33 @@ App nativa de iPad creada en Xcode/SwiftUI a partir del Excel original.
 
 Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad físico y ejecuta el esquema `JueceoCoreografias`.
 
+## macOS para descarga directa
+
+El proyecto tambien compila como app de macOS usando Mac Catalyst. En Xcode elegi el esquema `JueceoCoreografias` y el destino `My Mac (Mac Catalyst)`.
+
+Build local:
+
+```bash
+xcodebuild \
+  -project JueceoCoreografias.xcodeproj \
+  -scheme JueceoCoreografias \
+  -destination 'platform=macOS,variant=Mac Catalyst' \
+  -configuration Release \
+  build
+```
+
+Para publicar por descarga directa, genera un archive de Mac Catalyst, exportalo firmado con Developer ID, notarizalo y empaquetalo como `.dmg`:
+
+```bash
+xcodebuild archive \
+  -project JueceoCoreografias.xcodeproj \
+  -scheme JueceoCoreografias \
+  -destination 'generic/platform=macOS,variant=Mac Catalyst' \
+  -archivePath build/JueceoCoreografias-macOS.xcarchive
+```
+
+La distribucion publica fuera del Mac App Store requiere certificado `Developer ID Application` y notarizacion de Apple antes de subir el `.dmg` a la web.
+
 ## Cargar otro Excel
 
 Para reemplazar el contenido base por otro Excel con la misma estructura:
