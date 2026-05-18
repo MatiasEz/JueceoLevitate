@@ -11,7 +11,8 @@ enum ScoreSheetPDFExporter {
         fileName: String,
         positions: [String: Int],
         templateForRoutine: (Routine) -> JudgingTemplate,
-        scoreForCriterion: (Routine, String, Criterion) -> Double
+        scoreForCriterion: (Routine, String, Criterion) -> Double,
+        penaltyForRoutine: (Routine, String) -> Double
     ) -> URL? {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(filenameWithoutExtension(fileName))
@@ -79,7 +80,8 @@ enum ScoreSheetPDFExporter {
                             y: y,
                             page: page,
                             margin: margin,
-                            scoreForCriterion: scoreForCriterion
+                            scoreForCriterion: scoreForCriterion,
+                            penaltyForRoutine: penaltyForRoutine
                         )
                         y += neededHeight
                     }
@@ -134,7 +136,7 @@ enum ScoreSheetPDFExporter {
         let meta = [
             clean(sourceName, fallback: "LEVITATE CDMX 2026"),
             academyName.map { "ACADEMIA: \(clean($0, fallback: "-"))" } ?? "TODAS LAS ACADEMIAS",
-            "PENALIZACION: 0"
+            "PENALIZACION: VER TABLA"
         ]
         drawText(
             meta.joined(separator: "  |  "),
@@ -221,10 +223,12 @@ enum ScoreSheetPDFExporter {
         y: CGFloat,
         page: CGRect,
         margin: CGFloat,
-        scoreForCriterion: (Routine, String, Criterion) -> Double
+        scoreForCriterion: (Routine, String, Criterion) -> Double,
+        penaltyForRoutine: (Routine, String) -> Double
     ) {
         let metrics = Layout.metrics(criteriaCount: criteria.count, pageWidth: page.width, margin: margin)
         let aggregate = aggregateTotal(for: result, judges: judges)
+        let aggregatePenalty = penaltyTotal(for: result, judges: judges)
 
         for (judgeIndex, judge) in judges.enumerated() {
             let rowY = y + CGFloat(judgeIndex) * Layout.rowHeight
@@ -259,7 +263,7 @@ enum ScoreSheetPDFExporter {
             x += metrics.judgeTotalWidth
             drawCell(rect: CGRect(x: x, y: rowY, width: metrics.scoreWidth, height: Layout.rowHeight), text: isFirstJudge && aggregate > 0 ? formatScore(aggregate) : "", fill: fill, fontSize: 6.9, weight: .bold)
             x += metrics.scoreWidth
-            drawCell(rect: CGRect(x: x, y: rowY, width: metrics.penaltyWidth, height: Layout.rowHeight), text: isFirstJudge ? "0" : "", fill: fill, fontSize: 6.9, weight: .bold)
+            drawCell(rect: CGRect(x: x, y: rowY, width: metrics.penaltyWidth, height: Layout.rowHeight), text: isFirstJudge && aggregatePenalty != 0 ? formatScore(aggregatePenalty) : "", fill: fill, fontSize: 6.9, weight: .bold)
             x += metrics.penaltyWidth
             drawCell(rect: CGRect(x: x, y: rowY, width: metrics.positionWidth, height: Layout.rowHeight), text: isFirstJudge ? positionText(position, aggregate: aggregate) : "", fill: fill, fontSize: 6.9, weight: .bold)
         }
@@ -269,6 +273,13 @@ enum ScoreSheetPDFExporter {
         let totalsByJudge = Dictionary(uniqueKeysWithValues: result.judgeTotals.map { ($0.judge, $0.total) })
         return judges.reduce(0) { sum, judge in
             sum + (totalsByJudge[judge] ?? 0)
+        }
+    }
+
+    private static func penaltyTotal(for result: RoutineResult, judges: [String]) -> Double {
+        let penaltiesByJudge = Dictionary(uniqueKeysWithValues: result.judgePenalties.map { ($0.judge, $0.value) })
+        return judges.reduce(0) { sum, judge in
+            sum + (penaltiesByJudge[judge] ?? 0)
         }
     }
 

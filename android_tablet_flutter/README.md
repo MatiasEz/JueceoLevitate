@@ -20,8 +20,8 @@ flutter run \
 - Reads the active/shared Supabase event.
 - Selects event and judge.
 - Lists blocks/routines with search.
-- Scores criteria and writes feedback.
+- Scores criteria, penalties and feedback.
 - Stores local values with pending sync.
-- Upserts scores/feedback to Supabase.
+- Upserts scores/penalties/feedback to Supabase.
 - Shows scores and dictamen with the same average/tie rules as iPad.
 - Exports a basic results PDF from the tablet.

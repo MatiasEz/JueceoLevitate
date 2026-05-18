@@ -14,12 +14,12 @@ class EventSummary {
   final bool isActive;
 
   factory EventSummary.fromJson(Map<String, dynamic> json) => EventSummary(
-        id: json['id'] as String,
-        slug: json['slug'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        sourceName: json['source_name'] as String? ?? '',
-        isActive: json['is_active'] as bool? ?? false,
-      );
+    id: json['id'] as String,
+    slug: json['slug'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    sourceName: json['source_name'] as String? ?? '',
+    isActive: json['is_active'] as bool? ?? false,
+  );
 }
 
 class AppData {
@@ -76,19 +76,19 @@ class Routine {
   final String duration;
 
   factory Routine.fromJson(Map<String, dynamic> json) => Routine(
-        id: json['routine_id'] as String? ?? json['id'] as String? ?? '',
-        block: json['block'] as String? ?? '',
-        name: json['name'] as String? ?? '',
-        academy: json['academy'] as String? ?? '',
-        division: json['division'] as String? ?? '',
-        genre: json['genre'] as String? ?? '',
-        level: json['level'] as String? ?? '',
-        category: json['category'] as String? ?? '',
-        choreographer: json['choreographer'] as String? ?? '',
-        state: json['state'] as String? ?? '',
-        time: json['scheduled_time'] as String? ?? json['time'] as String? ?? '',
-        duration: json['duration'] as String? ?? '',
-      );
+    id: json['routine_id'] as String? ?? json['id'] as String? ?? '',
+    block: json['block'] as String? ?? '',
+    name: json['name'] as String? ?? '',
+    academy: json['academy'] as String? ?? '',
+    division: json['division'] as String? ?? '',
+    genre: json['genre'] as String? ?? '',
+    level: json['level'] as String? ?? '',
+    category: json['category'] as String? ?? '',
+    choreographer: json['choreographer'] as String? ?? '',
+    state: json['state'] as String? ?? '',
+    time: json['scheduled_time'] as String? ?? json['time'] as String? ?? '',
+    duration: json['duration'] as String? ?? '',
+  );
 }
 
 class JudgingTemplate {
@@ -121,11 +121,12 @@ class Criterion {
   final double maxScore;
 
   factory Criterion.fromJson(Map<String, dynamic> json) => Criterion(
-        id: json['criterion_id'] as int? ?? json['id'] as int? ?? 0,
-        section: json['section'] as String? ?? '',
-        label: json['label'] as String? ?? '',
-        maxScore: (json['max_score'] as num? ?? json['maxScore'] as num? ?? 0).toDouble(),
-      );
+    id: json['criterion_id'] as int? ?? json['id'] as int? ?? 0,
+    section: json['section'] as String? ?? '',
+    label: json['label'] as String? ?? '',
+    maxScore: (json['max_score'] as num? ?? json['maxScore'] as num? ?? 0)
+        .toDouble(),
+  );
 }
 
 class RemoteScore {
@@ -142,38 +143,64 @@ class RemoteScore {
   final double value;
 
   factory RemoteScore.fromJson(Map<String, dynamic> json) => RemoteScore(
-        routineId: json['routine_id'] as String? ?? '',
-        judgeId: json['judge_id'] as String? ?? '',
-        criterionId: json['criterion_id'] as int? ?? 0,
-        value: (json['value'] as num? ?? 0).toDouble(),
-      );
+    routineId: json['routine_id'] as String? ?? '',
+    judgeId: json['judge_id'] as String? ?? '',
+    criterionId: json['criterion_id'] as int? ?? 0,
+    value: (json['value'] as num? ?? 0).toDouble(),
+  );
 }
 
 class RemoteFeedback {
-  RemoteFeedback({required this.routineId, required this.judgeId, required this.body});
+  RemoteFeedback({
+    required this.routineId,
+    required this.judgeId,
+    required this.body,
+  });
 
   final String routineId;
   final String judgeId;
   final String body;
 
   factory RemoteFeedback.fromJson(Map<String, dynamic> json) => RemoteFeedback(
-        routineId: json['routine_id'] as String? ?? '',
-        judgeId: json['judge_id'] as String? ?? '',
-        body: json['body'] as String? ?? '',
-      );
+    routineId: json['routine_id'] as String? ?? '',
+    judgeId: json['judge_id'] as String? ?? '',
+    body: json['body'] as String? ?? '',
+  );
+}
+
+class RemotePenalty {
+  RemotePenalty({
+    required this.routineId,
+    required this.judgeId,
+    required this.value,
+  });
+
+  final String routineId;
+  final String judgeId;
+  final double value;
+
+  factory RemotePenalty.fromJson(Map<String, dynamic> json) => RemotePenalty(
+    routineId: json['routine_id'] as String? ?? '',
+    judgeId: json['judge_id'] as String? ?? '',
+    value: (json['value'] as num? ?? 0).toDouble(),
+  );
 }
 
 class RoutineResult {
   RoutineResult({
     required this.routine,
     required this.judgeTotals,
+    required this.judgePenalties,
     required this.total,
+    required this.penalty,
     required this.maxScore,
   });
 
   final Routine routine;
   final Map<String, double> judgeTotals;
+  final Map<String, double> judgePenalties;
   final double total;
+  final double penalty;
   final double maxScore;
 }
 
@@ -187,7 +214,11 @@ String normalizedKey(String value) {
     'ü': 'u',
     'ñ': 'n',
   };
-  final folded = value.toLowerCase().split('').map((char) => accents[char] ?? char).join();
+  final folded = value
+      .toLowerCase()
+      .split('')
+      .map((char) => accents[char] ?? char)
+      .join();
   return folded.trim().toUpperCase();
 }
 

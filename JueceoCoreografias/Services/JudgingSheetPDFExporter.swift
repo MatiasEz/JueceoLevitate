@@ -10,6 +10,7 @@ enum JudgingSheetPDFExporter {
         blockName: String,
         fileName: String,
         feedback: String,
+        penalty: Double,
         scoreForCriterion: (Criterion) -> Double
     ) -> URL? {
         let url = FileManager.default.temporaryDirectory
@@ -24,7 +25,8 @@ enum JudgingSheetPDFExporter {
         ]
 
         let criteria = template.criteria.sorted { $0.id < $1.id }
-        let total = criteria.reduce(0) { $0 + scoreForCriterion($1) }
+        let subtotal = criteria.reduce(0) { $0 + scoreForCriterion($1) }
+        let total = subtotal > 0 ? max(0, subtotal + penalty) : 0
         let maxTotal = template.maxScore > 0 ? template.maxScore : criteria.reduce(0) { $0 + $1.maxScore }
 
         do {
@@ -54,6 +56,7 @@ enum JudgingSheetPDFExporter {
                     feedback: feedback,
                     total: total,
                     maxTotal: maxTotal,
+                    penalty: penalty,
                     y: footerTop,
                     margin: margin,
                     page: page
@@ -403,6 +406,7 @@ enum JudgingSheetPDFExporter {
         feedback: String,
         total: Double,
         maxTotal: Double,
+        penalty: Double,
         y: CGFloat,
         margin: CGFloat,
         page: CGRect
@@ -415,7 +419,7 @@ enum JudgingSheetPDFExporter {
         let metricWidth = (fullWidth - 28 - gap * 2) / 3
         drawFooterMetric(label: "TOTAL", value: total.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14, y: y + 8, width: metricWidth, height: 28), accent: Theme.pink)
         drawFooterMetric(label: "MAXIMO", value: maxTotal.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + metricWidth + gap, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
-        drawFooterMetric(label: "PENALIZACION", value: "0", rect: CGRect(x: margin + 14 + (metricWidth + gap) * 2, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
+        drawFooterMetric(label: "PENALIZACION", value: penalty.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + (metricWidth + gap) * 2, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
 
         let feedbackCard = CGRect(x: margin, y: y + 54, width: fullWidth, height: 64)
         drawRoundedRect(feedbackCard, fill: Theme.surface, stroke: Theme.silver.withAlphaComponent(0.55), cornerRadius: 12, lineWidth: 0.8)

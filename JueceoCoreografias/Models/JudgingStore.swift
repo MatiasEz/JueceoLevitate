@@ -31,6 +31,9 @@ final class JudgingStore: ObservableObject {
     @Published var feedback: [String: String] = [:] {
         didSet { persistFeedback() }
     }
+    @Published var penalties: [String: Double] = [:] {
+        didSet { persistPenalties() }
+    }
     @Published var favoriteSelections: [String: String] = [:] {
         didSet { persistFavoriteSelections() }
     }
@@ -41,9 +44,11 @@ final class JudgingStore: ObservableObject {
 
     private let scoresKey = "jueceo.scores.v1"
     private let feedbackKey = "jueceo.feedback.v1"
+    private let penaltiesKey = "jueceo.penalties.v1"
     private let favoriteSelectionsKey = "jueceo.favoriteSelections.v1"
     private let pendingScoreKeysKey = "jueceo.pendingScoreKeys.v1"
     private let pendingFeedbackKeysKey = "jueceo.pendingFeedbackKeys.v1"
+    private let pendingPenaltyKeysKey = "jueceo.pendingPenaltyKeys.v1"
     private let pendingFavoriteKeysKey = "jueceo.pendingFavoriteKeys.v1"
     private let selectedEventKey = "jueceo.selectedEventID.v1"
     private let selectedBlockKey = "jueceo.selectedBlockID.v1"
@@ -51,6 +56,7 @@ final class JudgingStore: ObservableObject {
     private let deviceIDKey = "jueceo.deviceID.v1"
     private var pendingScoreKeys: Set<String> = []
     private var pendingFeedbackKeys: Set<String> = []
+    private var pendingPenaltyKeys: Set<String> = []
     private var pendingFavoriteKeys: Set<String> = []
     private let remoteRepository: RemoteJudgingRepository?
     private var didStartRemote = false
@@ -65,9 +71,11 @@ final class JudgingStore: ObservableObject {
             ?? "JUEZ"
         scores = Self.loadDictionary(scoresKey) ?? [:]
         feedback = Self.loadDictionary(feedbackKey) ?? [:]
+        penalties = Self.loadDictionary(penaltiesKey) ?? [:]
         favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? [:]
         pendingScoreKeys = Self.loadSet(pendingScoreKeysKey)
         pendingFeedbackKeys = Self.loadSet(pendingFeedbackKeysKey)
+        pendingPenaltyKeys = Self.loadSet(pendingPenaltyKeysKey)
         pendingFavoriteKeys = Self.loadSet(pendingFavoriteKeysKey)
         selectedEventID = UserDefaults.standard.string(forKey: selectedEventKey)
         selectedBlockID = UserDefaults.standard.string(forKey: selectedBlockKey)
@@ -125,7 +133,9 @@ final class JudgingStore: ObservableObject {
     }
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
     var hasGoogleDriveConfiguration: Bool { GoogleDriveConfig.load() != nil }
-    var pendingSyncCount: Int { pendingScoreKeys.count + pendingFeedbackKeys.count + pendingFavoriteKeys.count }
+    var pendingSyncCount: Int {
+        pendingScoreKeys.count + pendingFeedbackKeys.count + pendingPenaltyKeys.count + pendingFavoriteKeys.count
+    }
     var isLoadingBackendData: Bool { hasRemoteConfiguration && syncStatus.isBackendLoading }
     var backendLoadingMessage: String {
         syncMessage ?? "Cargando informacion del backend..."
@@ -247,8 +257,16 @@ final class JudgingStore: ObservableObject {
         "\(routineID)::\(judge.normalizedKey)"
     }
 
+    func penaltyKey(routineID: String, judge: String) -> String {
+        "\(routineID)::\(judge.normalizedKey)"
+    }
+
     func score(for routine: Routine, judge: String, criterion: Criterion) -> Double {
         scores[scoreKey(routineID: routine.id, judge: judge, criterionID: criterion.id)] ?? 0
+    }
+
+    func penalty(for routine: Routine, judge: String) -> Double {
+        penalties[penaltyKey(routineID: routine.id, judge: judge)] ?? 0
     }
 
     func setScore(_ value: Double, routine: Routine, judge: String, criterion: Criterion) {
@@ -258,7 +276,7 @@ final class JudgingStore: ObservableObject {
         markScorePending(key)
     }
 
-    func submitScores(_ values: [(criterion: Criterion, value: Double)], routine: Routine, judge: String) {
+    func submitScores(_ values: [(criterion: Criterion, value: Double)], routine: Routine, judge: String, penalty: Double? = nil) {
         var changedKeys: [String] = []
         for item in values {
             let clamped = min(max(item.value, 0), item.criterion.maxScore)
@@ -267,12 +285,22 @@ final class JudgingStore: ObservableObject {
             changedKeys.append(key)
         }
         markScoresPending(changedKeys)
+        if let penalty {
+            setPenalty(penalty, routine: routine, judge: judge)
+        }
     }
 
     func setFeedback(_ value: String, routine: Routine, judge: String) {
         let key = feedbackKey(routineID: routine.id, judge: judge)
         feedback[key] = value
         markFeedbackPending(key)
+    }
+
+    func setPenalty(_ value: Double, routine: Routine, judge: String) {
+        let clamped = min(max(value, -100), 0)
+        let key = penaltyKey(routineID: routine.id, judge: judge)
+        penalties[key] = clamped
+        markPenaltyPending(key)
     }
 
     func isFavorite(_ routine: Routine, category: FavoriteCategory, judge: String? = nil) -> Bool {
@@ -399,6 +427,28 @@ final class JudgingStore: ObservableObject {
                 persistPendingFeedbackKeys()
             }
 
+            let penaltyRows = pendingPenaltyKeys.compactMap { key -> PenaltyUpsertRow? in
+                guard
+                    let parsed = parsePenaltyKey(key),
+                    let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
+                else {
+                    return nil
+                }
+                return PenaltyUpsertRow(
+                    eventID: eventID,
+                    blockID: blockID(forRoutineID: parsed.routineID),
+                    routineID: parsed.routineID,
+                    judgeID: judgeName.stableRemoteID,
+                    value: penalties[key] ?? 0,
+                    deviceID: deviceID
+                )
+            }
+            if !penaltyRows.isEmpty {
+                try await remoteRepository.upsertPenalties(penaltyRows)
+                pendingPenaltyKeys.removeAll()
+                persistPendingPenaltyKeys()
+            }
+
             let favoriteKeys = pendingFavoriteKeys
             let favoriteUpsertRows = favoriteKeys.compactMap { key -> FavoriteUpsertRow? in
                 guard
@@ -453,15 +503,27 @@ final class JudgingStore: ObservableObject {
 
     func result(for routine: Routine) -> RoutineResult {
         let template = template(for: routine)
-        let judgeTotals = appData.judges.map { judge in
-            let total = template.criteria.reduce(0) { sum, criterion in
+        let summaries = appData.judges.map { judge in
+            let subtotal = template.criteria.reduce(0) { sum, criterion in
                 sum + score(for: routine, judge: judge, criterion: criterion)
             }
-            return (judge: judge, total: total)
+            let penaltyValue = penalty(for: routine, judge: judge)
+            let finalTotal = subtotal > 0 ? max(0, subtotal + penaltyValue) : 0
+            return (judge: judge, subtotal: subtotal, penalty: penaltyValue, total: finalTotal)
         }
-        let submitted = judgeTotals.filter { $0.total > 0 }
+        let judgeTotals = summaries.map { (judge: $0.judge, total: $0.total) }
+        let judgePenalties = summaries.map { (judge: $0.judge, value: $0.penalty) }
+        let submitted = summaries.filter { $0.subtotal > 0 }
         let average = submitted.isEmpty ? 0 : submitted.reduce(0) { $0 + $1.total } / Double(submitted.count)
-        return RoutineResult(routine: routine, judgeTotals: judgeTotals, total: average, maxScore: template.maxScore)
+        let aggregatePenalty = submitted.reduce(0) { $0 + $1.penalty }
+        return RoutineResult(
+            routine: routine,
+            judgeTotals: judgeTotals,
+            judgePenalties: judgePenalties,
+            total: average,
+            penalty: aggregatePenalty,
+            maxScore: template.maxScore
+        )
     }
 
     func routines(in block: DanceBlock) -> [Routine] {
@@ -503,6 +565,9 @@ final class JudgingStore: ObservableObject {
             },
             scoreForCriterion: { [weak self] routine, judge, criterion in
                 self?.score(for: routine, judge: judge, criterion: criterion) ?? 0
+            },
+            penaltyForRoutine: { [weak self] routine, judge in
+                self?.penalty(for: routine, judge: judge) ?? 0
             }
         )
     }
@@ -659,6 +724,13 @@ final class JudgingStore: ObservableObject {
                 feedback[key] = remoteFeedback.body
             }
         }
+        for remotePenalty in bundle.penalties {
+            guard let judge = judgeNamesByID[remotePenalty.judgeID] else { continue }
+            let key = penaltyKey(routineID: remotePenalty.routineID, judge: judge)
+            if !pendingPenaltyKeys.contains(key) {
+                penalties[key] = min(max(remotePenalty.value, -100), 0)
+            }
+        }
 
         let eventPrefix = "\(bundle.event.id)::"
         let staleFavoriteKeys = favoriteSelections.keys.filter { key in
@@ -708,6 +780,14 @@ final class JudgingStore: ObservableObject {
         Task { await syncPending() }
     }
 
+    private func markPenaltyPending(_ key: String) {
+        guard remoteRepository != nil, selectedEventID != nil else { return }
+        pendingPenaltyKeys.insert(key)
+        persistPendingPenaltyKeys()
+        syncStatus = .pending
+        Task { await syncPending() }
+    }
+
     private func markFavoritePending(_ key: String) {
         guard remoteRepository != nil, selectedEventID != nil else { return }
         pendingFavoriteKeys.insert(key)
@@ -724,6 +804,10 @@ final class JudgingStore: ObservableObject {
         Self.saveDictionary(feedback, key: feedbackKey)
     }
 
+    private func persistPenalties() {
+        Self.saveDictionary(penalties, key: penaltiesKey)
+    }
+
     private func persistFavoriteSelections() {
         Self.saveDictionary(favoriteSelections, key: favoriteSelectionsKey)
     }
@@ -734,6 +818,10 @@ final class JudgingStore: ObservableObject {
 
     private func persistPendingFeedbackKeys() {
         Self.saveSet(pendingFeedbackKeys, key: pendingFeedbackKeysKey)
+    }
+
+    private func persistPendingPenaltyKeys() {
+        Self.saveSet(pendingPenaltyKeys, key: pendingPenaltyKeysKey)
     }
 
     private func persistPendingFavoriteKeys() {
@@ -760,6 +848,12 @@ final class JudgingStore: ObservableObject {
     }
 
     private func parseFeedbackKey(_ key: String) -> (routineID: String, judgeKey: String)? {
+        let parts = key.components(separatedBy: "::")
+        guard parts.count == 2 else { return nil }
+        return (parts[0], parts[1])
+    }
+
+    private func parsePenaltyKey(_ key: String) -> (routineID: String, judgeKey: String)? {
         let parts = key.components(separatedBy: "::")
         guard parts.count == 2 else { return nil }
         return (parts[0], parts[1])
@@ -793,6 +887,13 @@ final class JudgingStore: ObservableObject {
         blocks.first { $0.name == blockName || $0.id == blockName }?.sortOrder ?? Int.max
     }
 
+    private func blockID(forRoutineID routineID: String) -> String {
+        guard let routine = routines.first(where: { $0.id == routineID }) else {
+            return selectedBlock?.id ?? ""
+        }
+        return block(containing: routine)?.id ?? routine.blockID ?? routine.block.stableRemoteID
+    }
+
     private func exportJudgingSheetPDF(
         routine: Routine,
         judge: String,
@@ -810,6 +911,7 @@ final class JudgingStore: ObservableObject {
             blockName: blockName,
             fileName: fileName,
             feedback: feedbackBody,
+            penalty: penalty(for: routine, judge: judge),
             scoreForCriterion: { [weak self] criterion in
                 self?.score(for: routine, judge: judge, criterion: criterion) ?? 0
             }

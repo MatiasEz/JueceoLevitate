@@ -90,7 +90,9 @@ struct RoutineResult: Identifiable, Sendable {
     var id: String { routine.id }
     let routine: Routine
     let judgeTotals: [(judge: String, total: Double)]
+    let judgePenalties: [(judge: String, value: Double)]
     let total: Double
+    let penalty: Double
     let maxScore: Double
 }
 

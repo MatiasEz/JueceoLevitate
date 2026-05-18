@@ -112,6 +112,7 @@ private struct ScoreSheet: View {
 
     @State private var draftScores: [Int: String] = [:]
     @State private var penalty = "0"
+    @State private var customPenalty = ""
     @State private var didSubmit = false
     @State private var errorMessage: String?
     @FocusState private var focusedCriterionID: Int?
@@ -121,9 +122,20 @@ private struct ScoreSheet: View {
     }
 
     private var subtotal: Double {
+        max(0, scoreSubtotal + penaltyValue)
+    }
+
+    private var scoreSubtotal: Double {
         template.criteria.reduce(0) { sum, criterion in
             sum + scoreValue(for: criterion)
         }
+    }
+
+    private var penaltyValue: Double {
+        if penalty == "Otro" {
+            return min(max(Double(customPenalty.replacingOccurrences(of: ",", with: ".")) ?? 0, -100), 0)
+        }
+        return Double(penalty) ?? 0
     }
 
     private var maxTotal: Double {
@@ -269,6 +281,11 @@ private struct ScoreSheet: View {
                         .font(.title.weight(.black))
                         .foregroundStyle(LevitTheme.muted)
                 }
+                if penaltyValue != 0 {
+                    Text("Subtotal \(scoreSubtotal.formatted(.number.precision(.fractionLength(0...1)))) · Penalizacion \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+                }
 
                 Label(didSubmit ? "Sincronizado" : store.syncStatus.title, systemImage: didSubmit ? "checkmark.circle.fill" : store.syncStatus.systemImage)
                     .font(.callout.weight(.bold))
@@ -406,6 +423,10 @@ private struct ScoreSheet: View {
                 ForEach(["0", "-1", "-2", "Otro"], id: \.self) { item in
                     Button {
                         penalty = item
+                        if item != "Otro" {
+                            customPenalty = ""
+                        }
+                        didSubmit = false
                     } label: {
                         Text(item)
                             .font(.callout.weight(.black))
@@ -416,6 +437,23 @@ private struct ScoreSheet: View {
                     }
                     .buttonStyle(.plain)
                 }
+            }
+            if penalty == "Otro" {
+                TextField("-3", text: Binding(
+                    get: { customPenalty },
+                    set: {
+                        customPenalty = sanitizedPenaltyText($0)
+                        didSubmit = false
+                    }
+                ))
+                .keyboardType(.numbersAndPunctuation)
+                .textFieldStyle(.plain)
+                .font(.title3.monospacedDigit().weight(.black))
+                .foregroundStyle(LevitTheme.ink)
+                .padding(.horizontal, 14)
+                .frame(width: 150, height: 44)
+                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(LevitTheme.line))
             }
         }
     }
@@ -469,6 +507,7 @@ private struct ScoreSheet: View {
             let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
             return (criterion.id, saved > 0 ? saved.formatted(.number.precision(.fractionLength(0...1))) : "")
         })
+        loadPenalty(store.penalty(for: routine, judge: scoringJudge))
         didSubmit = false
         errorMessage = nil
         focusedCriterionID = nil
@@ -482,7 +521,7 @@ private struct ScoreSheet: View {
             return (criterion: criterion, value: value)
         }
 
-        store.submitScores(values, routine: routine, judge: scoringJudge)
+        store.submitScores(values, routine: routine, judge: scoringJudge, penalty: penaltyValue)
         didSubmit = true
         errorMessage = nil
         focusedCriterionID = nil
@@ -511,6 +550,40 @@ private struct ScoreSheet: View {
 
     private func scoreValue(for criterion: Criterion) -> Double {
         Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private func loadPenalty(_ value: Double) {
+        if abs(value) < 0.0001 {
+            penalty = "0"
+            customPenalty = ""
+        } else if abs(value + 1) < 0.0001 {
+            penalty = "-1"
+            customPenalty = ""
+        } else if abs(value + 2) < 0.0001 {
+            penalty = "-2"
+            customPenalty = ""
+        } else {
+            penalty = "Otro"
+            customPenalty = value.formatted(.number.precision(.fractionLength(0...1)))
+        }
+    }
+
+    private func sanitizedPenaltyText(_ text: String) -> String {
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNegative = trimmed.hasPrefix("-")
+        let allowed = trimmed.filter { "0123456789.".contains($0) }
+        let parts = allowed.split(separator: ".", omittingEmptySubsequences: false)
+        let compact = parts.count > 1 ? "\(parts[0]).\(parts.dropFirst().joined())" : allowed
+        if compact.isEmpty {
+            return isNegative ? "-" : ""
+        }
+        let signed = isNegative ? "-\(compact)" : compact
+        guard var value = Double(signed) else { return signed }
+        if !isNegative {
+            value = -abs(value)
+        }
+        return min(max(value, -100), 0).formatted(.number.precision(.fractionLength(0...1)))
     }
 
     private func sanitizedScoreText(_ text: String, maxScore: Double) -> String {

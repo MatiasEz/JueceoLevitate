@@ -18,30 +18,62 @@ class SupabaseApi {
   }
 
   Map<String, String> get _headers => {
-        'apikey': anonKey,
-        'Authorization': 'Bearer $anonKey',
-        'Content-Type': 'application/json',
-      };
+    'apikey': anonKey,
+    'Authorization': 'Bearer $anonKey',
+    'Content-Type': 'application/json',
+  };
 
   Future<List<EventSummary>> fetchEvents() async {
     final response = await http.get(
-      _endpoint('events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc'),
+      _endpoint(
+        'events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc',
+      ),
       headers: _headers,
     );
     _throwIfFailed(response);
     final rows = jsonDecode(response.body) as List<dynamic>;
-    return rows.map((row) => EventSummary.fromJson(row as Map<String, dynamic>)).toList();
+    return rows
+        .map((row) => EventSummary.fromJson(row as Map<String, dynamic>))
+        .toList();
   }
 
   Future<RemoteBundle> fetchBundle(EventSummary event) async {
     final eventID = Uri.encodeQueryComponent(event.id);
     final responses = await Future.wait([
-      http.get(_endpoint('routines?select=*&event_id=eq.$eventID&order=sort_order.asc'), headers: _headers),
-      http.get(_endpoint('judges?select=*&event_id=eq.$eventID&order=sort_order.asc'), headers: _headers),
-      http.get(_endpoint('criteria_templates?select=*&event_id=eq.$eventID&order=sort_order.asc'), headers: _headers),
-      http.get(_endpoint('criteria?select=*&event_id=eq.$eventID&order=sort_order.asc'), headers: _headers),
-      http.get(_endpoint('scores?select=*&event_id=eq.$eventID'), headers: _headers),
-      http.get(_endpoint('feedback?select=*&event_id=eq.$eventID'), headers: _headers),
+      http.get(
+        _endpoint(
+          'routines?select=*&event_id=eq.$eventID&order=sort_order.asc',
+        ),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint('judges?select=*&event_id=eq.$eventID&order=sort_order.asc'),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint(
+          'criteria_templates?select=*&event_id=eq.$eventID&order=sort_order.asc',
+        ),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint(
+          'criteria?select=*&event_id=eq.$eventID&order=sort_order.asc',
+        ),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint('scores?select=*&event_id=eq.$eventID'),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint('feedback?select=*&event_id=eq.$eventID'),
+        headers: _headers,
+      ),
+      http.get(
+        _endpoint('penalties?select=*&event_id=eq.$eventID'),
+        headers: _headers,
+      ),
     ]);
     for (final response in responses) {
       _throwIfFailed(response);
@@ -53,8 +85,11 @@ class SupabaseApi {
     final criterionRows = jsonDecode(responses[3].body) as List<dynamic>;
     final scoreRows = jsonDecode(responses[4].body) as List<dynamic>;
     final feedbackRows = jsonDecode(responses[5].body) as List<dynamic>;
+    final penaltyRows = jsonDecode(responses[6].body) as List<dynamic>;
 
-    final routines = routineRows.map((row) => Routine.fromJson(row as Map<String, dynamic>)).toList();
+    final routines = routineRows
+        .map((row) => Routine.fromJson(row as Map<String, dynamic>))
+        .toList();
     final judges = judgeRows
         .map((row) => (row as Map<String, dynamic>)['name'] as String? ?? '')
         .where((name) => name.isNotEmpty)
@@ -63,7 +98,9 @@ class SupabaseApi {
     final criteriaByTemplate = <String, List<Criterion>>{};
     for (final item in criterionRows.cast<Map<String, dynamic>>()) {
       final templateID = item['template_id'] as String? ?? '';
-      criteriaByTemplate.putIfAbsent(templateID, () => []).add(Criterion.fromJson(item));
+      criteriaByTemplate
+          .putIfAbsent(templateID, () => [])
+          .add(Criterion.fromJson(item));
     }
 
     final templates = templateRows.cast<Map<String, dynamic>>().map((row) {
@@ -91,23 +128,35 @@ class SupabaseApi {
       judges: judges,
       templates: templates,
       blocks: blocks.entries
-          .map((entry) => DanceBlock(
-                name: entry.key,
-                title: blockTitles[entry.key] ?? '',
-                routines: entry.value,
-              ))
+          .map(
+            (entry) => DanceBlock(
+              name: entry.key,
+              title: blockTitles[entry.key] ?? '',
+              routines: entry.value,
+            ),
+          )
           .toList(),
     );
 
     return RemoteBundle(
       event: event,
       appData: appData,
-      scores: scoreRows.map((row) => RemoteScore.fromJson(row as Map<String, dynamic>)).toList(),
-      feedback: feedbackRows.map((row) => RemoteFeedback.fromJson(row as Map<String, dynamic>)).toList(),
+      scores: scoreRows
+          .map((row) => RemoteScore.fromJson(row as Map<String, dynamic>))
+          .toList(),
+      feedback: feedbackRows
+          .map((row) => RemoteFeedback.fromJson(row as Map<String, dynamic>))
+          .toList(),
+      penalties: penaltyRows
+          .map((row) => RemotePenalty.fromJson(row as Map<String, dynamic>))
+          .toList(),
     );
   }
 
-  Future<void> upsertScores(String eventID, List<Map<String, dynamic>> rows) async {
+  Future<void> upsertScores(
+    String eventID,
+    List<Map<String, dynamic>> rows,
+  ) async {
     if (rows.isEmpty) return;
     final response = await http.post(
       _endpoint('scores?on_conflict=event_id,routine_id,judge_id,criterion_id'),
@@ -120,10 +169,29 @@ class SupabaseApi {
     _throwIfFailed(response);
   }
 
-  Future<void> upsertFeedback(String eventID, List<Map<String, dynamic>> rows) async {
+  Future<void> upsertFeedback(
+    String eventID,
+    List<Map<String, dynamic>> rows,
+  ) async {
     if (rows.isEmpty) return;
     final response = await http.post(
       _endpoint('feedback?on_conflict=event_id,routine_id,judge_id'),
+      headers: {
+        ..._headers,
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: jsonEncode(rows),
+    );
+    _throwIfFailed(response);
+  }
+
+  Future<void> upsertPenalties(
+    String eventID,
+    List<Map<String, dynamic>> rows,
+  ) async {
+    if (rows.isEmpty) return;
+    final response = await http.post(
+      _endpoint('penalties?on_conflict=event_id,routine_id,judge_id'),
       headers: {
         ..._headers,
         'Prefer': 'resolution=merge-duplicates,return=minimal',
@@ -146,12 +214,14 @@ class RemoteBundle {
     required this.appData,
     required this.scores,
     required this.feedback,
+    required this.penalties,
   });
 
   final EventSummary event;
   final AppData appData;
   final List<RemoteScore> scores;
   final List<RemoteFeedback> feedback;
+  final List<RemotePenalty> penalties;
 }
 
 class SupabaseApiException implements Exception {

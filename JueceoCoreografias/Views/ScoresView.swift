@@ -131,6 +131,7 @@ struct ScoresView: View {
                     tableHeader("ACADEMIA", width: 330, alignment: .leading)
                     Spacer()
                     tableHeader("TOTAL", width: 120)
+                    tableHeader("PENAL.", width: 92)
                     tableHeader("PROMEDIO", width: 120)
                 }
                 .padding(.horizontal, 18)
@@ -163,6 +164,11 @@ struct ScoresView: View {
                             .font(.headline.monospacedDigit().weight(.bold))
                             .foregroundStyle(LevitTheme.ink)
                             .frame(width: 120)
+
+                        Text(result.penalty != 0 ? result.penalty.formatted(.number.precision(.fractionLength(1))) : "-")
+                            .font(.headline.monospacedDigit().weight(.bold))
+                            .foregroundStyle(result.penalty != 0 ? LevitTheme.pink : LevitTheme.muted)
+                            .frame(width: 92)
 
                         Text(result.total > 0 ? result.total.formatted(.number.precision(.fractionLength(1))) : "-")
                             .font(.headline.monospacedDigit().weight(.bold))

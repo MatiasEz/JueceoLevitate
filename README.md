@@ -79,7 +79,9 @@ Los roles de personas estan en `supabase/migrations/0004_judge_roles.sql`. `ATI`
 
 Los favoritos de vestuario/coreografia/musica se guardan en `supabase/migrations/0005_routine_favorites.sql`. La tabla mantiene una seleccion por evento, bloque, juez y tipo de favorito.
 
-La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback/favoritos pendientes.
+Las penalizaciones por rutina y juez se guardan en `supabase/migrations/0006_routine_penalties.sql` y se aplican al total final.
+
+La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback/penalizaciones/favoritos pendientes.
 
 La tab `Excel` sube archivos a `excel_imports` como importaciones pendientes. Para habilitarla, corre tambien `supabase/migrations/0002_excel_imports.sql`. Luego procesa esas cargas con una key admin:
 
@@ -89,7 +91,7 @@ python3 scripts/process_excel_imports.py --allow-errors
 
 ## Exportar a Google Drive
 
-El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `Levitate CDMX 2026`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` queda en `0`.
+El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `Levitate CDMX 2026`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` se lee desde Supabase/local y se resta del total.
 
 Para habilitarlo:
 

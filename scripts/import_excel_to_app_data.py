@@ -383,7 +383,7 @@ def upsert_rows(table: str, rows: list[dict[str, Any]], conflict: str) -> None:
 
 def delete_event_rows(event_id: str) -> None:
     encoded = urllib.parse.quote(event_id)
-    for table in ["feedback", "scores", "criteria", "criteria_templates", "judges", "routines", "blocks"]:
+    for table in ["penalties", "feedback", "scores", "criteria", "criteria_templates", "judges", "routines", "blocks"]:
         supabase_request("DELETE", f"{table}?event_id=eq.{encoded}", prefer="return=minimal")
 
 
@@ -412,10 +412,12 @@ def delete_block_rows(event_id: str, block_ids: list[str], *, force_replace: boo
     if not block_ids:
         return
     if not force_replace and (
-        rows_exist("scores", event_id, block_ids) or rows_exist("feedback", event_id, block_ids)
+        rows_exist("scores", event_id, block_ids)
+        or rows_exist("feedback", event_id, block_ids)
+        or rows_exist("penalties", event_id, block_ids)
     ):
         raise RuntimeError(
-            "El bloque ya tiene puntajes o feedback. Usa --force-replace para reemplazarlo."
+            "El bloque ya tiene puntajes, feedback o penalizaciones. Usa --force-replace para reemplazarlo."
         )
     encoded_event_id = urllib.parse.quote(event_id)
     encoded_block_ids = ",".join(urllib.parse.quote(block_id) for block_id in block_ids)
@@ -462,9 +464,13 @@ def upload_to_supabase(
     event_id = event_rows[0]["id"]
     imported_block_ids = [block.get("blockID") or stable_id(block["name"]) for block in app_data["blocks"]]
     if replace_event:
-        if not force_replace and (event_rows_exist("scores", event_id) or event_rows_exist("feedback", event_id)):
+        if not force_replace and (
+            event_rows_exist("scores", event_id)
+            or event_rows_exist("feedback", event_id)
+            or event_rows_exist("penalties", event_id)
+        ):
             raise RuntimeError(
-                "El evento ya tiene puntajes o feedback. Usa --force-replace para reemplazarlo."
+                "El evento ya tiene puntajes, feedback o penalizaciones. Usa --force-replace para reemplazarlo."
             )
         delete_event_rows(event_id)
     else:

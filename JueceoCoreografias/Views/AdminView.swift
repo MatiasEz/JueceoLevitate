@@ -280,9 +280,10 @@ struct AdminView: View {
 
     private func judgeTotal(for routine: Routine, judge: String) -> Double {
         guard !judge.isEmpty else { return 0 }
-        return store.template(for: routine).criteria.reduce(0) { sum, criterion in
+        let subtotal = store.template(for: routine).criteria.reduce(0) { sum, criterion in
             sum + store.score(for: routine, judge: judge, criterion: criterion)
         }
+        return subtotal > 0 ? max(0, subtotal + store.penalty(for: routine, judge: judge)) : 0
     }
 
     private var driveStatusMessage: String {

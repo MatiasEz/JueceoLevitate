@@ -9,7 +9,8 @@
 5. Run `supabase/migrations/0003_blocks_model.sql` to enable the event -> blocks -> routines model.
 6. Run `supabase/migrations/0004_judge_roles.sql` to persist judge/admin roles.
 7. Run `supabase/migrations/0005_routine_favorites.sql` to persist favorite routine picks.
-8. Copy `.env.example` to `.env` at the repo root and fill:
+8. Run `supabase/migrations/0006_routine_penalties.sql` to persist penalties.
+9. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
 SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co
@@ -17,7 +18,7 @@ SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-for-imports-only
 ```
 
-The first migration enables permissive pilot RLS policies: anonymous clients can read event data and upsert scores/feedback. This is deliberate for the event pilot. Tighten this with per-event codes or judge auth before production.
+The first migration enables permissive pilot RLS policies: anonymous clients can read event data and upsert scores/feedback. Later migrations extend the same pilot policy to favorites and penalties. Tighten this with per-event codes or judge auth before production.
 
 ## Importar Excel
 
@@ -28,7 +29,7 @@ python3 scripts/import_excel_to_app_data.py "JueceoCoreografias/Resources/Bloque
 
 Use `SUPABASE_SERVICE_ROLE_KEY` for imports because event/routine/template tables are admin-owned. The mobile apps only need `SUPABASE_PUBLISHABLE_KEY`.
 
-By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores or feedback. Use `--force-replace` only for deliberate admin resets.
+By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback or penalties. Use `--force-replace` only for deliberate admin resets.
 
 ## Migrar bloques legacy ya cargados
 

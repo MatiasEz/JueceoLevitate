@@ -23,10 +23,15 @@ class JudgingStore extends ChangeNotifier {
   String syncMessage = '';
   final Map<String, double> scores = {};
   final Map<String, String> feedback = {};
+  final Map<String, double> penalties = {};
   final Set<String> pendingScoreKeys = {};
   final Set<String> pendingFeedbackKeys = {};
+  final Set<String> pendingPenaltyKeys = {};
 
-  int get pendingCount => pendingScoreKeys.length + pendingFeedbackKeys.length;
+  int get pendingCount =>
+      pendingScoreKeys.length +
+      pendingFeedbackKeys.length +
+      pendingPenaltyKeys.length;
   List<Routine> get routines => appData?.routines ?? const [];
   List<DanceBlock> get blocks => appData?.blocks ?? const [];
   List<String> get judges => appData?.judges ?? const [];
@@ -45,12 +50,21 @@ class JudgingStore extends ChangeNotifier {
     selectedRoutineId = _prefs?.getString('selectedRoutineId') ?? '';
     scores.addAll(_decodeDoubleMap(_prefs?.getString('scores') ?? '{}'));
     feedback.addAll(_decodeStringMap(_prefs?.getString('feedback') ?? '{}'));
-    pendingScoreKeys.addAll(_prefs?.getStringList('pendingScoreKeys') ?? const []);
-    pendingFeedbackKeys.addAll(_prefs?.getStringList('pendingFeedbackKeys') ?? const []);
+    penalties.addAll(_decodeDoubleMap(_prefs?.getString('penalties') ?? '{}'));
+    pendingScoreKeys.addAll(
+      _prefs?.getStringList('pendingScoreKeys') ?? const [],
+    );
+    pendingFeedbackKeys.addAll(
+      _prefs?.getStringList('pendingFeedbackKeys') ?? const [],
+    );
+    pendingPenaltyKeys.addAll(
+      _prefs?.getStringList('pendingPenaltyKeys') ?? const [],
+    );
 
     if (!api.isConfigured) {
       syncState = SyncState.localOnly;
-      syncMessage = 'Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY con --dart-define.';
+      syncMessage =
+          'Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY con --dart-define.';
       notifyListeners();
       return;
     }
@@ -67,7 +81,13 @@ class JudgingStore extends ChangeNotifier {
         orElse: () => events.firstWhere(
           (event) => event.isActive,
           orElse: () => events.isEmpty
-              ? EventSummary(id: '', slug: '', name: '', sourceName: '', isActive: false)
+              ? EventSummary(
+                  id: '',
+                  slug: '',
+                  name: '',
+                  sourceName: '',
+                  isActive: false,
+                )
               : events.first,
         ),
       );
@@ -99,11 +119,17 @@ class JudgingStore extends ChangeNotifier {
       if (!routines.any((routine) => routine.id == selectedRoutineId)) {
         selectedRoutineId = routines.isEmpty ? '' : routines.first.id;
       }
-      final judgeById = {for (final judge in judges) stableRemoteId(judge): judge};
+      final judgeById = {
+        for (final judge in judges) stableRemoteId(judge): judge,
+      };
       for (final remoteScore in bundle.scores) {
         final judge = judgeById[remoteScore.judgeId];
         if (judge == null) continue;
-        final key = scoreKey(remoteScore.routineId, judge, remoteScore.criterionId);
+        final key = scoreKey(
+          remoteScore.routineId,
+          judge,
+          remoteScore.criterionId,
+        );
         if (!pendingScoreKeys.contains(key)) {
           scores[key] = remoteScore.value;
         }
@@ -114,6 +140,14 @@ class JudgingStore extends ChangeNotifier {
         final key = feedbackKey(remoteFeedback.routineId, judge);
         if (!pendingFeedbackKeys.contains(key)) {
           feedback[key] = remoteFeedback.body;
+        }
+      }
+      for (final remotePenalty in bundle.penalties) {
+        final judge = judgeById[remotePenalty.judgeId];
+        if (judge == null) continue;
+        final key = penaltyKey(remotePenalty.routineId, judge);
+        if (!pendingPenaltyKeys.contains(key)) {
+          penalties[key] = remotePenalty.value.clamp(-100, 0).toDouble();
         }
       }
       await _persistAll();
@@ -128,9 +162,16 @@ class JudgingStore extends ChangeNotifier {
   JudgingTemplate templateFor(Routine routine) {
     final templates = appData?.templates ?? const <JudgingTemplate>[];
     return templates.firstWhere(
-      (template) => normalizedKey(template.genre) == normalizedKey(routine.genre),
+      (template) =>
+          normalizedKey(template.genre) == normalizedKey(routine.genre),
       orElse: () => templates.isEmpty
-          ? JudgingTemplate(templateId: 'general', genre: 'General', title: 'Hoja de jueceo', maxScore: 0, criteria: const [])
+          ? JudgingTemplate(
+              templateId: 'general',
+              genre: 'General',
+              title: 'Hoja de jueceo',
+              maxScore: 0,
+              criteria: const [],
+            )
           : templates.first,
     );
   }
@@ -143,8 +184,16 @@ class JudgingStore extends ChangeNotifier {
     return '$routineId::${normalizedKey(judge)}';
   }
 
+  String penaltyKey(String routineId, String judge) {
+    return '$routineId::${normalizedKey(judge)}';
+  }
+
   double scoreFor(Routine routine, String judge, Criterion criterion) {
     return scores[scoreKey(routine.id, judge, criterion.id)] ?? 0;
+  }
+
+  double penaltyFor(Routine routine, String judge) {
+    return penalties[penaltyKey(routine.id, judge)] ?? 0;
   }
 
   void selectJudge(String judge) {
@@ -159,11 +208,20 @@ class JudgingStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> submitScores(Routine routine, Map<int, double> values) async {
+  Future<void> submitScores(
+    Routine routine,
+    Map<int, double> values, {
+    double? penalty,
+  }) async {
     for (final entry in values.entries) {
       final key = scoreKey(routine.id, selectedJudge, entry.key);
       scores[key] = entry.value.clamp(0, 10).toDouble();
       pendingScoreKeys.add(key);
+    }
+    if (penalty != null) {
+      final key = penaltyKey(routine.id, selectedJudge);
+      penalties[key] = penalty.clamp(-100, 0).toDouble();
+      pendingPenaltyKeys.add(key);
     }
     await _persistAll();
     syncState = SyncState.pending;
@@ -223,6 +281,19 @@ class JudgingStore extends ChangeNotifier {
       }).toList();
       await api.upsertFeedback(eventID, feedbackRows);
       pendingFeedbackKeys.clear();
+
+      final penaltyRows = pendingPenaltyKeys.map((key) {
+        final parts = key.split('::');
+        return {
+          'event_id': eventID,
+          'routine_id': parts[0],
+          'judge_id': stableRemoteId(parts[1]),
+          'value': penalties[key] ?? 0,
+          'device_id': 'android-tablet',
+        };
+      }).toList();
+      await api.upsertPenalties(eventID, penaltyRows);
+      pendingPenaltyKeys.clear();
       await _persistAll();
       syncState = SyncState.online;
       syncMessage = 'Datos sincronizados.';
@@ -238,7 +309,9 @@ class JudgingStore extends ChangeNotifier {
     results.sort((left, right) {
       final totalCompare = right.total.compareTo(left.total);
       if (totalCompare != 0) return totalCompare;
-      return (int.tryParse(left.routine.id) ?? 0).compareTo(int.tryParse(right.routine.id) ?? 0);
+      return (int.tryParse(left.routine.id) ?? 0).compareTo(
+        int.tryParse(right.routine.id) ?? 0,
+      );
     });
     return results;
   }
@@ -246,18 +319,34 @@ class JudgingStore extends ChangeNotifier {
   RoutineResult resultFor(Routine routine) {
     final template = templateFor(routine);
     final totals = <String, double>{};
+    final penaltyValues = <String, double>{};
+    var penaltyTotal = 0.0;
+    var submittedCount = 0;
+    var finalSum = 0.0;
     for (final judge in judges) {
-      totals[judge] = template.criteria.fold<double>(
+      final subtotal = template.criteria.fold<double>(
         0,
         (sum, criterion) => sum + scoreFor(routine, judge, criterion),
       );
+      final penalty = penaltyFor(routine, judge);
+      final finalTotal = subtotal > 0
+          ? (subtotal + penalty).clamp(0, double.infinity).toDouble()
+          : 0.0;
+      totals[judge] = finalTotal;
+      penaltyValues[judge] = penalty;
+      if (subtotal > 0) {
+        submittedCount += 1;
+        finalSum += finalTotal;
+        penaltyTotal += penalty;
+      }
     }
-    final submitted = totals.values.where((value) => value > 0).toList();
-    final total = submitted.isEmpty ? 0.0 : submitted.reduce((a, b) => a + b) / submitted.length;
+    final total = submittedCount == 0 ? 0.0 : finalSum / submittedCount;
     return RoutineResult(
       routine: routine,
       judgeTotals: totals,
+      judgePenalties: penaltyValues,
       total: total,
+      penalty: penaltyTotal,
       maxScore: template.criteria.length * 10,
     );
   }
@@ -265,13 +354,26 @@ class JudgingStore extends ChangeNotifier {
   Future<void> _persistAll() async {
     await _prefs?.setString('scores', jsonEncode(scores));
     await _prefs?.setString('feedback', jsonEncode(feedback));
-    await _prefs?.setStringList('pendingScoreKeys', pendingScoreKeys.toList()..sort());
-    await _prefs?.setStringList('pendingFeedbackKeys', pendingFeedbackKeys.toList()..sort());
+    await _prefs?.setString('penalties', jsonEncode(penalties));
+    await _prefs?.setStringList(
+      'pendingScoreKeys',
+      pendingScoreKeys.toList()..sort(),
+    );
+    await _prefs?.setStringList(
+      'pendingFeedbackKeys',
+      pendingFeedbackKeys.toList()..sort(),
+    );
+    await _prefs?.setStringList(
+      'pendingPenaltyKeys',
+      pendingPenaltyKeys.toList()..sort(),
+    );
   }
 
   Map<String, double> _decodeDoubleMap(String raw) {
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
-    return decoded.map((key, value) => MapEntry(key, (value as num).toDouble()));
+    return decoded.map(
+      (key, value) => MapEntry(key, (value as num).toDouble()),
+    );
   }
 
   Map<String, String> _decodeStringMap(String raw) {

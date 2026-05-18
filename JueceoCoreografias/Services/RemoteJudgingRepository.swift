@@ -30,6 +30,7 @@ struct RemoteEventBundle: Sendable {
     let appData: AppData
     let scores: [RemoteScoreRow]
     let feedback: [RemoteFeedbackRow]
+    let penalties: [RemotePenaltyRow]
     let favorites: [RemoteFavoriteRow]
 }
 
@@ -60,6 +61,22 @@ struct RemoteFeedbackRow: Codable, Hashable, Sendable {
         case routineID = "routine_id"
         case judgeID = "judge_id"
         case body
+    }
+}
+
+struct RemotePenaltyRow: Codable, Hashable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String
+    let judgeID: String
+    let value: Double
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case judgeID = "judge_id"
+        case value
     }
 }
 
@@ -109,6 +126,24 @@ struct FeedbackUpsertRow: Encodable, Sendable {
         case routineID = "routine_id"
         case judgeID = "judge_id"
         case body
+        case deviceID = "device_id"
+    }
+}
+
+struct PenaltyUpsertRow: Encodable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String
+    let judgeID: String
+    let value: Double
+    let deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case judgeID = "judge_id"
+        case value
         case deviceID = "device_id"
     }
 }
@@ -197,6 +232,7 @@ actor RemoteJudgingRepository {
         async let criteria: [CriterionRowDTO] = get("criteria?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let scores: [RemoteScoreRow] = get("scores?select=*&event_id=eq.\(encodedEventID)")
         async let feedback: [RemoteFeedbackRow] = get("feedback?select=*&event_id=eq.\(encodedEventID)")
+        async let penalties: [RemotePenaltyRow] = fetchPenalties(eventID: encodedEventID)
         async let favorites: [RemoteFavoriteRow] = fetchFavorites(eventID: encodedEventID)
 
         let blockRows = try await blocks
@@ -255,7 +291,7 @@ actor RemoteJudgingRepository {
             judges: judgeRows.map(\.name),
             judgeProfiles: judgeRows.map(\.profile)
         )
-        return try await RemoteEventBundle(event: event, appData: appData, scores: scores, feedback: feedback, favorites: favorites)
+        return try await RemoteEventBundle(event: event, appData: appData, scores: scores, feedback: feedback, penalties: penalties, favorites: favorites)
     }
 
     func upsertScores(_ rows: [ScoreUpsertRow]) async throws {
@@ -269,6 +305,14 @@ actor RemoteJudgingRepository {
     func upsertFeedback(_ rows: [FeedbackUpsertRow]) async throws {
         try await post(
             "feedback?on_conflict=event_id,routine_id,judge_id",
+            rows,
+            prefer: "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
+    func upsertPenalties(_ rows: [PenaltyUpsertRow]) async throws {
+        try await post(
+            "penalties?on_conflict=event_id,routine_id,judge_id",
             rows,
             prefer: "resolution=merge-duplicates,return=minimal"
         )
@@ -315,6 +359,14 @@ actor RemoteJudgingRepository {
     private func fetchFavorites(eventID: String) async throws -> [RemoteFavoriteRow] {
         do {
             return try await get("routine_favorites?select=*&event_id=eq.\(eventID)")
+        } catch {
+            return []
+        }
+    }
+
+    private func fetchPenalties(eventID: String) async throws -> [RemotePenaltyRow] {
+        do {
+            return try await get("penalties?select=*&event_id=eq.\(eventID)")
         } catch {
             return []
         }

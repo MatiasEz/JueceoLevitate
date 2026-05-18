@@ -478,6 +478,8 @@ private struct PhoneScoreSheet: View {
     var onClose: (() -> Void)?
 
     @State private var draftScores: [Int: String] = [:]
+    @State private var penalty = "0"
+    @State private var customPenalty = ""
     @State private var didSubmit = false
     @State private var errorMessage: String?
     @FocusState private var focusedCriterionID: Int?
@@ -491,7 +493,18 @@ private struct PhoneScoreSheet: View {
     }
 
     private var subtotal: Double {
+        max(0, scoreSubtotal + penaltyValue)
+    }
+
+    private var scoreSubtotal: Double {
         template.criteria.reduce(0) { $0 + scoreValue(for: $1) }
+    }
+
+    private var penaltyValue: Double {
+        if penalty == "Otro" {
+            return min(max(Double(customPenalty.replacingOccurrences(of: ",", with: ".")) ?? 0, -100), 0)
+        }
+        return Double(penalty) ?? 0
     }
 
     private var maxTotal: Double {
@@ -519,6 +532,7 @@ private struct PhoneScoreSheet: View {
                 routineHeader
                 totalPanel
                 criteriaList
+                penaltyControl
                 favoriteButtons
                 feedbackEditor
                 saveButtons
@@ -617,7 +631,7 @@ private struct PhoneScoreSheet: View {
                 Label(didSubmit ? "Guardado" : store.syncStatus.title, systemImage: didSubmit ? "checkmark.circle.fill" : store.syncStatus.systemImage)
                     .font(.caption.weight(.black))
                     .foregroundStyle(didSubmit ? Color.green : LevitTheme.muted)
-                Text("Penalizacion 0")
+                Text("Penalizacion \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -660,6 +674,52 @@ private struct PhoneScoreSheet: View {
                     .font(.callout.weight(.bold))
                     .foregroundStyle(.red)
                     .padding(.top, 2)
+            }
+        }
+    }
+
+    private var penaltyControl: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Penalizacion")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            HStack(spacing: 8) {
+                ForEach(["0", "-1", "-2", "Otro"], id: \.self) { item in
+                    Button {
+                        penalty = item
+                        if item != "Otro" {
+                            customPenalty = ""
+                        }
+                        didSubmit = false
+                    } label: {
+                        Text(item)
+                            .font(.callout.weight(.black))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12)
+                            .foregroundStyle(penalty == item ? LevitTheme.pink : LevitTheme.ink)
+                            .background(penalty == item ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(penalty == item ? LevitTheme.pink.opacity(0.46) : LevitTheme.line))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if penalty == "Otro" {
+                TextField("-3", text: Binding(
+                    get: { customPenalty },
+                    set: {
+                        customPenalty = sanitizedPenaltyText($0)
+                        didSubmit = false
+                    }
+                ))
+                .keyboardType(.numbersAndPunctuation)
+                .textFieldStyle(.plain)
+                .font(.title3.monospacedDigit().weight(.black))
+                .padding(.horizontal, 14)
+                .frame(height: 46)
+                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(LevitTheme.line))
             }
         }
     }
@@ -795,6 +855,7 @@ private struct PhoneScoreSheet: View {
             let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
             return (criterion.id, saved > 0 ? saved.formatted(.number.precision(.fractionLength(0...1))) : "")
         })
+        loadPenalty(store.penalty(for: routine, judge: scoringJudge))
         didSubmit = false
         errorMessage = nil
         focusedCriterionID = nil
@@ -806,7 +867,7 @@ private struct PhoneScoreSheet: View {
             let value = Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
             return (criterion: criterion, value: value)
         }
-        store.submitScores(values, routine: routine, judge: scoringJudge)
+        store.submitScores(values, routine: routine, judge: scoringJudge, penalty: penaltyValue)
         didSubmit = true
         errorMessage = nil
         focusedCriterionID = nil
@@ -833,6 +894,40 @@ private struct PhoneScoreSheet: View {
 
     private func scoreValue(for criterion: Criterion) -> Double {
         Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private func loadPenalty(_ value: Double) {
+        if abs(value) < 0.0001 {
+            penalty = "0"
+            customPenalty = ""
+        } else if abs(value + 1) < 0.0001 {
+            penalty = "-1"
+            customPenalty = ""
+        } else if abs(value + 2) < 0.0001 {
+            penalty = "-2"
+            customPenalty = ""
+        } else {
+            penalty = "Otro"
+            customPenalty = value.formatted(.number.precision(.fractionLength(0...1)))
+        }
+    }
+
+    private func sanitizedPenaltyText(_ text: String) -> String {
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isNegative = trimmed.hasPrefix("-")
+        let allowed = trimmed.filter { "0123456789.".contains($0) }
+        let parts = allowed.split(separator: ".", omittingEmptySubsequences: false)
+        let compact = parts.count > 1 ? "\(parts[0]).\(parts.dropFirst().joined())" : allowed
+        if compact.isEmpty {
+            return isNegative ? "-" : ""
+        }
+        let signed = isNegative ? "-\(compact)" : compact
+        guard var value = Double(signed) else { return signed }
+        if !isNegative {
+            value = -abs(value)
+        }
+        return min(max(value, -100), 0).formatted(.number.precision(.fractionLength(0...1)))
     }
 
     private func sanitizedScoreText(_ text: String, maxScore: Double) -> String {

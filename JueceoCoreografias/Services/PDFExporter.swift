@@ -8,7 +8,8 @@ enum PDFExporter {
         sourceName: String,
         title: String = "Calificaciones y Dictamen Final",
         templateForRoutine: (Routine) -> JudgingTemplate,
-        scoreForCriterion: (Routine, String, Criterion) -> Double
+        scoreForCriterion: (Routine, String, Criterion) -> Double,
+        penaltyForRoutine: (Routine, String) -> Double
     ) -> URL? {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(filename(for: title))
@@ -59,7 +60,8 @@ enum PDFExporter {
                             fill: fill,
                             page: page,
                             margin: margin,
-                            scoreForCriterion: scoreForCriterion
+                            scoreForCriterion: scoreForCriterion,
+                            penaltyForRoutine: penaltyForRoutine
                         )
                         y += neededHeight
                     }
@@ -187,7 +189,8 @@ enum PDFExporter {
         fill: UIColor,
         page: CGRect,
         margin: CGFloat,
-        scoreForCriterion: (Routine, String, Criterion) -> Double
+        scoreForCriterion: (Routine, String, Criterion) -> Double,
+        penaltyForRoutine: (Routine, String) -> Double
     ) {
         let metrics = Layout.metrics(criteriaCount: criteria.count, pageWidth: page.width, margin: margin)
         let rowJudges = judges.isEmpty ? ["-"] : judges
@@ -196,9 +199,10 @@ enum PDFExporter {
             let rowY = y + CGFloat(judgeIndex) * Layout.rowHeight
             var x = margin
             let isFirstJudge = judgeIndex == 0
-            let judgeTotal = criteria.reduce(0) { sum, criterion in
+            let subtotal = criteria.reduce(0) { sum, criterion in
                 sum + scoreForCriterion(result.routine, judge, criterion)
             }
+            let judgeTotal = subtotal > 0 ? max(0, subtotal + penaltyForRoutine(result.routine, judge)) : 0
 
             drawCell(
                 rect: CGRect(x: x, y: rowY, width: metrics.numberWidth, height: Layout.rowHeight),
