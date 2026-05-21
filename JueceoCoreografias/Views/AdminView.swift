@@ -54,9 +54,6 @@ struct AdminView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
-                header
-                metrics
-                adminActions
                 driveExportPanel
                 editAsJudgePanel
             }
@@ -97,7 +94,7 @@ struct AdminView: View {
     private var metrics: some View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
             AdminMetricCard(icon: "square.stack.3d.up.fill", value: "\(store.blocks.count)", label: "Bloques", detail: "\(store.visibleRoutines.count) en vista")
-            AdminMetricCard(icon: "figure.dance", value: "\(store.routines.count)", label: "Coreografias", detail: "\(completedRoutines) calificadas")
+            AdminMetricCard(icon: "figure.dance", value: "\(store.routines.count)", label: "Coreografías", detail: "\(completedRoutines) calificadas")
             AdminMetricCard(icon: "person.3.fill", value: "\(store.editableJudges.count)", label: "Jueces", detail: "ATI administra")
             AdminMetricCard(icon: "checkmark.circle.fill", value: "\(completionPercent)%", label: "Avance", detail: store.pendingSyncCount == 0 ? "Sin pendientes" : "\(store.pendingSyncCount) por subir")
         }
@@ -106,7 +103,7 @@ struct AdminView: View {
     private var adminActions: some View {
         HStack(spacing: 12) {
             AdminActionButton(title: "Exportar PDF", icon: "doc.richtext") {
-                onExportPDF(store.rankings, "Calificaciones y Dictamen Final")
+                onExportPDF(store.rankings, "Calificaciones y dictamen final")
             }
             AdminActionButton(title: "Actualizar datos", icon: "arrow.clockwise") {
                 Task { await store.refreshEvents() }
@@ -146,7 +143,7 @@ struct AdminView: View {
                 guard !store.driveExportStatus.isExporting else { return }
                 Task { await store.exportSelectedBlockToDrive() }
             } label: {
-                Label("Exportar Drive", systemImage: "icloud.and.arrow.up")
+                Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
                     .font(.callout.weight(.black))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -170,9 +167,6 @@ struct AdminView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Editar como juez")
                         .font(.title2.weight(.black))
-                    Text("ATI mantiene permisos de admin y la hoja guarda puntajes con el juez elegido.")
-                        .font(.callout.weight(.semibold))
-                        .foregroundStyle(LevitTheme.muted)
                 }
 
                 Spacer()
@@ -181,7 +175,7 @@ struct AdminView: View {
                     Button {
                         store.clearAdminScoringOverride()
                     } label: {
-                        Label("Salir de edicion", systemImage: "xmark.circle")
+                        Label("Salir de edición", systemImage: "xmark.circle")
                             .font(.callout.weight(.black))
                             .padding(.horizontal, 14)
                             .padding(.vertical, 11)
@@ -195,7 +189,7 @@ struct AdminView: View {
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 14) {
                     AdminMenuField(title: "Juez", value: selectedJudgeForEdit.isEmpty ? "Sin jueces" : selectedJudgeForEdit, icon: "person.fill") {
-                        ForEach(store.editableJudges, id: \.self) { judge in
+                        ForEach(store.orderedEditableJudges, id: \.self) { judge in
                             Button {
                                 selectedJudgeForEdit = judge
                             } label: {
@@ -232,7 +226,7 @@ struct AdminView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
-                        Label("Coreografias del bloque", systemImage: "list.bullet.rectangle")
+                        Label("Coreografías del bloque", systemImage: "list.bullet.rectangle")
                             .font(.headline.weight(.black))
                         Spacer()
                         HStack(spacing: 8) {
@@ -270,8 +264,8 @@ struct AdminView: View {
     }
 
     private func normalizeSelection() {
-        if !store.editableJudges.contains(selectedJudgeForEdit) {
-            selectedJudgeForEdit = store.adminScoringJudge ?? store.editableJudges.first ?? ""
+        if !store.orderedEditableJudges.contains(selectedJudgeForEdit) {
+            selectedJudgeForEdit = store.adminScoringJudge ?? store.orderedEditableJudges.first ?? ""
         }
         if !sortedRoutines.contains(where: { $0.id == selectedRoutineIDForEdit }) {
             selectedRoutineIDForEdit = store.selectedRoutine?.id ?? sortedRoutines.first?.id ?? ""
@@ -291,7 +285,7 @@ struct AdminView: View {
             return message
         }
         if store.hasGoogleDriveConfiguration {
-            return "Crea carpetas por bloque, academia y coreografia; sube una hoja de jueceo por juez."
+            return "Crea carpetas por bloque, academia y coreografía; sube una hoja de jueceo por juez."
         }
         return "Faltan GOOGLE_CLIENT_ID y GOOGLE_REVERSED_CLIENT_ID para habilitar Drive."
     }

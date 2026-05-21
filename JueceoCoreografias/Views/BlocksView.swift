@@ -56,9 +56,9 @@ struct BlocksView: View {
                 LazyVStack(spacing: 12) {
                     if filteredRoutines.isEmpty {
                         ContentUnavailableView(
-                            "Sin coreografias",
+                            "Sin coreografías",
                             systemImage: "line.3.horizontal.decrease.circle",
-                            description: Text("Cambia la busqueda o el filtro seleccionado.")
+                            description: Text("Cambia la búsqueda o el filtro seleccionado.")
                         )
                         .frame(maxWidth: .infinity, minHeight: 420)
                     } else {
@@ -84,7 +84,7 @@ struct BlocksView: View {
     private var header: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Coreografias del \(blocks.first?.name.lowercased() ?? "bloque")")
+                Text("Coreografías del \(blocks.first?.name.lowercased() ?? "bloque")")
                     .font(.title2.weight(.black))
                     .foregroundStyle(LevitTheme.ink)
                 Text("\(filteredRoutines.count) de \(routines.count) visibles")
@@ -97,7 +97,7 @@ struct BlocksView: View {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(LevitTheme.muted)
-                TextField("Buscar coreografia", text: $searchText)
+                TextField("Buscar coreografía", text: $searchText)
                     .textInputAutocapitalization(.never)
                     .disableAutocorrection(true)
                     .foregroundStyle(LevitTheme.ink)

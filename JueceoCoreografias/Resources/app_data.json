@@ -57,7 +57,7 @@
           "id": "54",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "Haciendo Mis Sueños Realidad",
+          "name": "Haciendo mis sueños realidad",
           "academy": "MITOTIA CENTRO DE ARTE",
           "division": "PETITE",
           "genre": "BALLET",
@@ -222,7 +222,7 @@
           "id": "65",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "Solo De Derbake Mix",
+          "name": "Solo de derbake mix",
           "academy": "CON LOS PIES EN EL AIRE",
           "division": "JUNIOR",
           "genre": "BELLYDANCE",
@@ -252,7 +252,7 @@
           "id": "67",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "Camino Inevitbale Hacia El Final De Mi Vida",
+          "name": "Camino inevitable hacia el final de mi vida",
           "academy": "MARAN’S DANZA",
           "division": "TEEN",
           "genre": "CONTEMPORÁNEO",
@@ -342,7 +342,7 @@
           "id": "73",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "El Dolor De Las Mascaras",
+          "name": "El dolor de las máscaras",
           "academy": "MARAN’S DANZA",
           "division": "TEEN",
           "genre": "CONTEMPORÁNEO",
@@ -447,7 +447,7 @@
           "id": "80",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "Conciente",
+          "name": "Consciente",
           "academy": "CON LOS PIES EN EL AIRE",
           "division": "SENIOR",
           "genre": "BELLYDANCE",
@@ -582,7 +582,7 @@
           "id": "89",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "Algo De Mi Se Quedara Con Tigo",
+          "name": "Algo de mí se quedará contigo",
           "academy": "MARAN’S DANZA",
           "division": "SENIOR",
           "genre": "CONTEMPORÁNEO",
@@ -612,7 +612,7 @@
           "id": "91",
           "blockID": "bloque-2",
           "block": "BLOQUE 2",
-          "name": "De Mi Enamorate",
+          "name": "De mí enamórate",
           "academy": "MARAN’S DANZA",
           "division": "SENIOR",
           "genre": "LÍRICO",
@@ -676,7 +676,7 @@
       "id": "54",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "Haciendo Mis Sueños Realidad",
+      "name": "Haciendo mis sueños realidad",
       "academy": "MITOTIA CENTRO DE ARTE",
       "division": "PETITE",
       "genre": "BALLET",
@@ -841,7 +841,7 @@
       "id": "65",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "Solo De Derbake Mix",
+      "name": "Solo de derbake mix",
       "academy": "CON LOS PIES EN EL AIRE",
       "division": "JUNIOR",
       "genre": "BELLYDANCE",
@@ -871,7 +871,7 @@
       "id": "67",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "Camino Inevitbale Hacia El Final De Mi Vida",
+      "name": "Camino inevitable hacia el final de mi vida",
       "academy": "MARAN’S DANZA",
       "division": "TEEN",
       "genre": "CONTEMPORÁNEO",
@@ -961,7 +961,7 @@
       "id": "73",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "El Dolor De Las Mascaras",
+      "name": "El dolor de las máscaras",
       "academy": "MARAN’S DANZA",
       "division": "TEEN",
       "genre": "CONTEMPORÁNEO",
@@ -1066,7 +1066,7 @@
       "id": "80",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "Conciente",
+      "name": "Consciente",
       "academy": "CON LOS PIES EN EL AIRE",
       "division": "SENIOR",
       "genre": "BELLYDANCE",
@@ -1201,7 +1201,7 @@
       "id": "89",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "Algo De Mi Se Quedara Con Tigo",
+      "name": "Algo de mí se quedará contigo",
       "academy": "MARAN’S DANZA",
       "division": "SENIOR",
       "genre": "CONTEMPORÁNEO",
@@ -1231,7 +1231,7 @@
       "id": "91",
       "blockID": "bloque-2",
       "block": "BLOQUE 2",
-      "name": "De Mi Enamorate",
+      "name": "De mí enamórate",
       "academy": "MARAN’S DANZA",
       "division": "SENIOR",
       "genre": "LÍRICO",
@@ -1252,25 +1252,25 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Conocimiento Y Dominio Del Genero",
+          "label": "Conocimiento y dominio del género",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Diseño Coreográfico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Transiciones (Sentido Practico) Y Sincronía",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Originalidad Y Creatividad",
+          "label": "Originalidad y creatividad",
           "maxScore": 5.0
         },
         {
@@ -1282,13 +1282,13 @@
         {
           "id": 6,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Líneas Corporales, Colocación",
+          "label": "Líneas corporales, colocación",
           "maxScore": 5.0
         },
         {
           "id": 7,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fuerza, Control Corporal",
+          "label": "Fuerza, control corporal",
           "maxScore": 5.0
         },
         {
@@ -1300,43 +1300,43 @@
         {
           "id": 9,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fluidez Y Calidad En La Tecnica De Giro Y Salto",
+          "label": "Fluidez y calidad en la técnica de giro y salto",
           "maxScore": 5.0
         },
         {
           "id": 10,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Limpieza De La Ejecución, Matiz Y Movimiento Orgánico",
+          "label": "Limpieza de la ejecución, matiz y movimiento orgánico",
           "maxScore": 5.0
         },
         {
           "id": 11,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Incorporación De Skills",
+          "label": "Incorporación de skills",
           "maxScore": 5.0
         },
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Interpretación, Proyección Y Conexión Con El Público",
+          "label": "Interpretación, proyección y conexión con el público",
           "maxScore": 4.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 4.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         }
       ]
@@ -1349,31 +1349,31 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Conocimiento Y Dominio Del Genero",
+          "label": "Conocimiento y dominio del género",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Diseño Coreografico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Transiciones ( Sentido Practico) Y Sincronia",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Originalidad Y Creatividad",
+          "label": "Originalidad y creatividad",
           "maxScore": 5.0
         },
         {
           "id": 5,
           "section": "TÉCNICA",
-          "label": "* Repertorio ( Apego A Coreografia Original )",
+          "label": "* Repertorio (apego a coreografía original)",
           "maxScore": 5.0
         },
         {
@@ -1385,55 +1385,55 @@
         {
           "id": 7,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Líneas  Corporales, Colocación Y Control Del  Movimiento",
+          "label": "Líneas corporales, colocación y control del movimiento",
           "maxScore": 5.0
         },
         {
           "id": 8,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Tecnica De Giros Y Saltos",
+          "label": "Técnica de giros y saltos",
           "maxScore": 5.0
         },
         {
           "id": 9,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Tecnica De Puntas",
+          "label": "Técnica de puntas",
           "maxScore": 5.0
         },
         {
           "id": 10,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fluidez, Calidad Y Elegancia De Movimiento",
+          "label": "Fluidez, calidad y elegancia de movimiento",
           "maxScore": 5.0
         },
         {
           "id": 11,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fuerza Y Control",
+          "label": "Fuerza y control",
           "maxScore": 5.0
         },
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Interpretación, Proyección Y Conexión Con El Público",
+          "label": "Interpretación, proyección y conexión con el público",
           "maxScore": 5.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 3.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         }
       ]
@@ -1446,31 +1446,31 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Conocimiento Y Dominio Del Genero",
+          "label": "Conocimiento y dominio del género",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Diseño Coreográfico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Balance Entre Técnica Jazz Y Acrobacia",
+          "label": "Balance entre técnica jazz y acrobacia",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Transiciones (Sentido Practico) Y Sincronía",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
           "id": 5,
           "section": "TÉCNICA",
-          "label": "Originalidad Y Creatividad",
+          "label": "Originalidad y creatividad",
           "maxScore": 5.0
         },
         {
@@ -1482,55 +1482,55 @@
         {
           "id": 7,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Líneas Corporales, Colocación Y Control Del Movimiento",
+          "label": "Líneas corporales, colocación y control del movimiento",
           "maxScore": 5.0
         },
         {
           "id": 8,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Dominio De Ejecuciones Acrobáticas",
+          "label": "Dominio de ejecuciones acrobáticas",
           "maxScore": 5.0
         },
         {
           "id": 9,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Dominio De Técnica Jazz",
+          "label": "Dominio de técnica jazz",
           "maxScore": 5.0
         },
         {
           "id": 10,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Grado De Dificultad General",
+          "label": "Grado de dificultad general",
           "maxScore": 5.0
         },
         {
           "id": 11,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Limpieza De Ejecución Y Fluidez - Precisión Del Movimiento",
+          "label": "Limpieza de ejecución y fluidez - precisión del movimiento",
           "maxScore": 5.0
         },
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Interpretación, Proyección Y Conexión Con El Público",
+          "label": "Interpretación, proyección y conexión con el público",
           "maxScore": 4.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 4.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         }
       ]
@@ -1543,25 +1543,25 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Conocimiento Y Dominio Del Genero",
+          "label": "Conocimiento y dominio del género",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Diseño Coreográfico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Transiciones (Sentido Practico) Y Sincronía",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Originalidad Y Creatividad",
+          "label": "Originalidad y creatividad",
           "maxScore": 5.0
         },
         {
@@ -1573,13 +1573,13 @@
         {
           "id": 6,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Líneas Corporales, Colocación",
+          "label": "Líneas corporales, colocación",
           "maxScore": 5.0
         },
         {
           "id": 7,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Fuerza, Control Corporal",
+          "label": "Fuerza, control corporal",
           "maxScore": 5.0
         },
         {
@@ -1591,43 +1591,43 @@
         {
           "id": 9,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Fluidez Y Precisión del Movimiento",
+          "label": "Fluidez y precisión del movimiento",
           "maxScore": 5.0
         },
         {
           "id": 10,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Limpieza De La Ejecución",
+          "label": "Limpieza de la ejecución",
           "maxScore": 5.0
         },
         {
           "id": 11,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Manejo De La Energia",
+          "label": "Manejo de la energía",
           "maxScore": 5.0
         },
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Interpretación, Proyección Y Conexión Con El Público",
+          "label": "Interpretación, proyección y conexión con el público",
           "maxScore": 4.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 4.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         }
       ]
@@ -1640,25 +1640,25 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Conocimiento Y Dominio Del Genero",
+          "label": "Conocimiento y dominio del género",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Diseño Coreográfico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Transiciones (Sentido Practico) Y Sincronía",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Originalidad Y Creatividad",
+          "label": "Originalidad y creatividad",
           "maxScore": 5.0
         },
         {
@@ -1670,25 +1670,25 @@
         {
           "id": 6,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Calidad Y Fluidez De Movimiento",
+          "label": "Calidad y fluidez de movimiento",
           "maxScore": 5.0
         },
         {
           "id": 7,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Tecnica Y Dominio Del Estilo",
+          "label": "Técnica y dominio del estilo",
           "maxScore": 5.0
         },
         {
           "id": 8,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Limpieza De La Ejecucion",
+          "label": "Limpieza de la ejecución",
           "maxScore": 5.0
         },
         {
           "id": 9,
           "section": "EJECUCIÓN DANCÍSTICA",
-          "label": "Manejo De Implementos ( Alas, Velo, Sable, Abanicos Etc )",
+          "label": "Manejo de implementos (alas, velo, sable, abanicos, etc.)",
           "maxScore": 5.0
         },
         {
@@ -1700,25 +1700,25 @@
         {
           "id": 11,
           "section": "PERFORMANCE",
-          "label": "Proyección Y Conexión Con El Público",
+          "label": "Proyección y conexión con el público",
           "maxScore": 5.0
         },
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 5.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 5.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Manejo De La Energia",
+          "label": "Manejo de la energía",
           "maxScore": 5.0
         }
       ]
@@ -1731,25 +1731,25 @@
         {
           "id": 1,
           "section": "TÉCNICA",
-          "label": "Dominio Del Genero Y Estilos",
+          "label": "Dominio del género y estilos",
           "maxScore": 5.0
         },
         {
           "id": 2,
           "section": "TÉCNICA",
-          "label": "Creatividad Y Originalidad",
+          "label": "Creatividad y originalidad",
           "maxScore": 5.0
         },
         {
           "id": 3,
           "section": "TÉCNICA",
-          "label": "Diseño Coreografico",
+          "label": "Diseño coreográfico",
           "maxScore": 5.0
         },
         {
           "id": 4,
           "section": "TÉCNICA",
-          "label": "Transiciones ( Sentido Practico) Y Sincronia",
+          "label": "Transiciones (sentido práctico) y sincronía",
           "maxScore": 5.0
         },
         {
@@ -1761,37 +1761,37 @@
         {
           "id": 6,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Ejecucion De La Tecnica O Estilo",
+          "label": "Ejecución de la técnica o estilo",
           "maxScore": 5.0
         },
         {
           "id": 7,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Calidad De Movimiento",
+          "label": "Calidad de movimiento",
           "maxScore": 5.0
         },
         {
           "id": 8,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fuerza Y Control",
+          "label": "Fuerza y control",
           "maxScore": 5.0
         },
         {
           "id": 9,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Incorporacion De Skills",
+          "label": "Incorporación de skills",
           "maxScore": 5.0
         },
         {
           "id": 10,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Fluidez, Limpieza Y Calidad De Movimiento",
+          "label": "Fluidez, limpieza y calidad de movimiento",
           "maxScore": 4.0
         },
         {
           "id": 11,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Manejo De La Energia",
+          "label": "Manejo de la energía",
           "maxScore": 4.0
         },
         {
@@ -1803,31 +1803,31 @@
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Interpretación, Proyección Y Conexión Con El Público",
+          "label": "Interpretación, proyección y conexión con el público",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , Calidad Y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 3.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Maquillaje Y Vestuario",
+          "label": "Maquillaje y vestuario",
           "maxScore": 3.0
         },
         {
           "id": 16,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         }
       ]
     },
     {
-      "genre": "DANZA AEREA",
+      "genre": "DANZA AÉREA",
       "title": "HOJA DE JUECEO DANZA AÉREA",
       "maxScore": 70.0,
       "criteria": [
@@ -1864,7 +1864,7 @@
         {
           "id": 6,
           "section": "EJECUCIÓN COREOGRÁFICA",
-          "label": "Destreza y Fluidez de movimientos",
+          "label": "Destreza y fluidez de movimientos",
           "maxScore": 5.0
         },
         {
@@ -1900,25 +1900,25 @@
         {
           "id": 12,
           "section": "PERFORMANCE",
-          "label": "Musicalización ( Selección , calidad y Edición )",
+          "label": "Musicalización (selección, calidad y edición)",
           "maxScore": 5.0
         },
         {
           "id": 13,
           "section": "PERFORMANCE",
-          "label": "Impacto visual: Maquillaje y vestuario",
+          "label": "Impacto visual: maquillaje y vestuario",
           "maxScore": 4.0
         },
         {
           "id": 14,
           "section": "PERFORMANCE",
-          "label": "Uso Y Manejo De Accesorios",
+          "label": "Uso y manejo de accesorios",
           "maxScore": 3.0
         },
         {
           "id": 15,
           "section": "PERFORMANCE",
-          "label": "Ejecución completa de Obligatorios",
+          "label": "Ejecución completa de obligatorios",
           "maxScore": 3.0
         }
       ]

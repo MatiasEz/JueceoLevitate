@@ -20,7 +20,7 @@ enum JudgingSheetPDFExporter {
         let margin: CGFloat = 28
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
-            kCGPDFContextCreator as String: "Jueceo Coreografias",
+            kCGPDFContextCreator as String: "Jueceo Coreografías",
             kCGPDFContextTitle as String: fileName
         ]
 
@@ -233,7 +233,7 @@ enum JudgingSheetPDFExporter {
         let pillWidth = (fullWidth - 32 - gap * 2) / 3
         let firstRowY = cardY + 72
         drawMetaPill(label: "JUEZ", value: judge, rect: CGRect(x: margin + 16, y: firstRowY, width: pillWidth, height: 34))
-        drawMetaPill(label: "GENERO / MODALIDAD", value: routine.genre, rect: CGRect(x: margin + 16 + pillWidth + gap, y: firstRowY, width: pillWidth, height: 34))
+        drawMetaPill(label: "GÉNERO / MODALIDAD", value: routine.genre, rect: CGRect(x: margin + 16 + pillWidth + gap, y: firstRowY, width: pillWidth, height: 34))
         drawMetaPill(label: "CATEGORIA", value: routine.category, rect: CGRect(x: margin + 16 + (pillWidth + gap) * 2, y: firstRowY, width: pillWidth, height: 34))
 
         let secondRowY = firstRowY + 38
@@ -418,13 +418,13 @@ enum JudgingSheetPDFExporter {
         let gap: CGFloat = 10
         let metricWidth = (fullWidth - 28 - gap * 2) / 3
         drawFooterMetric(label: "TOTAL", value: total.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14, y: y + 8, width: metricWidth, height: 28), accent: Theme.pink)
-        drawFooterMetric(label: "MAXIMO", value: maxTotal.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + metricWidth + gap, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
-        drawFooterMetric(label: "PENALIZACION", value: penalty.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + (metricWidth + gap) * 2, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
+        drawFooterMetric(label: "MÁXIMO", value: maxTotal.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + metricWidth + gap, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
+        drawFooterMetric(label: "PENALIZACIÓN", value: penalty.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + (metricWidth + gap) * 2, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
 
         let feedbackCard = CGRect(x: margin, y: y + 54, width: fullWidth, height: 64)
         drawRoundedRect(feedbackCard, fill: Theme.surface, stroke: Theme.silver.withAlphaComponent(0.55), cornerRadius: 12, lineWidth: 0.8)
         drawText(
-            "RETROALIMENTACION",
+            "RETROALIMENTACIÓN",
             in: CGRect(x: feedbackCard.minX + 14, y: feedbackCard.minY + 10, width: 176, height: 12),
             size: 8.2,
             weight: .black,

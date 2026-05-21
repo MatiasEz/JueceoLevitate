@@ -6,7 +6,7 @@ enum PDFExporter {
         results: [RoutineResult],
         judges: [String],
         sourceName: String,
-        title: String = "Calificaciones y Dictamen Final",
+        title: String = "Calificaciones y dictamen final",
         templateForRoutine: (Routine) -> JudgingTemplate,
         scoreForCriterion: (Routine, String, Criterion) -> Double,
         penaltyForRoutine: (Routine, String) -> Double
@@ -17,7 +17,7 @@ enum PDFExporter {
 
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
-            kCGPDFContextCreator as String: "Jueceo Coreografias",
+            kCGPDFContextCreator as String: "Jueceo Coreografías",
             kCGPDFContextTitle as String: title
         ]
 
@@ -80,7 +80,7 @@ enum PDFExporter {
 
     private static func groupedResults(_ results: [RoutineResult]) -> [(title: String, results: [RoutineResult])] {
         let grouped = Dictionary(grouping: results) { result in
-            clean(result.routine.genre, fallback: "SIN GENERO")
+            clean(result.routine.genre, fallback: "SIN GÉNERO")
         }
 
         return grouped
@@ -122,7 +122,7 @@ enum PDFExporter {
 
         drawCell(rect: CGRect(x: x, y: y, width: metrics.numberWidth, height: Layout.headerHeight), text: "#", fill: Theme.headerFill, fontSize: 8, weight: .bold)
         x += metrics.numberWidth
-        drawCell(rect: CGRect(x: x, y: y, width: metrics.routineWidth, height: Layout.headerHeight), text: "COREOGRAFIA", fill: Theme.headerFill, fontSize: 8, weight: .bold)
+        drawCell(rect: CGRect(x: x, y: y, width: metrics.routineWidth, height: Layout.headerHeight), text: "COREOGRAFÍA", fill: Theme.headerFill, fontSize: 8, weight: .bold)
         x += metrics.routineWidth
         drawCell(rect: CGRect(x: x, y: y, width: metrics.judgeWidth, height: Layout.headerHeight), text: "JUEZ", fill: Theme.headerFill, fontSize: 8, weight: .bold)
         x += metrics.judgeWidth

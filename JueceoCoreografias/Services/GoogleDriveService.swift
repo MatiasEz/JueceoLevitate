@@ -2,7 +2,11 @@ import AuthenticationServices
 import CryptoKit
 import Foundation
 import Security
+#if canImport(UIKit)
 import UIKit
+#elseif canImport(AppKit) && !targetEnvironment(macCatalyst)
+import AppKit
+#endif
 
 struct GoogleDriveUploadedFile: Identifiable, Decodable, Sendable {
     let id: String
@@ -30,11 +34,11 @@ enum GoogleDriveServiceError: LocalizedError {
         case .authorizationCancelled:
             "Inicio de sesion con Google cancelado."
         case .invalidCallback:
-            "Google no devolvio un codigo valido."
+            "Google no devolvió un código válido."
         case .missingRefreshToken:
             "No hay sesion de Google guardada. Vuelve a iniciar sesion."
         case .invalidResponse:
-            "Google devolvio una respuesta invalida."
+            "Google devolvió una respuesta inválida."
         case let .requestFailed(message):
             message
         }
@@ -121,7 +125,7 @@ final class GoogleDriveService {
             throw GoogleDriveServiceError.invalidResponse
         }
 
-        let callbackURL = try await authenticationCallback(for: url)
+        let callbackURL = try await authenticationCallback(for: url, expectedState: state)
         guard
             let callbackComponents = URLComponents(url: callbackURL, resolvingAgainstBaseURL: false),
             callbackComponents.queryItems?.first(where: { $0.name == "state" })?.value == state,
@@ -133,28 +137,37 @@ final class GoogleDriveService {
         return try await exchangeCodeForToken(code: code, verifier: verifier)
     }
 
-    private func authenticationCallback(for url: URL) async throws -> URL {
+    private func authenticationCallback(for url: URL, expectedState: String) async throws -> URL {
+        #if targetEnvironment(macCatalyst)
+        return try await GoogleOAuthCallbackCoordinator.shared.beginExternalAuth(
+            url: url,
+            callbackScheme: config.reversedClientID,
+            expectedState: expectedState
+        )
+        #else
         try await withCheckedThrowingContinuation { continuation in
+            let continuationBox = GoogleAuthContinuationBox(continuation)
             let session = ASWebAuthenticationSession(
                 url: url,
                 callbackURLScheme: config.reversedClientID
             ) { callbackURL, error in
                 if let callbackURL {
-                    continuation.resume(returning: callbackURL)
+                    continuationBox.resume(returning: callbackURL)
                 } else if let error = error as? ASWebAuthenticationSessionError,
                           error.code == .canceledLogin {
-                    continuation.resume(throwing: GoogleDriveServiceError.authorizationCancelled)
+                    continuationBox.resume(throwing: GoogleDriveServiceError.authorizationCancelled)
                 } else {
-                    continuation.resume(throwing: error ?? GoogleDriveServiceError.invalidCallback)
+                    continuationBox.resume(throwing: error ?? GoogleDriveServiceError.invalidCallback)
                 }
             }
             session.presentationContextProvider = presentationProvider
             session.prefersEphemeralWebBrowserSession = false
             authSession = session
             if !session.start() {
-                continuation.resume(throwing: GoogleDriveServiceError.invalidCallback)
+                continuationBox.resume(throwing: GoogleDriveServiceError.invalidCallback)
             }
         }
+        #endif
     }
 
     private func exchangeCodeForToken(code: String, verifier: String) async throws -> GoogleOAuthToken {
@@ -295,6 +308,103 @@ final class GoogleDriveService {
     }
 }
 
+@MainActor
+final class GoogleOAuthCallbackCoordinator {
+    static let shared = GoogleOAuthCallbackCoordinator()
+
+    private struct PendingAuthorization {
+        let callbackScheme: String
+        let expectedState: String
+        let continuation: CheckedContinuation<URL, Error>
+        let timeoutTask: Task<Void, Never>
+    }
+
+    private var pendingAuthorization: PendingAuthorization?
+
+    private init() {}
+
+    func beginExternalAuth(url: URL, callbackScheme: String, expectedState: String) async throws -> URL {
+        cancelPendingAuthorization()
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(300))
+                self?.finishPendingAuthorization(throwing: GoogleDriveServiceError.authorizationCancelled)
+            }
+            pendingAuthorization = PendingAuthorization(
+                callbackScheme: callbackScheme,
+                expectedState: expectedState,
+                continuation: continuation,
+                timeoutTask: timeoutTask
+            )
+
+            #if canImport(UIKit)
+            UIApplication.shared.open(url, options: [:]) { [weak self] success in
+                guard !success else { return }
+                Task { @MainActor in
+                    self?.finishPendingAuthorization(throwing: GoogleDriveServiceError.invalidCallback)
+                }
+            }
+            #elseif canImport(AppKit)
+            if !NSWorkspace.shared.open(url) {
+                finishPendingAuthorization(throwing: GoogleDriveServiceError.invalidCallback)
+            }
+            #else
+            finishPendingAuthorization(throwing: GoogleDriveServiceError.invalidCallback)
+            #endif
+        }
+    }
+
+    @discardableResult
+    func handle(_ url: URL) -> Bool {
+        guard let pendingAuthorization,
+              url.scheme == pendingAuthorization.callbackScheme
+        else {
+            return false
+        }
+
+        guard let components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            finishPendingAuthorization(throwing: GoogleDriveServiceError.invalidCallback)
+            return true
+        }
+
+        let queryItems = components.queryItems ?? []
+        if let error = queryItems.first(where: { $0.name == "error" })?.value {
+            let description = queryItems.first(where: { $0.name == "error_description" })?.value
+            finishPendingAuthorization(throwing: GoogleDriveServiceError.requestFailed(description ?? error))
+            return true
+        }
+
+        guard queryItems.first(where: { $0.name == "state" })?.value == pendingAuthorization.expectedState,
+              queryItems.first(where: { $0.name == "code" })?.value != nil
+        else {
+            finishPendingAuthorization(throwing: GoogleDriveServiceError.invalidCallback)
+            return true
+        }
+
+        finishPendingAuthorization(returning: url)
+        return true
+    }
+
+    private func cancelPendingAuthorization() {
+        finishPendingAuthorization(throwing: GoogleDriveServiceError.authorizationCancelled)
+    }
+
+    private func finishPendingAuthorization(returning url: URL) {
+        guard let pendingAuthorization else { return }
+        self.pendingAuthorization = nil
+        pendingAuthorization.timeoutTask.cancel()
+        pendingAuthorization.continuation.resume(returning: url)
+    }
+
+    private func finishPendingAuthorization(throwing error: Error) {
+        guard let pendingAuthorization else { return }
+        self.pendingAuthorization = nil
+        pendingAuthorization.timeoutTask.cancel()
+        pendingAuthorization.continuation.resume(throwing: error)
+    }
+}
+
 struct GoogleDriveConfig: Sendable {
     let clientID: String
     let reversedClientID: String
@@ -339,13 +449,70 @@ struct GoogleDriveConfig: Sendable {
 
 private final class GoogleOAuthPresentationProvider: NSObject, ASWebAuthenticationPresentationContextProviding {
     func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        MainActor.assumeIsolated {
-            UIApplication.shared.connectedScenes
+        #if canImport(UIKit)
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { Self.currentUIKitAnchor() }
+        }
+        var anchor = ASPresentationAnchor()
+        DispatchQueue.main.sync {
+            anchor = MainActor.assumeIsolated { Self.currentUIKitAnchor() }
+        }
+        return anchor
+        #elseif canImport(AppKit) && !targetEnvironment(macCatalyst)
+        if Thread.isMainThread {
+            return Self.currentAppKitAnchor()
+        }
+        var anchor = ASPresentationAnchor()
+        DispatchQueue.main.sync {
+            anchor = Self.currentAppKitAnchor()
+        }
+        return anchor
+        #else
+        return ASPresentationAnchor()
+        #endif
+    }
+
+    #if canImport(UIKit)
+    @MainActor
+    private static func currentUIKitAnchor() -> ASPresentationAnchor {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+            ?? UIApplication.shared.connectedScenes
                 .compactMap { $0 as? UIWindowScene }
                 .flatMap(\.windows)
-                .first(where: \.isKeyWindow)
-                ?? ASPresentationAnchor()
-        }
+                .first
+            ?? ASPresentationAnchor()
+    }
+    #endif
+
+    #if canImport(AppKit) && !targetEnvironment(macCatalyst)
+    private static func currentAppKitAnchor() -> ASPresentationAnchor {
+        NSApplication.shared.keyWindow
+            ?? NSApplication.shared.windows.first
+            ?? ASPresentationAnchor()
+    }
+    #endif
+}
+
+private final class GoogleAuthContinuationBox {
+    private var continuation: CheckedContinuation<URL, Error>?
+
+    init(_ continuation: CheckedContinuation<URL, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(returning url: URL) {
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(returning: url)
+    }
+
+    func resume(throwing error: Error) {
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(throwing: error)
     }
 }
 

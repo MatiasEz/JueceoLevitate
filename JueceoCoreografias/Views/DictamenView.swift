@@ -55,7 +55,7 @@ struct DictamenView: View {
                 Text("Dictamen final")
                     .font(.system(size: 31, weight: .black, design: .rounded))
                     .foregroundStyle(LevitTheme.ink)
-                Text("Resultados oficiales por Genero · Edad · Cantidad")
+                Text("Resultados oficiales de la hoja de jueceo")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -70,7 +70,7 @@ struct DictamenView: View {
     private var selectedGroupSummary: some View {
         if let selectedGroup {
             HStack(spacing: 12) {
-                Label("Categoria seleccionada", systemImage: "trophy.fill")
+                Label("Categoría seleccionada", systemImage: "trophy.fill")
                     .font(.callout.weight(.black))
                     .foregroundStyle(LevitTheme.pink)
 
@@ -144,10 +144,10 @@ struct DictamenView: View {
 
     private func sortedResults(_ items: [RoutineResult]) -> [RoutineResult] {
         items.sorted {
-            if $0.total == $1.total {
+            if $0.aggregateTotal == $1.aggregateTotal {
                 return (Int($0.routine.id) ?? 0) < (Int($1.routine.id) ?? 0)
             }
-            return $0.total > $1.total
+            return $0.aggregateTotal > $1.aggregateTotal
         }
     }
 
@@ -168,8 +168,8 @@ private struct DictamenGroup: Identifiable {
 
     var id: String { Self.id(genre: genre, age: age, amount: amount) }
     var title: String { "\(genre) · \(age) · \(amount)" }
-    var completedCount: Int { results.filter { $0.total > 0 }.count }
-    var podium: [RoutineResult] { Array(results.filter { $0.total > 0 }.prefix(3)) }
+    var completedCount: Int { results.filter { $0.aggregateTotal > 0 }.count }
+    var podium: [RoutineResult] { Array(results.filter { $0.aggregateTotal > 0 }.prefix(3)) }
 
     static func id(genre: String, age: String, amount: String) -> String {
         [genre, age, amount].map(\.normalizedKey).joined(separator: "|")
@@ -223,7 +223,7 @@ private struct DictamenGroupCard: View {
 
                         Spacer()
 
-                        Text(result.total > 0 ? result.total.formatted(.number.precision(.fractionLength(2))) : "-")
+                        Text(result.aggregateTotal > 0 ? result.aggregateTotal.formatted(.number.precision(.fractionLength(1))) : "-")
                             .font(.headline.monospacedDigit().weight(.black))
                             .foregroundStyle(LevitTheme.ink)
                     }
@@ -283,7 +283,7 @@ private struct PodiumCard: View {
                 .lineLimit(3)
                 .minimumScaleFactor(0.75)
 
-            Text(result.map { $0.total.formatted(.number.precision(.fractionLength(1))) } ?? "-")
+            Text(result.map { $0.aggregateTotal.formatted(.number.precision(.fractionLength(1))) } ?? "-")
                 .font(.title2.monospacedDigit().weight(.black))
                 .foregroundStyle(isWinner ? .white : LevitTheme.ink)
         }

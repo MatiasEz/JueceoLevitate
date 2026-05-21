@@ -22,7 +22,7 @@ struct JudgingView: View {
                 onBack: onBack
             )
         } else {
-            ContentUnavailableView("Sin coreografias", systemImage: "tray")
+            ContentUnavailableView("Sin coreografías", systemImage: "tray")
                 .foregroundStyle(LevitTheme.ink)
         }
     }
@@ -56,13 +56,13 @@ private struct JudgeSelectionView: View {
                     Text("Elegir juez")
                         .font(.system(size: 42, weight: .black, design: .rounded))
                         .foregroundStyle(LevitTheme.ink)
-                    Text("Selecciona quien va a calificar antes de entrar a la hoja de jueceo.")
+                    Text("Selecciona quién va a calificar antes de entrar a la hoja de jueceo.")
                         .font(.title3.weight(.medium))
                         .foregroundStyle(LevitTheme.muted)
                 }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 190, maximum: 230), spacing: 18)], spacing: 18) {
-                    ForEach(store.judges, id: \.self) { judge in
+                    ForEach(store.orderedJudges, id: \.self) { judge in
                         Button {
                             store.selectJudge(judge)
                             onContinue()
@@ -282,7 +282,7 @@ private struct ScoreSheet: View {
                         .foregroundStyle(LevitTheme.muted)
                 }
                 if penaltyValue != 0 {
-                    Text("Subtotal \(scoreSubtotal.formatted(.number.precision(.fractionLength(0...1)))) · Penalizacion \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
+                    Text("Subtotal \(scoreSubtotal.formatted(.number.precision(.fractionLength(0...1)))) · Penalización \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
                         .font(.caption.weight(.black))
                         .foregroundStyle(LevitTheme.muted)
                 }
@@ -379,12 +379,12 @@ private struct ScoreSheet: View {
                 .background(LevitTheme.pink.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Coreografia del bloque")
+                Text("Coreografía del bloque")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
 
                 Picker(
-                    "Coreografia del bloque",
+                    "",
                     selection: Binding(
                         get: { selectedRoutineIDForPicker },
                         set: { store.selectedRoutineID = $0 }
@@ -398,6 +398,7 @@ private struct ScoreSheet: View {
                 .buttonStyle(.plain)
                 .pickerStyle(.menu)
                 .tint(LevitTheme.ink)
+                .labelsHidden()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -416,7 +417,7 @@ private struct ScoreSheet: View {
 
     private var penaltyControl: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("PENALIZACION")
+            Text("PENALIZACIÓN")
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
             HStack(spacing: 10) {
@@ -462,7 +463,7 @@ private struct ScoreSheet: View {
         let key = store.feedbackKey(routineID: routine.id, judge: scoringJudge)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("RETROALIMENTACION")
+                Text("RETROALIMENTACIÓN")
                     .font(.caption.weight(.black))
                     .foregroundStyle(LevitTheme.muted)
                 Spacer()
@@ -484,7 +485,7 @@ private struct ScoreSheet: View {
                 .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
 
                 if (store.feedback[key] ?? "").isEmpty {
-                    Text("Excelente ejecucion tecnica y limpieza en las transiciones.")
+                    Text("Excelente ejecución técnica y limpieza en las transiciones.")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(LevitTheme.muted.opacity(0.75))
                         .padding(16)

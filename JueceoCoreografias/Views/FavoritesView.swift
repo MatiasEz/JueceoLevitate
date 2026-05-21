@@ -7,11 +7,8 @@ struct FavoritesView: View {
         store.favoriteSummaries
     }
 
-    private var groupedFavorites: [(category: FavoriteCategory, favorites: [FavoriteSelectionSummary])] {
-        FavoriteCategory.allCases.compactMap { category in
-            let items = favorites.filter { $0.category == category }
-            return items.isEmpty ? nil : (category, items)
-        }
+    private var rankingBlocks: [FavoriteRankingBlock] {
+        store.favoriteRankingBlocks
     }
 
     var body: some View {
@@ -73,12 +70,12 @@ struct FavoritesView: View {
 
     @ViewBuilder
     private var favoritesContent: some View {
-        if favorites.isEmpty {
+        if rankingBlocks.isEmpty {
             emptyState
         } else {
             VStack(alignment: .leading, spacing: 18) {
-                ForEach(groupedFavorites, id: \.category) { group in
-                    FavoriteCategorySection(category: group.category, favorites: group.favorites)
+                ForEach(rankingBlocks) { block in
+                    FavoriteRankingBlockSection(block: block)
                 }
             }
         }
@@ -93,9 +90,9 @@ struct FavoritesView: View {
                 .background(LevitTheme.softFill, in: Circle())
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Todavia no hay favoritos")
+                Text("Todavía no hay favoritos")
                     .font(.headline.weight(.black))
-                Text("Cuando un juez marque vestuario, coreografia o musica, va a aparecer aca.")
+                Text("Cuando los jueces marquen vestuario, coreografía o música, el top 3 va a aparecer acá.")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -147,23 +144,22 @@ private struct FavoriteMetricCard: View {
     }
 }
 
-private struct FavoriteCategorySection: View {
-    let category: FavoriteCategory
-    let favorites: [FavoriteSelectionSummary]
+private struct FavoriteRankingBlockSection: View {
+    let block: FavoriteRankingBlock
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Image(systemName: category.systemImage)
+                Image(systemName: "square.stack.3d.up.fill")
                     .font(.headline.weight(.bold))
                     .foregroundStyle(LevitTheme.pink)
                     .frame(width: 38, height: 38)
                     .background(LevitTheme.palePink, in: Circle())
 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(category.title)
+                    Text(block.blockName)
                         .font(.title3.weight(.black))
-                    Text("\(favorites.count) seleccion\(favorites.count == 1 ? "" : "es")")
+                    Text("\(block.totalVotes) voto\(block.totalVotes == 1 ? "" : "s")")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LevitTheme.muted)
                 }
@@ -171,9 +167,9 @@ private struct FavoriteCategorySection: View {
                 Spacer()
             }
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 330), spacing: 12)], spacing: 12) {
-                ForEach(favorites) { favorite in
-                    FavoriteSummaryCard(favorite: favorite)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 12)], spacing: 12) {
+                ForEach(block.categories) { category in
+                    FavoriteRankingCategoryCard(ranking: category)
                 }
             }
         }
@@ -184,58 +180,77 @@ private struct FavoriteCategorySection: View {
     }
 }
 
-private struct FavoriteSummaryCard: View {
-    let favorite: FavoriteSelectionSummary
+private struct FavoriteRankingCategoryCard: View {
+    let ranking: FavoriteCategoryRanking
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .top, spacing: 12) {
-                Text("#\(favorite.routine.id)")
-                    .font(.callout.monospacedDigit().weight(.black))
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                Image(systemName: ranking.category.systemImage)
+                    .font(.headline.weight(.bold))
                     .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 58, height: 42)
-                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 12))
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(favorite.routine.name)
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                    Text(favorite.routine.academy)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                        .lineLimit(1)
-                }
-
+                    .frame(width: 32, height: 32)
+                    .background(LevitTheme.palePink, in: Circle())
+                Text(ranking.category.title)
+                    .font(.headline.weight(.black))
+                    .lineLimit(1)
                 Spacer()
+                Text("Top 3")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
             }
 
-            Divider().overlay(LevitTheme.line)
-
-            HStack(spacing: 9) {
-                FavoriteChip(icon: "person.fill", text: favorite.judge)
-                FavoriteChip(icon: "square.stack.3d.up.fill", text: favorite.blockName)
+            if ranking.items.isEmpty {
+                Text("Sin votos")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 110, alignment: .center)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(ranking.items) { item in
+                        FavoriteRankingRow(item: item)
+                    }
+                }
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 140, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
         .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
     }
 }
 
-private struct FavoriteChip: View {
-    let icon: String
-    let text: String
+private struct FavoriteRankingRow: View {
+    let item: FavoriteRankingItem
 
     var body: some View {
-        Label(text, systemImage: icon)
-            .font(.caption.weight(.black))
-            .lineLimit(1)
-            .minimumScaleFactor(0.72)
-            .foregroundStyle(LevitTheme.pink)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(LevitTheme.palePink, in: Capsule())
+        HStack(spacing: 12) {
+            Text("\(item.rank)")
+                .font(.headline.weight(.black))
+                .foregroundStyle(item.rank == 1 ? .white : LevitTheme.pink)
+                .frame(width: 34, height: 34)
+                .background(item.rank == 1 ? LevitTheme.pink : LevitTheme.palePink, in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.routine.academy.isEmpty ? item.routine.name : item.routine.academy)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                    .lineLimit(1)
+                Text("#\(item.routine.id) \(item.routine.name)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("\(item.votes)")
+                .font(.headline.monospacedDigit().weight(.black))
+                .foregroundStyle(LevitTheme.ink)
+                .frame(width: 34, alignment: .trailing)
+        }
+        .padding(12)
+        .background(item.rank == 1 ? LevitTheme.palePink.opacity(0.72) : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
     }
 }

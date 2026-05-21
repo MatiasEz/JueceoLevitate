@@ -12,6 +12,9 @@ struct JueceoCoreografiasApp: App {
         WindowGroup {
             rootView
                 .environmentObject(store)
+                .onOpenURL { url in
+                    GoogleOAuthCallbackCoordinator.shared.handle(url)
+                }
         }
     }
 

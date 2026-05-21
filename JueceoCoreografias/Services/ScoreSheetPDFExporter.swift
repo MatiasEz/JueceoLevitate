@@ -22,7 +22,7 @@ enum ScoreSheetPDFExporter {
         let margin: CGFloat = 20
         let format = UIGraphicsPDFRendererFormat()
         format.documentInfo = [
-            kCGPDFContextCreator as String: "Jueceo Coreografias",
+            kCGPDFContextCreator as String: "Jueceo Coreografías",
             kCGPDFContextTitle as String: fileName
         ]
 
@@ -108,7 +108,7 @@ enum ScoreSheetPDFExporter {
 
     private static func groupedByGenre(_ results: [RoutineResult]) -> [(genre: String, results: [RoutineResult])] {
         Dictionary(grouping: results) { result in
-            clean(result.routine.genre, fallback: "SIN GENERO")
+            clean(result.routine.genre, fallback: "SIN GÉNERO")
         }
         .map { genre, items in (genre, items) }
         .sorted { lhs, rhs in lhs.genre.localizedStandardCompare(rhs.genre) == .orderedAscending }
@@ -136,7 +136,7 @@ enum ScoreSheetPDFExporter {
         let meta = [
             clean(sourceName, fallback: "LEVITATE CDMX 2026"),
             academyName.map { "ACADEMIA: \(clean($0, fallback: "-"))" } ?? "TODAS LAS ACADEMIAS",
-            "PENALIZACION: VER TABLA"
+            "PENALIZACIÓN: VER TABLA"
         ]
         drawText(
             meta.joined(separator: "  |  "),
@@ -154,7 +154,7 @@ enum ScoreSheetPDFExporter {
 
         drawCell(rect: CGRect(x: x, y: y, width: metrics.numberWidth, height: Layout.headerHeight), text: "#", fill: Theme.headerFill, fontSize: 7.6, weight: .bold)
         x += metrics.numberWidth
-        drawCell(rect: CGRect(x: x, y: y, width: metrics.routineWidth, height: Layout.headerHeight), text: "COREOGRAFIA", fill: Theme.headerFill, fontSize: 7.6, weight: .bold)
+        drawCell(rect: CGRect(x: x, y: y, width: metrics.routineWidth, height: Layout.headerHeight), text: "COREOGRAFÍA", fill: Theme.headerFill, fontSize: 7.6, weight: .bold)
         x += metrics.routineWidth
         drawCell(rect: CGRect(x: x, y: y, width: metrics.academyWidth, height: Layout.headerHeight), text: "ACADEMIA", fill: Theme.headerFill, fontSize: 7.6, weight: .bold)
         x += metrics.academyWidth

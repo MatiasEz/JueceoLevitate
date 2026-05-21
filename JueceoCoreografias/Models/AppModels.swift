@@ -24,8 +24,8 @@ enum FavoriteCategory: String, CaseIterable, Identifiable, Codable, Sendable {
     var title: String {
         switch self {
         case .costume: "Vestuario favorito"
-        case .choreography: "Coreografia favorita"
-        case .music: "Musica favorita"
+        case .choreography: "Coreografía favorita"
+        case .music: "Música favorita"
         }
     }
 
@@ -96,12 +96,48 @@ struct RoutineResult: Identifiable, Sendable {
     let maxScore: Double
 }
 
+extension RoutineResult {
+    var aggregateTotal: Double {
+        judgeTotals.reduce(0) { $0 + $1.total }
+    }
+}
+
 struct FavoriteSelectionSummary: Identifiable, Hashable, Sendable {
     let id: String
     let category: FavoriteCategory
     let judge: String
     let blockName: String
     let routine: Routine
+}
+
+struct FavoriteRankingBlock: Identifiable, Hashable, Sendable {
+    var id: String { blockName.normalizedKey }
+    let blockName: String
+    let categories: [FavoriteCategoryRanking]
+
+    var totalVotes: Int {
+        categories.reduce(0) { $0 + $1.totalVotes }
+    }
+}
+
+struct FavoriteCategoryRanking: Identifiable, Hashable, Sendable {
+    var id: String { category.rawValue }
+    let category: FavoriteCategory
+    let items: [FavoriteRankingItem]
+
+    var totalVotes: Int {
+        items.reduce(0) { $0 + $1.votes }
+    }
+}
+
+struct FavoriteRankingItem: Identifiable, Hashable, Sendable {
+    let id: String
+    let rank: Int
+    let category: FavoriteCategory
+    let blockName: String
+    let routine: Routine
+    let votes: Int
+    let judges: [String]
 }
 
 struct EventSummary: Identifiable, Codable, Hashable, Sendable {
@@ -128,11 +164,11 @@ enum ExcelImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingRemoteConfiguration:
-            "Supabase no esta configurado."
+            "Supabase no está configurado."
         case .invalidFile:
             "No se pudo leer el Excel seleccionado."
         case let .fileTooLarge(maxMegabytes):
-            "El archivo supera el maximo de \(maxMegabytes) MB."
+            "El archivo supera el máximo de \(maxMegabytes) MB."
         }
     }
 }

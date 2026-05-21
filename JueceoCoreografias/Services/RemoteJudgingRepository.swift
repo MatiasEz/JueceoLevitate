@@ -420,9 +420,9 @@ enum RemoteJudgingError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidURL:
-            "URL de Supabase invalida."
+            "URL de Supabase inválida."
         case .invalidResponse:
-            "Respuesta invalida de Supabase."
+            "Respuesta inválida de Supabase."
         case .missingEvent:
             "No se encontro el evento solicitado."
         case let .http(status, detail):

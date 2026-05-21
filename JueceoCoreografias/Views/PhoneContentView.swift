@@ -9,7 +9,7 @@ struct PhoneContentView: View {
     @State private var isAdminJudgingPresented = false
 
     private var availableTabs: [PhoneTab] {
-        store.isAdmin ? [.home, .routines, .favorites, .ranking, .dictamen, .excel, .admin] : [.home, .routines, .judging]
+        store.isAdmin ? [.home, .admin, .dictamen, .favorites, .excel] : [.home, .routines, .judging]
     }
 
     var body: some View {
@@ -105,14 +105,14 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .home: "Inicio"
+        case .home: "Home"
         case .routines: "Rutinas"
         case .judging: "Jueceo"
         case .favorites: "Favoritos"
         case .ranking: "Ranking"
-        case .dictamen: "Dictamen"
-        case .excel: "Excel"
-        case .admin: "Admin"
+        case .dictamen: "Dictamen final"
+        case .excel: "Subir Excel"
+        case .admin: "Panel admin"
         }
     }
 
@@ -149,16 +149,26 @@ private struct PhoneHomeView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
-                    topBar
-                    hero
+                    VStack(alignment: .leading, spacing: 18) {
+                        topBar
+                        hero
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 10)
+                    .background(alignment: .trailing) {
+                        DashboardHeroBackground(widthFraction: 2.0 / 3.0)
+                    }
+
                     nextRoutines
+                        .padding(.horizontal, 18)
                     primaryActions
+                        .padding(.horizontal, 18)
                 }
-                .padding(.horizontal, 18)
-                .padding(.top, 14)
                 .padding(.bottom, 28)
             }
-            .background(LevitTheme.paper)
+            .background(DashboardBackground())
             .navigationBarTitleDisplayMode(.inline)
         }
     }
@@ -223,11 +233,11 @@ private struct PhoneHomeView: View {
     private var nextRoutines: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("Proximas rutinas")
+                Text("Próximas rutinas")
                     .font(.title3.weight(.black))
                 Spacer()
                 Button {
-                    selectedTab = .routines
+                    selectedTab = store.isAdmin ? .admin : .routines
                 } label: {
                     Image(systemName: "arrow.right")
                         .font(.headline.weight(.bold))
@@ -258,20 +268,16 @@ private struct PhoneHomeView: View {
     private var primaryActions: some View {
         HStack(spacing: 12) {
             Button {
+                if store.isAdmin {
+                    selectedTab = .admin
+                    return
+                }
                 if let next = pendingRoutines.first ?? orderedRoutines.first {
                     store.selectedRoutineID = next.id
                 }
-                if store.isAdmin {
-                    if store.isAdminEditingAsJudge {
-                        isAdminJudgingPresented = true
-                    } else {
-                        selectedTab = .admin
-                    }
-                } else {
-                    selectedTab = .judging
-                }
+                selectedTab = .judging
             } label: {
-                Label("Juecear", systemImage: "play.fill")
+                Label(store.isAdmin ? "Panel admin" : "Calificar", systemImage: store.isAdmin ? "gearshape.fill" : "play.fill")
                     .font(.headline.weight(.black))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16)
@@ -279,20 +285,22 @@ private struct PhoneHomeView: View {
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 17))
             }
             .buttonStyle(.plain)
-            .disabled(orderedRoutines.isEmpty)
-            .opacity(orderedRoutines.isEmpty ? 0.45 : 1)
+            .disabled(!store.isAdmin && orderedRoutines.isEmpty)
+            .opacity(!store.isAdmin && orderedRoutines.isEmpty ? 0.45 : 1)
 
-            Button {
-                selectedTab = .routines
-            } label: {
-                Image(systemName: "list.bullet")
-                    .font(.headline.weight(.black))
-                    .frame(width: 58, height: 52)
-                    .foregroundStyle(LevitTheme.ink)
-                    .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
-                    .overlay(RoundedRectangle(cornerRadius: 17).stroke(LevitTheme.line))
+            if !store.isAdmin {
+                Button {
+                    selectedTab = .routines
+                } label: {
+                    Image(systemName: "list.bullet")
+                        .font(.headline.weight(.black))
+                        .frame(width: 58, height: 52)
+                        .foregroundStyle(LevitTheme.ink)
+                        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
+                        .overlay(RoundedRectangle(cornerRadius: 17).stroke(LevitTheme.line))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 
@@ -631,7 +639,7 @@ private struct PhoneScoreSheet: View {
                 Label(didSubmit ? "Guardado" : store.syncStatus.title, systemImage: didSubmit ? "checkmark.circle.fill" : store.syncStatus.systemImage)
                     .font(.caption.weight(.black))
                     .foregroundStyle(didSubmit ? Color.green : LevitTheme.muted)
-                Text("Penalizacion \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
+                Text("Penalización \(penaltyValue.formatted(.number.precision(.fractionLength(0...1))))")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -680,7 +688,7 @@ private struct PhoneScoreSheet: View {
 
     private var penaltyControl: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Penalizacion")
+            Text("Penalización")
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
 
@@ -756,7 +764,7 @@ private struct PhoneScoreSheet: View {
         let key = store.feedbackKey(routineID: routine.id, judge: scoringJudge)
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Retroalimentacion")
+                Text("Retroalimentación")
                     .font(.caption.weight(.black))
                     .foregroundStyle(LevitTheme.muted)
                 Spacer()
@@ -958,11 +966,8 @@ private struct PhoneFavoritesView: View {
         store.favoriteSummaries
     }
 
-    private var groupedFavorites: [(category: FavoriteCategory, favorites: [FavoriteSelectionSummary])] {
-        FavoriteCategory.allCases.compactMap { category in
-            let items = favorites.filter { $0.category == category }
-            return items.isEmpty ? nil : (category, items)
-        }
+    private var rankingBlocks: [FavoriteRankingBlock] {
+        store.favoriteRankingBlocks
     }
 
     var body: some View {
@@ -974,15 +979,15 @@ private struct PhoneFavoritesView: View {
                         PhoneMetricCard(icon: "icloud.fill", value: store.pendingSyncCount == 0 ? "OK" : "\(store.pendingSyncCount)", label: "Sync")
                     }
 
-                    if favorites.isEmpty {
+                    if rankingBlocks.isEmpty {
                         PhoneEmptyState(
                             icon: "star.slash",
                             title: "Sin favoritos",
-                            detail: "Las marcas de vestuario, coreografia y musica aparecen aca."
+                            detail: "El top 3 de cada bloque aparece acá."
                         )
                     } else {
-                        ForEach(groupedFavorites, id: \.category) { group in
-                            PhoneFavoriteCategoryBlock(category: group.category, favorites: group.favorites)
+                        ForEach(rankingBlocks) { block in
+                            PhoneFavoriteRankingBlock(block: block)
                         }
                     }
                 }
@@ -1000,19 +1005,24 @@ private struct PhoneFavoritesView: View {
     }
 }
 
-private struct PhoneFavoriteCategoryBlock: View {
-    let category: FavoriteCategory
-    let favorites: [FavoriteSelectionSummary]
+private struct PhoneFavoriteRankingBlock: View {
+    let block: FavoriteRankingBlock
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(category.title, systemImage: category.systemImage)
-                .font(.headline.weight(.black))
-                .foregroundStyle(LevitTheme.pink)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Label(block.blockName, systemImage: "square.stack.3d.up.fill")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                Spacer()
+                Text("\(block.totalVotes) voto\(block.totalVotes == 1 ? "" : "s")")
+                    .font(.caption.monospacedDigit().weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
 
             VStack(spacing: 10) {
-                ForEach(favorites) { favorite in
-                    PhoneFavoriteRow(favorite: favorite)
+                ForEach(block.categories) { ranking in
+                    PhoneFavoriteCategoryRanking(ranking: ranking)
                 }
             }
         }
@@ -1022,38 +1032,64 @@ private struct PhoneFavoriteCategoryBlock: View {
     }
 }
 
-private struct PhoneFavoriteRow: View {
-    let favorite: FavoriteSelectionSummary
+private struct PhoneFavoriteCategoryRanking: View {
+    let ranking: FavoriteCategoryRanking
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 12) {
-                Text("#\(favorite.routine.id)")
-                    .font(.callout.monospacedDigit().weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 58, height: 40)
-                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 12))
+            Label(ranking.category.title, systemImage: ranking.category.systemImage)
+                .font(.headline.weight(.black))
+                .foregroundStyle(LevitTheme.pink)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(favorite.routine.name)
-                        .font(.callout.weight(.black))
-                        .lineLimit(1)
-                    Text(favorite.routine.academy)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                        .lineLimit(1)
+            if ranking.items.isEmpty {
+                Text("Sin votos")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 52, alignment: .center)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(ranking.items) { item in
+                        PhoneFavoriteRankingRow(item: item)
+                    }
                 }
-            }
-
-            HStack(spacing: 8) {
-                PhoneChip(icon: "person.fill", text: favorite.judge)
-                PhoneChip(icon: "square.stack.3d.up.fill", text: favorite.blockName)
             }
         }
         .padding(14)
-        .foregroundStyle(LevitTheme.ink)
         .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
         .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneFavoriteRankingRow: View {
+    let item: FavoriteRankingItem
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text("\(item.rank)")
+                .font(.headline.weight(.black))
+                .foregroundStyle(item.rank == 1 ? .white : LevitTheme.pink)
+                .frame(width: 36, height: 36)
+                .background(item.rank == 1 ? LevitTheme.pink : LevitTheme.palePink, in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.routine.academy.isEmpty ? item.routine.name : item.routine.academy)
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                Text("#\(item.routine.id) \(item.routine.name)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("\(item.votes)")
+                .font(.headline.monospacedDigit().weight(.black))
+        }
+        .padding(12)
+        .foregroundStyle(LevitTheme.ink)
+        .background(item.rank == 1 ? LevitTheme.palePink.opacity(0.72) : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
     }
 }
 
@@ -1102,7 +1138,7 @@ private struct PhoneDictamenView: View {
                         PhoneEmptyState(
                             icon: "trophy",
                             title: "Sin dictamen",
-                            detail: "Cuando haya calificaciones, las categorias apareceran aca."
+                            detail: "Cuando haya calificaciones, las categorías aparecerán acá."
                         )
                     }
 
@@ -1112,7 +1148,7 @@ private struct PhoneDictamenView: View {
                 .padding(.bottom, 24)
             }
             .background(LevitTheme.paper)
-            .navigationTitle("Dictamen")
+            .navigationTitle("Dictamen final")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     BlockPill(isCompact: true)
@@ -1179,7 +1215,7 @@ private struct PhoneDictamenView: View {
 
     private var groupsList: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Categorias")
+            Text("Categorías")
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
 
@@ -1198,10 +1234,10 @@ private struct PhoneDictamenView: View {
 
     private func sortedResults(_ items: [RoutineResult]) -> [RoutineResult] {
         items.sorted {
-            if $0.total == $1.total {
+            if $0.aggregateTotal == $1.aggregateTotal {
                 return (Int($0.routine.id) ?? 0) < (Int($1.routine.id) ?? 0)
             }
-            return $0.total > $1.total
+            return $0.aggregateTotal > $1.aggregateTotal
         }
     }
 
@@ -1218,8 +1254,8 @@ private struct PhoneDictamenGroup: Identifiable {
 
     var id: String { Self.id(genre: genre, division: division, category: category) }
     var title: String { "\(genre) · \(division) · \(category)" }
-    var completedCount: Int { results.filter { $0.total > 0 }.count }
-    var podium: [RoutineResult] { Array(results.filter { $0.total > 0 }.prefix(3)) }
+    var completedCount: Int { results.filter { $0.aggregateTotal > 0 }.count }
+    var podium: [RoutineResult] { Array(results.filter { $0.aggregateTotal > 0 }.prefix(3)) }
 
     static func id(genre: String, division: String, category: String) -> String {
         [genre, division, category].map(\.normalizedKey).joined(separator: "|")
@@ -1542,7 +1578,7 @@ private struct PhoneRankingView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Button {
-                        store.exportPDF(results: store.rankings, title: "Calificaciones y Dictamen Final")
+                        store.exportPDF(results: store.rankings, title: "Calificaciones y dictamen final")
                         sharing = store.lastPDFURL != nil
                     } label: {
                         Image(systemName: "doc.richtext")
@@ -1569,68 +1605,25 @@ private struct PhoneAdminView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    adminHeader
-                    blockSelector
-                    editAsJudge
                     driveExport
-                    refreshButton
+                    editAsJudge
                 }
                 .padding(16)
                 .padding(.bottom, 24)
             }
             .background(LevitTheme.paper)
-            .navigationTitle("Admin")
-        }
-    }
-
-    private var adminHeader: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            EventPill(isCompact: true)
-            HStack {
-                PhoneMetricCard(icon: "square.stack.3d.up.fill", value: "\(store.blocks.count)", label: "Bloques")
-                PhoneMetricCard(icon: "person.3.fill", value: "\(store.editableJudges.count)", label: "Jueces")
-            }
-        }
-        .padding(16)
-        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
-    }
-
-    private var blockSelector: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Bloque")
-                .font(.caption.weight(.black))
-                .foregroundStyle(LevitTheme.muted)
-            ScrollView(.horizontal) {
-                HStack(spacing: 10) {
-                    ForEach(store.blocks.sorted(by: blockOrder)) { block in
-                        Button {
-                            store.selectBlock(block)
-                        } label: {
-                            Text(block.name)
-                                .font(.callout.weight(.black))
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 11)
-                                .foregroundStyle(block.id == store.selectedBlock?.id ? LevitTheme.pink : LevitTheme.ink)
-                                .background(block.id == store.selectedBlock?.id ? LevitTheme.palePink : LevitTheme.solidSurface, in: Capsule())
-                                .overlay(Capsule().stroke(block.id == store.selectedBlock?.id ? LevitTheme.pink.opacity(0.34) : LevitTheme.line))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-            .scrollIndicators(.hidden)
+            .navigationTitle("Panel admin")
         }
     }
 
     private var editAsJudge: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Juecear como")
+            Text("Editar como juez")
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
 
             Menu {
-                ForEach(store.editableJudges, id: \.self) { judge in
+                ForEach(store.orderedEditableJudges, id: \.self) { judge in
                     Button {
                         if let routine = store.selectedRoutine ?? store.visibleRoutines.first {
                             store.beginAdminScoring(judge: judge, routine: routine)
@@ -1645,13 +1638,13 @@ private struct PhoneAdminView: View {
                     Button {
                         store.clearAdminScoringOverride()
                     } label: {
-                        Label("Salir de edicion", systemImage: "xmark.circle")
+                        Label("Salir de edición", systemImage: "xmark.circle")
                     }
                 }
             } label: {
                 PhoneActionRow(
                     title: store.isAdminEditingAsJudge ? store.scoringJudge : "Elegir juez",
-                    detail: "Abrir hoja de jueceo",
+                    detail: "",
                     icon: "person.fill.viewfinder",
                     color: LevitTheme.pink
                 )
@@ -1681,7 +1674,7 @@ private struct PhoneAdminView: View {
                             .foregroundStyle(driveColor)
                     }
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Exportar Drive")
+                        Text("Exportar a Drive")
                             .font(.headline.weight(.black))
                         Text(store.driveExportMessage ?? driveHelpText)
                             .font(.caption.weight(.semibold))
@@ -1699,24 +1692,9 @@ private struct PhoneAdminView: View {
         }
     }
 
-    private var refreshButton: some View {
-        Button {
-            Task { await store.refreshEvents() }
-        } label: {
-            Label("Actualizar datos", systemImage: "arrow.clockwise")
-                .font(.headline.weight(.black))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .foregroundStyle(LevitTheme.ink)
-                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
-        }
-        .buttonStyle(.plain)
-    }
-
     private var driveHelpText: String {
         store.hasGoogleDriveConfiguration
-            ? "Bloque, academia, coreografia y juez"
+            ? "Bloque, academia, coreografía y juez"
             : "Faltan credenciales Google"
     }
 
@@ -1733,23 +1711,16 @@ private struct PhoneAdminView: View {
         }
     }
 
-    private func blockOrder(_ lhs: DanceBlock, _ rhs: DanceBlock) -> Bool {
-        let lhsOrder = lhs.sortOrder ?? Int.max
-        let rhsOrder = rhs.sortOrder ?? Int.max
-        if lhsOrder == rhsOrder {
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
-        }
-        return lhsOrder < rhsOrder
-    }
 }
 
 private struct PhoneJudgeMenu: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var addingJudge: Bool
+    @State private var judgePendingDeletion: String?
 
     var body: some View {
         Menu {
-            ForEach(store.judges, id: \.self) { judge in
+            ForEach(store.orderedJudges, id: \.self) { judge in
                 Button {
                     store.selectJudge(judge)
                 } label: {
@@ -1757,6 +1728,20 @@ private struct PhoneJudgeMenu: View {
                 }
             }
             Divider()
+            if !store.deletableJudges.isEmpty {
+                Menu {
+                    ForEach(store.deletableJudges, id: \.self) { judge in
+                        Button(role: .destructive) {
+                            judgePendingDeletion = judge
+                        } label: {
+                            Label(judge, systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Label("Borrar juez", systemImage: "trash")
+                }
+                Divider()
+            }
             Button {
                 addingJudge = true
             } label: {
@@ -1773,6 +1758,22 @@ private struct PhoneJudgeMenu: View {
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
+        }
+        .alert("Borrar juez", isPresented: Binding(
+            get: { judgePendingDeletion != nil },
+            set: { if !$0 { judgePendingDeletion = nil } }
+        )) {
+            Button("Borrar", role: .destructive) {
+                if let judgePendingDeletion {
+                    store.deleteJudge(judgePendingDeletion)
+                }
+                judgePendingDeletion = nil
+            }
+            Button("Cancelar", role: .cancel) {
+                judgePendingDeletion = nil
+            }
+        } message: {
+            Text("Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
         }
     }
 }
@@ -2006,7 +2007,7 @@ private struct PhoneRankingRow: View {
 
             Spacer()
 
-            Text(result.total.formatted(.number.precision(.fractionLength(1))))
+            Text(result.aggregateTotal.formatted(.number.precision(.fractionLength(1))))
                 .font(.headline.monospacedDigit().weight(.black))
         }
         .padding(14)
@@ -2031,9 +2032,11 @@ private struct PhoneActionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
                     .font(.headline.weight(.black))
-                Text(detail)
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(LevitTheme.muted)
+                if !detail.isEmpty {
+                    Text(detail)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
             }
             Spacer()
             Image(systemName: "chevron.down")

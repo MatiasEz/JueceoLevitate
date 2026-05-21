@@ -92,7 +92,7 @@ struct ScoresView: View {
             .background(LevitTheme.softFill, in: Capsule())
             .overlay(Capsule().stroke(LevitTheme.line))
 
-            Picker("Genero", selection: $selectedGenre) {
+            Picker("Género", selection: $selectedGenre) {
                 ForEach(genres, id: \.self) { genre in
                     Text(genre).tag(genre)
                 }

@@ -90,6 +90,16 @@ final class JudgingStore: ObservableObject {
 
     var routines: [Routine] { appData.routines }
     var judges: [String] { appData.judges }
+    var orderedJudges: [String] {
+        judges.sorted { lhs, rhs in
+            let lhsIsAdmin = role(for: lhs) == .admin
+            let rhsIsAdmin = role(for: rhs) == .admin
+            if lhsIsAdmin != rhsIsAdmin {
+                return !lhsIsAdmin
+            }
+            return lhs.localizedStandardCompare(rhs) == .orderedAscending
+        }
+    }
     var judgeProfiles: [JudgeProfile] {
         let profilesByID = Dictionary(uniqueKeysWithValues: (appData.judgeProfiles ?? []).map { ($0.judgeID, $0) })
         return appData.judges.map { judge in
@@ -111,6 +121,12 @@ final class JudgingStore: ObservableObject {
     }
     var editableJudges: [String] {
         judges.filter { role(for: $0) == .judge }
+    }
+    var orderedEditableJudges: [String] {
+        orderedJudges.filter { role(for: $0) == .judge }
+    }
+    var deletableJudges: [String] {
+        orderedJudges.filter(canDeleteJudge)
     }
     var blocks: [DanceBlock] { appData.blocks }
     var selectedBlock: DanceBlock? {
@@ -185,6 +201,52 @@ final class JudgingStore: ObservableObject {
         }
     }
 
+    var favoriteRankingBlocks: [FavoriteRankingBlock] {
+        Dictionary(grouping: favoriteSummaries, by: \.blockName)
+            .map { blockName, blockFavorites in
+                let categories = FavoriteCategory.allCases.map { category in
+                    let categoryFavorites = blockFavorites.filter { $0.category == category }
+                    let items = Dictionary(grouping: categoryFavorites, by: { $0.routine.id })
+                        .compactMap { routineID, picks -> (routine: Routine, votes: Int, judges: [String])? in
+                            guard let routine = picks.first?.routine else { return nil }
+                            let judges = Array(Set(picks.map(\.judge)))
+                                .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+                            return (routine, judges.count, judges)
+                        }
+                        .sorted { lhs, rhs in
+                            if lhs.votes == rhs.votes {
+                                return routineOrder(lhs.routine, rhs.routine)
+                            }
+                            return lhs.votes > rhs.votes
+                        }
+                        .prefix(3)
+                        .enumerated()
+                        .map { index, item in
+                            FavoriteRankingItem(
+                                id: "\(blockName.normalizedKey)::\(category.rawValue)::\(item.routine.id)",
+                                rank: index + 1,
+                                category: category,
+                                blockName: blockName,
+                                routine: item.routine,
+                                votes: item.votes,
+                                judges: item.judges
+                            )
+                        }
+                    return FavoriteCategoryRanking(category: category, items: items)
+                }
+                return FavoriteRankingBlock(blockName: blockName, categories: categories)
+            }
+            .filter { $0.totalVotes > 0 }
+            .sorted {
+                let lhsOrder = blockSortOrder(named: $0.blockName)
+                let rhsOrder = blockSortOrder(named: $1.blockName)
+                if lhsOrder == rhsOrder {
+                    return $0.blockName.localizedStandardCompare($1.blockName) == .orderedAscending
+                }
+                return lhsOrder < rhsOrder
+            }
+    }
+
     func template(for routine: Routine) -> JudgingTemplate {
         appData.templates.first { $0.genre.normalizedKey == routine.genre.normalizedKey }
             ?? appData.templates.first
@@ -197,6 +259,68 @@ final class JudgingStore: ObservableObject {
         appData.judges.append(cleanName)
         appendOrUpdateJudgeProfile(name: cleanName, role: cleanName.stableRemoteID == "ati" ? .admin : .judge)
         selectJudge(cleanName)
+    }
+
+    func canDeleteJudge(_ judge: String) -> Bool {
+        appData.judges.contains(judge) && role(for: judge) != .admin
+    }
+
+    func deleteJudge(_ judge: String) {
+        guard canDeleteJudge(judge) else { return }
+
+        appData.judges.removeAll { $0 == judge }
+        if var profiles = appData.judgeProfiles {
+            profiles.removeAll {
+                matchesJudgeKey($0.judgeID, judge: judge)
+                    || $0.name.normalizedKey == judge.normalizedKey
+            }
+            appData.judgeProfiles = profiles
+        }
+
+        scores = scores.filter { key, _ in
+            guard let parsed = parseScoreKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        feedback = feedback.filter { key, _ in
+            guard let parsed = parseFeedbackKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        penalties = penalties.filter { key, _ in
+            guard let parsed = parsePenaltyKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        favoriteSelections = favoriteSelections.filter { key, _ in
+            guard let parsed = parseFavoriteKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+
+        pendingScoreKeys = pendingScoreKeys.filter { key in
+            guard let parsed = parseScoreKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        pendingFeedbackKeys = pendingFeedbackKeys.filter { key in
+            guard let parsed = parseFeedbackKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        pendingPenaltyKeys = pendingPenaltyKeys.filter { key in
+            guard let parsed = parsePenaltyKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        pendingFavoriteKeys = pendingFavoriteKeys.filter { key in
+            guard let parsed = parseFavoriteKey(key) else { return true }
+            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+        }
+        persistPendingScoreKeys()
+        persistPendingFeedbackKeys()
+        persistPendingPenaltyKeys()
+        persistPendingFavoriteKeys()
+
+        if let adminScoringJudge, matchesJudgeKey(adminScoringJudge, judge: judge) {
+            self.adminScoringJudge = nil
+        }
+        if matchesJudgeKey(selectedJudge, judge: judge) {
+            selectedJudge = orderedJudges.first ?? "JUEZ"
+        }
     }
 
     func selectJudge(_ judge: String) {
@@ -552,7 +676,7 @@ final class JudgingStore: ObservableObject {
             }
     }
 
-    func exportPDF(results exportResults: [RoutineResult]? = nil, title: String = "Calificaciones y Dictamen Final") {
+    func exportPDF(results exportResults: [RoutineResult]? = nil, title: String = "Calificaciones y dictamen final") {
         let exportJudges = editableJudges.isEmpty ? judges : editableJudges
         let sourceName = selectedBlock?.name ?? appData.sourceName
         lastPDFURL = PDFExporter.export(
@@ -602,7 +726,7 @@ final class JudgingStore: ObservableObject {
                 }
                 let academyFolderName = driveSafeName(academy, fallback: "Academia")
                 for routine in academyRoutines {
-                    let routineFolderName = driveSafeName("#\(routine.id) \(routine.name)", fallback: "Coreografia \(routine.id)")
+                    let routineFolderName = driveSafeName("#\(routine.id) \(routine.name)", fallback: "Coreografía \(routine.id)")
                     for judge in exportJudges {
                         let fileName = "\(routineFolderName) - \(driveSafeName(judge, fallback: "Juez")).pdf"
                         guard let pdfURL = exportJudgingSheetPDF(
@@ -867,6 +991,14 @@ final class JudgingStore: ObservableObject {
 
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
         appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
+    }
+
+    private func matchesJudgeKey(_ judgeKey: String, judge: String) -> Bool {
+        judgeKey == judge
+            || judgeKey == judge.normalizedKey
+            || judgeKey == judge.stableRemoteID
+            || judgeKey.normalizedKey == judge.normalizedKey
+            || judgeKey.stableRemoteID == judge.stableRemoteID
     }
 
     private func favoriteKey(category: FavoriteCategory, judge: String) -> String {
