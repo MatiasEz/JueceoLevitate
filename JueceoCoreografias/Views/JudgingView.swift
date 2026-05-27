@@ -1,4 +1,126 @@
 import SwiftUI
+import UIKit
+
+struct LimitedScoreTextField: UIViewRepresentable {
+    @Binding var text: String
+    let maxScore: Double
+    let criterionID: Int
+    var focusedCriterionID: FocusState<Int?>.Binding
+    let fontSize: CGFloat
+
+    func makeUIView(context: Context) -> UITextField {
+        let textField = UITextField()
+        textField.delegate = context.coordinator
+        textField.keyboardType = .decimalPad
+        textField.textAlignment = .center
+        textField.adjustsFontSizeToFitWidth = true
+        textField.minimumFontSize = max(14, fontSize * 0.58)
+        textField.backgroundColor = .clear
+        textField.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
+        return textField
+    }
+
+    func updateUIView(_ textField: UITextField, context: Context) {
+        context.coordinator.parent = self
+        let sanitized = Self.sanitized(text, maxScore: maxScore)
+        if sanitized != text {
+            DispatchQueue.main.async {
+                self.text = sanitized
+            }
+        }
+        if textField.text != sanitized {
+            textField.text = sanitized
+        }
+        textField.font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .black)
+        textField.textColor = Self.inkColor
+        if focusedCriterionID.wrappedValue == criterionID, !textField.isFirstResponder {
+            textField.becomeFirstResponder()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var parent: LimitedScoreTextField
+
+        init(parent: LimitedScoreTextField) {
+            self.parent = parent
+        }
+
+        @objc func editingChanged(_ textField: UITextField) {
+            parent.text = LimitedScoreTextField.sanitized(textField.text ?? "", maxScore: parent.maxScore)
+        }
+
+        func textFieldDidBeginEditing(_ textField: UITextField) {
+            parent.focusedCriterionID.wrappedValue = parent.criterionID
+        }
+
+        func textFieldDidEndEditing(_ textField: UITextField) {
+            let finalized = LimitedScoreTextField.finalized(textField.text ?? "", maxScore: parent.maxScore)
+            textField.text = finalized
+            parent.text = finalized
+            if parent.focusedCriterionID.wrappedValue == parent.criterionID {
+                parent.focusedCriterionID.wrappedValue = nil
+            }
+        }
+
+        func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange, replacementString string: String) -> Bool {
+            let current = textField.text ?? ""
+            guard let textRange = Range(range, in: current) else { return false }
+            let candidate = current.replacingCharacters(in: textRange, with: string)
+            guard let normalized = LimitedScoreTextField.normalizedCandidate(candidate) else { return false }
+
+            if let value = Double(normalized), value > parent.maxScore {
+                let maxText = LimitedScoreTextField.scoreText(parent.maxScore)
+                textField.text = maxText
+                parent.text = maxText
+                return false
+            }
+
+            parent.text = candidate
+            return true
+        }
+    }
+
+    private static var inkColor: UIColor {
+        UIColor { traitCollection in
+            if traitCollection.userInterfaceStyle == .dark {
+                return UIColor(red: 0.94, green: 0.95, blue: 0.98, alpha: 1.0)
+            }
+            return UIColor(red: 0.12, green: 0.13, blue: 0.17, alpha: 1.0)
+        }
+    }
+
+    private static func normalizedCandidate(_ text: String) -> String? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard normalized.allSatisfy({ $0.isNumber || $0 == "." }) else { return nil }
+        guard normalized.filter({ $0 == "." }).count <= 1 else { return nil }
+        return normalized
+    }
+
+    private static func sanitized(_ text: String, maxScore: Double) -> String {
+        guard let normalized = normalizedCandidate(text) else { return "" }
+        guard normalized != "." else { return "" }
+        guard let value = Double(normalized) else { return text }
+        return value > maxScore ? scoreText(maxScore) : text
+    }
+
+    private static func finalized(_ text: String, maxScore: Double) -> String {
+        guard let normalized = normalizedCandidate(text),
+              let value = Double(normalized)
+        else {
+            return ""
+        }
+        return scoreText(min(max(value, 0), maxScore))
+    }
+
+    private static func scoreText(_ value: Double) -> String {
+        value.formatted(.number.precision(.fractionLength(0...1)))
+    }
+}
 
 struct JudgingView: View {
     @EnvironmentObject private var store: JudgingStore
@@ -195,9 +317,13 @@ private struct ScoreSheet: View {
                     .padding(.vertical, 22)
                 }
 
-                sidePanel
-                    .frame(width: 330)
-                    .padding(.top, 22)
+                ScrollView {
+                    sidePanel
+                        .frame(maxWidth: .infinity, alignment: .topLeading)
+                        .padding(.bottom, 22)
+                }
+                .frame(width: 330)
+                .padding(.top, 22)
             }
             .padding(.horizontal, 34)
         }
@@ -315,6 +441,41 @@ private struct ScoreSheet: View {
             }
             .buttonStyle(.plain)
 
+            if store.isAdminEditingAsJudge {
+                Button {
+                    exportCurrentRoutineToDrive()
+                } label: {
+                    HStack {
+                        if store.driveExportStatus.isExporting {
+                            ProgressView()
+                                .tint(LevitTheme.pink)
+                        } else {
+                            Image(systemName: "icloud.and.arrow.up")
+                        }
+                        Text("Exportar a Drive")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                        Spacer()
+                    }
+                    .font(.headline.weight(.black))
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 15)
+                    .foregroundStyle(store.driveExportStatus.isExporting ? LevitTheme.muted : LevitTheme.pink)
+                    .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.45), lineWidth: 1.2))
+                }
+                .buttonStyle(.plain)
+                .disabled(store.driveExportStatus.isExporting)
+                .opacity(store.driveExportStatus.isExporting ? 0.72 : 1)
+
+                if let message = store.driveExportMessage {
+                    Label(message, systemImage: store.driveExportStatus.systemImage)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(driveStatusColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             if !routines.isEmpty {
                 Divider().overlay(LevitTheme.line)
 
@@ -401,10 +562,6 @@ private struct ScoreSheet: View {
                 .labelsHidden()
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            Image(systemName: "chevron.down")
-                .font(.callout.weight(.bold))
-                .foregroundStyle(LevitTheme.muted)
         }
         .padding(18)
         .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
@@ -413,6 +570,19 @@ private struct ScoreSheet: View {
 
     private var selectedRoutineIDForPicker: String {
         routines.contains { $0.id == store.selectedRoutineID } ? store.selectedRoutineID : routine.id
+    }
+
+    private var driveStatusColor: Color {
+        switch store.driveExportStatus {
+        case .idle:
+            store.hasGoogleDriveConfiguration ? .green : .orange
+        case .exporting:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
+        }
     }
 
     private var penaltyControl: some View {
@@ -506,7 +676,7 @@ private struct ScoreSheet: View {
     private func loadDraft() {
         draftScores = Dictionary(uniqueKeysWithValues: template.criteria.map { criterion in
             let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
-            return (criterion.id, saved > 0 ? saved.formatted(.number.precision(.fractionLength(0...1))) : "")
+            return (criterion.id, saved.formatted(.number.precision(.fractionLength(0...1))))
         })
         loadPenalty(store.penalty(for: routine, judge: scoringJudge))
         didSubmit = false
@@ -514,8 +684,9 @@ private struct ScoreSheet: View {
         focusedCriterionID = nil
     }
 
-    private func saveScores(advance: Bool) {
-        guard validateScoresBeforeSaving() else { return }
+    @discardableResult
+    private func saveScores(advance: Bool) -> Bool {
+        guard validateScoresBeforeSaving() else { return false }
 
         let values = template.criteria.map { criterion in
             let value = Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
@@ -530,6 +701,15 @@ private struct ScoreSheet: View {
         if advance, let nextRoutine {
             store.selectedRoutineID = nextRoutine.id
         }
+        return true
+    }
+
+    private func exportCurrentRoutineToDrive() {
+        guard !store.driveExportStatus.isExporting else { return }
+        guard saveScores(advance: false) else { return }
+        Task {
+            await store.exportRoutineToDrive(routine: routine, judge: scoringJudge)
+        }
     }
 
     private func validateScoresBeforeSaving() -> Bool {
@@ -538,7 +718,7 @@ private struct ScoreSheet: View {
         }
 
         didSubmit = false
-        errorMessage = "Completa todas las notas entre 0 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
+        errorMessage = "Completa todas las notas entre 1 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
         focusedCriterionID = missingOrInvalid.id
         return false
     }
@@ -546,7 +726,7 @@ private struct ScoreSheet: View {
     private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
         guard !cleanText.isEmpty, let value = Double(cleanText) else { return false }
-        return value >= 0 && value <= maxScore
+        return value >= 1 && value <= maxScore
     }
 
     private func scoreValue(for criterion: Criterion) -> Double {
@@ -622,7 +802,7 @@ private struct DarkCriterionRow: View {
                     .font(.callout.weight(.black))
                     .foregroundStyle(LevitTheme.ink)
                     .lineLimit(1)
-                Text("0 a \(criterion.maxScore.formatted(.number.precision(.fractionLength(0...1)))) puntos")
+                Text("1 a \(criterion.maxScore.formatted(.number.precision(.fractionLength(0...1)))) puntos")
                     .font(.caption.weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -638,13 +818,14 @@ private struct DarkCriterionRow: View {
             }
             .buttonStyle(.plain)
 
-            TextField("0", text: $value)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.center)
-                .font(.system(size: 26, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(LevitTheme.ink)
+            LimitedScoreTextField(
+                text: $value,
+                maxScore: criterion.maxScore,
+                criterionID: criterion.id,
+                focusedCriterionID: focusedCriterionID,
+                fontSize: 26
+            )
                 .frame(width: 54, height: 42)
-                .focused(focusedCriterionID, equals: criterion.id)
 
             Button(action: onIncrement) {
                 Image(systemName: "plus")

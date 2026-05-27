@@ -111,7 +111,7 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
         case .favorites: "Favoritos"
         case .ranking: "Ranking"
         case .dictamen: "Dictamen final"
-        case .excel: "Subir Excel"
+        case .excel: "Importar Excel"
         case .admin: "Panel admin"
         }
     }
@@ -799,6 +799,42 @@ private struct PhoneScoreSheet: View {
             }
             .buttonStyle(.plain)
 
+            if store.isAdminEditingAsJudge {
+                Button {
+                    exportCurrentRoutineToDrive()
+                } label: {
+                    HStack(spacing: 10) {
+                        if store.driveExportStatus.isExporting {
+                            ProgressView()
+                                .tint(LevitTheme.pink)
+                        } else {
+                            Image(systemName: "icloud.and.arrow.up")
+                        }
+                        Text("Exportar a Drive")
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                        Spacer()
+                    }
+                    .font(.headline.weight(.black))
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 15)
+                    .foregroundStyle(store.driveExportStatus.isExporting ? LevitTheme.muted : LevitTheme.pink)
+                    .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.42)))
+                }
+                .buttonStyle(.plain)
+                .disabled(store.driveExportStatus.isExporting)
+                .opacity(store.driveExportStatus.isExporting ? 0.72 : 1)
+
+                if let message = store.driveExportMessage {
+                    Label(message, systemImage: store.driveExportStatus.systemImage)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(driveStatusColor)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             HStack(spacing: 10) {
                 Button {
                     if let previousRoutine {
@@ -850,6 +886,19 @@ private struct PhoneScoreSheet: View {
         }
     }
 
+    private var driveStatusColor: Color {
+        switch store.driveExportStatus {
+        case .idle:
+            store.hasGoogleDriveConfiguration ? .green : .orange
+        case .exporting:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
+        }
+    }
+
     private var groupedCriteria: [(section: String, criteria: [Criterion])] {
         Dictionary(grouping: template.criteria, by: \.section)
             .map { ($0.key, $0.value.sorted { $0.id < $1.id }) }
@@ -861,7 +910,7 @@ private struct PhoneScoreSheet: View {
     private func loadDraft() {
         draftScores = Dictionary(uniqueKeysWithValues: template.criteria.map { criterion in
             let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
-            return (criterion.id, saved > 0 ? saved.formatted(.number.precision(.fractionLength(0...1))) : "")
+            return (criterion.id, saved.formatted(.number.precision(.fractionLength(0...1))))
         })
         loadPenalty(store.penalty(for: routine, judge: scoringJudge))
         didSubmit = false
@@ -869,8 +918,9 @@ private struct PhoneScoreSheet: View {
         focusedCriterionID = nil
     }
 
-    private func saveScores(advance: Bool) {
-        guard validateScoresBeforeSaving() else { return }
+    @discardableResult
+    private func saveScores(advance: Bool) -> Bool {
+        guard validateScoresBeforeSaving() else { return false }
         let values = template.criteria.map { criterion in
             let value = Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
             return (criterion: criterion, value: value)
@@ -882,6 +932,15 @@ private struct PhoneScoreSheet: View {
         if advance, let nextRoutine {
             store.selectedRoutineID = nextRoutine.id
         }
+        return true
+    }
+
+    private func exportCurrentRoutineToDrive() {
+        guard !store.driveExportStatus.isExporting else { return }
+        guard saveScores(advance: false) else { return }
+        Task {
+            await store.exportRoutineToDrive(routine: routine, judge: scoringJudge)
+        }
     }
 
     private func validateScoresBeforeSaving() -> Bool {
@@ -889,7 +948,7 @@ private struct PhoneScoreSheet: View {
             return true
         }
         didSubmit = false
-        errorMessage = "Completa todas las notas entre 0 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
+        errorMessage = "Completa todas las notas entre 1 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
         focusedCriterionID = missingOrInvalid.id
         return false
     }
@@ -897,7 +956,7 @@ private struct PhoneScoreSheet: View {
     private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
         guard !cleanText.isEmpty, let value = Double(cleanText) else { return false }
-        return value >= 0 && value <= maxScore
+        return value >= 1 && value <= maxScore
     }
 
     private func scoreValue(for criterion: Criterion) -> Double {
@@ -1095,57 +1154,57 @@ private struct PhoneFavoriteRankingRow: View {
 
 private struct PhoneDictamenView: View {
     @EnvironmentObject private var store: JudgingStore
-    @State private var selectedGroupID: String?
-    @State private var sharing = false
+    @State private var filters = DictamenFilters()
 
-    private var groups: [PhoneDictamenGroup] {
-        Dictionary(grouping: store.rankings) { result in
-            PhoneDictamenGroup.id(
-                genre: emptyFallback(result.routine.genre),
-                division: emptyFallback(result.routine.division),
-                category: emptyFallback(result.routine.category)
-            )
-        }
-        .compactMap { _, items -> PhoneDictamenGroup? in
-            guard let sample = items.first?.routine else { return nil }
-            return PhoneDictamenGroup(
-                genre: emptyFallback(sample.genre),
-                division: emptyFallback(sample.division),
-                category: emptyFallback(sample.category),
-                results: sortedResults(items)
-            )
-        }
-        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    private var filteredRankings: [RoutineResult] {
+        DictamenBuilder.filteredResults(store.rankings, filters: filters)
     }
 
-    private var selectedGroup: PhoneDictamenGroup? {
-        if let selectedGroupID,
-           let group = groups.first(where: { $0.id == selectedGroupID }) {
-            return group
-        }
-        return groups.first
+    private var sections: [DictamenGenreSection] {
+        DictamenBuilder.sections(from: filteredRankings)
+    }
+
+    private var filterOptions: DictamenFilterOptions {
+        DictamenFilterOptions(results: store.rankings)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    if let selectedGroup {
-                        selectedSummary(selectedGroup)
-                        podium(selectedGroup)
-                        exportButton(selectedGroup)
-                    } else {
-                        PhoneEmptyState(
-                            icon: "trophy",
-                            title: "Sin dictamen",
-                            detail: "Cuando haya calificaciones, las categorías aparecerán acá."
-                        )
+                    DictamenFilterBar(filters: $filters, options: filterOptions, isCompact: true)
+
+                    if filters.hasActiveFilters {
+                        Button {
+                            filters.reset()
+                        } label: {
+                            Label("Limpiar filtros", systemImage: "xmark.circle.fill")
+                                .font(.callout.weight(.black))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                                .foregroundStyle(LevitTheme.pink)
+                                .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 14))
+                        }
+                        .buttonStyle(.plain)
                     }
 
-                    groupsList
+                    if sections.isEmpty {
+                        PhoneEmptyState(
+                            icon: "trophy",
+                            title: filters.hasActiveFilters ? "Sin resultados" : "Sin dictamen",
+                            detail: filters.hasActiveFilters
+                                ? "No hay coreografías que coincidan con los filtros."
+                                : "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
+                        )
+                    } else {
+                        ForEach(sections) { section in
+                            DictamenGenreTable(section: section, layout: .compact)
+                        }
+                    }
                 }
                 .padding(16)
                 .padding(.bottom, 24)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .background(LevitTheme.paper)
             .navigationTitle("Dictamen final")
@@ -1154,145 +1213,7 @@ private struct PhoneDictamenView: View {
                     BlockPill(isCompact: true)
                 }
             }
-            .sheet(isPresented: $sharing) {
-                if let url = store.lastPDFURL {
-                    ShareSheet(items: [url])
-                }
-            }
         }
-    }
-
-    private func selectedSummary(_ group: PhoneDictamenGroup) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: "trophy.fill")
-                .font(.headline.weight(.bold))
-                .foregroundStyle(LevitTheme.pink)
-                .frame(width: 38, height: 38)
-                .background(LevitTheme.palePink, in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text(group.title)
-                    .font(.headline.weight(.black))
-                    .lineLimit(2)
-                Text("\(group.completedCount) / \(group.results.count) calificadas")
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(LevitTheme.muted)
-            }
-        }
-        .padding(16)
-        .foregroundStyle(LevitTheme.ink)
-        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
-    }
-
-    private func podium(_ group: PhoneDictamenGroup) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Podio")
-                .font(.caption.weight(.black))
-                .foregroundStyle(LevitTheme.muted)
-
-            VStack(spacing: 10) {
-                ForEach(Array(group.podium.enumerated()), id: \.element.id) { index, result in
-                    PhoneRankingRow(position: index + 1, result: result)
-                }
-            }
-        }
-    }
-
-    private func exportButton(_ group: PhoneDictamenGroup) -> some View {
-        Button {
-            store.exportPDF(results: group.results, title: "Dictamen final - \(group.title)")
-            sharing = store.lastPDFURL != nil
-        } label: {
-            Label("Exportar dictamen", systemImage: "doc.richtext")
-                .font(.headline.weight(.black))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .foregroundStyle(.white)
-                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var groupsList: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Categorías")
-                .font(.caption.weight(.black))
-                .foregroundStyle(LevitTheme.muted)
-
-            VStack(spacing: 10) {
-                ForEach(groups) { group in
-                    Button {
-                        selectedGroupID = group.id
-                    } label: {
-                        PhoneDictamenGroupRow(group: group, isSelected: group.id == selectedGroup?.id)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-    }
-
-    private func sortedResults(_ items: [RoutineResult]) -> [RoutineResult] {
-        items.sorted {
-            if $0.aggregateTotal == $1.aggregateTotal {
-                return (Int($0.routine.id) ?? 0) < (Int($1.routine.id) ?? 0)
-            }
-            return $0.aggregateTotal > $1.aggregateTotal
-        }
-    }
-
-    private func emptyFallback(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "SIN DATO" : value
-    }
-}
-
-private struct PhoneDictamenGroup: Identifiable {
-    let genre: String
-    let division: String
-    let category: String
-    let results: [RoutineResult]
-
-    var id: String { Self.id(genre: genre, division: division, category: category) }
-    var title: String { "\(genre) · \(division) · \(category)" }
-    var completedCount: Int { results.filter { $0.aggregateTotal > 0 }.count }
-    var podium: [RoutineResult] { Array(results.filter { $0.aggregateTotal > 0 }.prefix(3)) }
-
-    static func id(genre: String, division: String, category: String) -> String {
-        [genre, division, category].map(\.normalizedKey).joined(separator: "|")
-    }
-}
-
-private struct PhoneDictamenGroupRow: View {
-    let group: PhoneDictamenGroup
-    let isSelected: Bool
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: isSelected ? "trophy.fill" : "circle")
-                .font(.headline.weight(.bold))
-                .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
-                .frame(width: 32, height: 32)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(group.genre)
-                    .font(.callout.weight(.black))
-                    .lineLimit(1)
-                HStack(spacing: 6) {
-                    LevitTag(group.division)
-                    LevitTag(group.category)
-                }
-            }
-
-            Spacer()
-
-            Text("\(group.completedCount)/\(group.results.count)")
-                .font(.caption.monospacedDigit().weight(.black))
-                .foregroundStyle(LevitTheme.muted)
-        }
-        .padding(14)
-        .foregroundStyle(LevitTheme.ink)
-        .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(isSelected ? LevitTheme.pink.opacity(0.34) : LevitTheme.line))
     }
 }
 
@@ -1300,6 +1221,7 @@ private struct PhoneExcelImportView: View {
     @EnvironmentObject private var store: JudgingStore
     @State private var eventName = ""
     @State private var eventSlug = ""
+    @State private var importSecret = ""
     @State private var selectedFileURL: URL?
     @State private var isPickingFile = false
     @State private var isUploading = false
@@ -1311,6 +1233,7 @@ private struct PhoneExcelImportView: View {
             && selectedFileURL != nil
             && !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !eventSlug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !importSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !isUploading
     }
 
@@ -1371,6 +1294,11 @@ private struct PhoneExcelImportView: View {
                     }
                 }
                 .modifier(PhoneImportFieldStyle())
+
+            SecureField("Clave de importación", text: $importSecret)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .modifier(PhoneImportFieldStyle())
         }
     }
 
@@ -1416,7 +1344,7 @@ private struct PhoneExcelImportView: View {
                 } else {
                     Image(systemName: "icloud.and.arrow.up.fill")
                 }
-                Text(isUploading ? "Subiendo" : "Subir Excel")
+                Text(isUploading ? "Importando" : "Importar Excel")
             }
             .font(.headline.weight(.black))
             .frame(maxWidth: .infinity)
@@ -1442,7 +1370,7 @@ private struct PhoneExcelImportView: View {
                 PhoneImportStatusRow(
                     icon: "checkmark.circle.fill",
                     title: lastUpload.eventName,
-                    detail: "\(lastUpload.fileName) enviado",
+                    detail: "\(lastUpload.routineCount ?? 0) rutinas importadas",
                     tint: .green
                 )
             }
@@ -1450,7 +1378,7 @@ private struct PhoneExcelImportView: View {
             if let errorMessage {
                 PhoneImportStatusRow(
                     icon: "exclamationmark.triangle.fill",
-                    title: "No se pudo subir",
+                    title: "No se pudo importar",
                     detail: errorMessage,
                     tint: .red
                 )
@@ -1486,7 +1414,8 @@ private struct PhoneExcelImportView: View {
             lastUpload = try await store.uploadExcelImport(
                 fileURL: selectedFileURL,
                 eventName: eventName,
-                eventSlug: eventSlug
+                eventSlug: eventSlug,
+                importSecret: importSecret
             )
         } catch {
             errorMessage = error.localizedDescription
@@ -1600,6 +1529,19 @@ private struct PhoneRankingView: View {
 private struct PhoneAdminView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var isAdminJudgingPresented: Bool
+    @State private var routinePendingDeletion: Routine?
+    @State private var deleteRoutineImportSecret = ""
+    @State private var isDeletingRoutine = false
+    @State private var routineDeleteErrorMessage: String?
+    @State private var driveFolderName = ""
+    @State private var isDriveFolderPromptPresented = false
+    @State private var driveFolderPendingOverwrite: String?
+    @State private var driveFolderErrorMessage: String?
+    @State private var isCheckingDriveFolder = false
+
+    private var orderedRoutines: [Routine] {
+        store.visibleRoutines.sorted(by: routineOrder)
+    }
 
     var body: some View {
         NavigationStack {
@@ -1607,12 +1549,81 @@ private struct PhoneAdminView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     driveExport
                     editAsJudge
+                    deleteRoutineMenu
                 }
                 .padding(16)
                 .padding(.bottom, 24)
             }
             .background(LevitTheme.paper)
             .navigationTitle("Panel admin")
+        }
+        .onAppear(perform: prepareDefaultDriveFolderName)
+        .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
+            TextField("Nombre de carpeta", text: $driveFolderName)
+                .textInputAutocapitalization(.words)
+                .disableAutocorrection(true)
+
+            Button("Continuar") {
+                Task { await prepareDriveExport() }
+            }
+            .disabled(cleanDriveFolderName.isEmpty || isCheckingDriveFolder || store.driveExportStatus.isExporting)
+
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Elegí el nombre de la carpeta principal donde se van a guardar los PDFs.")
+        }
+        .alert("Carpeta existente", isPresented: Binding(
+            get: { driveFolderPendingOverwrite != nil },
+            set: { if !$0 { driveFolderPendingOverwrite = nil } }
+        )) {
+            Button("Exportar igual") {
+                guard let folderName = driveFolderPendingOverwrite else { return }
+                Task { await exportDrive(named: folderName) }
+            }
+            Button("Cancelar", role: .cancel) {
+                driveFolderPendingOverwrite = nil
+            }
+        } message: {
+            Text("La carpeta \(driveFolderPendingOverwrite ?? "") ya existe en Drive. Los PDFs con el mismo nombre se van a actualizar.")
+        }
+        .alert("No se pudo revisar Drive", isPresented: Binding(
+            get: { driveFolderErrorMessage != nil },
+            set: { if !$0 { driveFolderErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                driveFolderErrorMessage = nil
+            }
+        } message: {
+            Text(driveFolderErrorMessage ?? "")
+        }
+        .alert("Borrar coreografía", isPresented: Binding(
+            get: { routinePendingDeletion != nil },
+            set: { if !$0 { resetPendingRoutineDeletion() } }
+        )) {
+            SecureField("Clave de importación", text: $deleteRoutineImportSecret)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            Button("Borrar", role: .destructive) {
+                Task { await deletePendingRoutine() }
+            }
+            .disabled(deleteRoutineImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingRoutine)
+
+            Button("Cancelar", role: .cancel) {
+                resetPendingRoutineDeletion()
+            }
+        } message: {
+            Text("Se va a borrar \(routineDeletionTitle) del programa actual.")
+        }
+        .alert("No se pudo borrar", isPresented: Binding(
+            get: { routineDeleteErrorMessage != nil },
+            set: { if !$0 { routineDeleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                routineDeleteErrorMessage = nil
+            }
+        } message: {
+            Text(routineDeleteErrorMessage ?? "")
         }
     }
 
@@ -1659,8 +1670,7 @@ private struct PhoneAdminView: View {
                 .foregroundStyle(LevitTheme.muted)
 
             Button {
-                guard !store.driveExportStatus.isExporting else { return }
-                Task { await store.exportSelectedBlockToDrive() }
+                presentDriveFolderPrompt()
             } label: {
                 HStack(spacing: 13) {
                     if store.driveExportStatus.isExporting {
@@ -1689,6 +1699,38 @@ private struct PhoneAdminView: View {
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
             }
             .buttonStyle(.plain)
+            .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
+            .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.72 : 1)
+        }
+    }
+
+    private var deleteRoutineMenu: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Coreografías")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            Menu {
+                if orderedRoutines.isEmpty {
+                    Text("Sin coreografías")
+                } else {
+                    ForEach(orderedRoutines) { routine in
+                        Button(role: .destructive) {
+                            routinePendingDeletion = routine
+                            deleteRoutineImportSecret = ""
+                        } label: {
+                            Label("#\(routine.id) \(routine.name)", systemImage: "trash")
+                        }
+                    }
+                }
+            } label: {
+                PhoneActionRow(
+                    title: "Borrar coreografía",
+                    detail: "\(orderedRoutines.count) en el bloque actual",
+                    icon: "trash",
+                    color: .red
+                )
+            }
         }
     }
 
@@ -1711,12 +1753,91 @@ private struct PhoneAdminView: View {
         }
     }
 
+    private var routineDeletionTitle: String {
+        guard let routinePendingDeletion else { return "esta coreografía" }
+        return "#\(routinePendingDeletion.id) \(routinePendingDeletion.name)"
+    }
+
+    @MainActor
+    private func deletePendingRoutine() async {
+        guard let routine = routinePendingDeletion else { return }
+        let secret = deleteRoutineImportSecret
+        isDeletingRoutine = true
+        defer { isDeletingRoutine = false }
+
+        do {
+            try await store.deleteRoutine(routine, importSecret: secret)
+            resetPendingRoutineDeletion()
+        } catch {
+            resetPendingRoutineDeletion()
+            routineDeleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetPendingRoutineDeletion() {
+        routinePendingDeletion = nil
+        deleteRoutineImportSecret = ""
+    }
+
+    private var cleanDriveFolderName: String {
+        driveFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func prepareDefaultDriveFolderName() {
+        guard cleanDriveFolderName.isEmpty else { return }
+        driveFolderName = store.defaultDriveRootFolderName
+    }
+
+    private func presentDriveFolderPrompt() {
+        guard !store.driveExportStatus.isExporting, !isCheckingDriveFolder else { return }
+        prepareDefaultDriveFolderName()
+        isDriveFolderPromptPresented = true
+    }
+
+    @MainActor
+    private func prepareDriveExport() async {
+        let folderName = cleanDriveFolderName
+        guard !folderName.isEmpty else { return }
+
+        isCheckingDriveFolder = true
+        do {
+            let exists = try await store.driveFolderExists(named: folderName)
+            isCheckingDriveFolder = false
+            if exists {
+                driveFolderPendingOverwrite = folderName
+            } else {
+                await exportDrive(named: folderName)
+            }
+        } catch {
+            isCheckingDriveFolder = false
+            driveFolderErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func exportDrive(named folderName: String) async {
+        driveFolderPendingOverwrite = nil
+        await store.exportSelectedBlockToDrive(rootFolderName: folderName)
+    }
+
+    private func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
+        let lhsNumber = Int(lhs.id) ?? Int.max
+        let rhsNumber = Int(rhs.id) ?? Int.max
+        if lhsNumber == rhsNumber {
+            return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+        }
+        return lhsNumber < rhsNumber
+    }
+
 }
 
 private struct PhoneJudgeMenu: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var addingJudge: Bool
     @State private var judgePendingDeletion: String?
+    @State private var deleteJudgeImportSecret = ""
+    @State private var isDeletingJudge = false
+    @State private var judgeDeleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -1733,6 +1854,7 @@ private struct PhoneJudgeMenu: View {
                     ForEach(store.deletableJudges, id: \.self) { judge in
                         Button(role: .destructive) {
                             judgePendingDeletion = judge
+                            deleteJudgeImportSecret = ""
                         } label: {
                             Label(judge, systemImage: "trash")
                         }
@@ -1761,20 +1883,58 @@ private struct PhoneJudgeMenu: View {
         }
         .alert("Borrar juez", isPresented: Binding(
             get: { judgePendingDeletion != nil },
-            set: { if !$0 { judgePendingDeletion = nil } }
+            set: { if !$0 { resetPendingJudgeDeletion() } }
         )) {
-            Button("Borrar", role: .destructive) {
-                if let judgePendingDeletion {
-                    store.deleteJudge(judgePendingDeletion)
-                }
-                judgePendingDeletion = nil
+            if store.hasRemoteConfiguration {
+                SecureField("Clave de importación", text: $deleteJudgeImportSecret)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
             }
+
+            Button("Borrar", role: .destructive) {
+                Task { await deletePendingJudge() }
+            }
+            .disabled((store.hasRemoteConfiguration && deleteJudgeImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || isDeletingJudge)
+
             Button("Cancelar", role: .cancel) {
-                judgePendingDeletion = nil
+                resetPendingJudgeDeletion()
             }
         } message: {
-            Text("Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
+            Text(store.hasRemoteConfiguration
+                ? "Se va a borrar \(judgePendingDeletion ?? "este juez") del programa actual. También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos."
+                : "Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
         }
+        .alert("No se pudo borrar", isPresented: Binding(
+            get: { judgeDeleteErrorMessage != nil },
+            set: { if !$0 { judgeDeleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                judgeDeleteErrorMessage = nil
+            }
+        } message: {
+            Text(judgeDeleteErrorMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func deletePendingJudge() async {
+        guard let judge = judgePendingDeletion else { return }
+        let secret = deleteJudgeImportSecret
+        isDeletingJudge = true
+        defer { isDeletingJudge = false }
+
+        do {
+            try await store.deleteJudge(judge, importSecret: secret)
+            resetPendingJudgeDeletion()
+        } catch {
+            resetPendingJudgeDeletion()
+            judgeDeleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetPendingJudgeDeletion() {
+        judgePendingDeletion = nil
+        deleteJudgeImportSecret = ""
     }
 }
 
@@ -1941,7 +2101,7 @@ private struct PhoneCriterionRow: View {
                         .font(.callout.weight(.black))
                         .foregroundStyle(LevitTheme.ink)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text("0 a \(criterion.maxScore.formatted(.number.precision(.fractionLength(0...1))))")
+                    Text("1 a \(criterion.maxScore.formatted(.number.precision(.fractionLength(0...1))))")
                         .font(.caption.weight(.bold))
                         .foregroundStyle(LevitTheme.muted)
                 }
@@ -1957,15 +2117,16 @@ private struct PhoneCriterionRow: View {
                 }
                 .buttonStyle(.plain)
 
-                TextField("0", text: $value)
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(size: 30, weight: .black, design: .rounded).monospacedDigit())
-                    .foregroundStyle(LevitTheme.ink)
+                LimitedScoreTextField(
+                    text: $value,
+                    maxScore: criterion.maxScore,
+                    criterionID: criterion.id,
+                    focusedCriterionID: focusedCriterionID,
+                    fontSize: 30
+                )
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
-                    .focused(focusedCriterionID, equals: criterion.id)
 
                 Button(action: onIncrement) {
                     Image(systemName: "plus")

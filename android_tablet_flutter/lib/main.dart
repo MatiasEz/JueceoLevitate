@@ -11,6 +11,7 @@ const supabasePublishableKey = String.fromEnvironment(
   'SUPABASE_PUBLISHABLE_KEY',
 );
 const supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+const appDisplayName = 'Levitate';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +34,7 @@ class JueceoTabletApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Jueceo Coreografias',
+      title: appDisplayName,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff111827)),
         useMaterial3: true,
@@ -72,7 +73,7 @@ class _TabletShellState extends State<TabletShell> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(store.selectedEvent?.name ?? 'Jueceo Coreografias'),
+        title: Text(store.selectedEvent?.name ?? appDisplayName),
         actions: [
           SyncChip(store: store),
           const SizedBox(width: 8),
@@ -266,6 +267,10 @@ class _BlocksPageState extends State<BlocksPage> {
                                   selected:
                                       routine.id == store.selectedRoutineId,
                                   onTap: () => store.selectRoutine(routine.id),
+                                  onDelete: () => _confirmDeleteRoutine(
+                                    context,
+                                    routine,
+                                  ),
                                 ),
                               ),
                           ],
@@ -279,6 +284,67 @@ class _BlocksPageState extends State<BlocksPage> {
       ],
     );
   }
+
+  Future<void> _confirmDeleteRoutine(
+    BuildContext context,
+    Routine routine,
+  ) async {
+    final secretController = TextEditingController();
+    final secret = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Borrar coreografía'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Se va a borrar #${routine.id} ${routine.name} del programa actual.',
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: secretController,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Clave de importación',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(secretController.text),
+            child: const Text('Borrar'),
+          ),
+        ],
+      ),
+    );
+
+    if (secret == null || secret.trim().isEmpty) {
+      secretController.dispose();
+      return;
+    }
+
+    try {
+      await widget.store.deleteRoutine(routine, secret);
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('#${routine.id} ${routine.name} borrada.')),
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo borrar: $error')),
+      );
+    } finally {
+      secretController.dispose();
+    }
+  }
 }
 
 class RoutineCard extends StatelessWidget {
@@ -287,11 +353,13 @@ class RoutineCard extends StatelessWidget {
     required this.routine,
     required this.selected,
     required this.onTap,
+    required this.onDelete,
   });
 
   final Routine routine;
   final bool selected;
   final VoidCallback onTap;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -304,9 +372,20 @@ class RoutineCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '#${routine.id}  ${routine.time}',
-                style: Theme.of(context).textTheme.labelLarge,
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '#${routine.id}  ${routine.time}',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Borrar coreografía',
+                    onPressed: onDelete,
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
               Text(

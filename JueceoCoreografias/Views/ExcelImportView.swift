@@ -6,6 +6,7 @@ struct ExcelImportView: View {
 
     @State private var eventName = ""
     @State private var eventSlug = ""
+    @State private var importSecret = ""
     @State private var selectedFileURL: URL?
     @State private var isPickingFile = false
     @State private var isUploading = false
@@ -17,6 +18,7 @@ struct ExcelImportView: View {
             && selectedFileURL != nil
             && !eventName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !eventSlug.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !importSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !isUploading
     }
 
@@ -50,10 +52,10 @@ struct ExcelImportView: View {
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Subir Excel")
+                Text("Importar Excel")
                     .font(.system(size: 31, weight: .black, design: .rounded))
                     .foregroundStyle(LevitTheme.ink)
-                Text("Importaciones pendientes para Supabase")
+                Text("Carga directa a Supabase")
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(LevitTheme.muted)
             }
@@ -88,6 +90,13 @@ struct ExcelImportView: View {
                     }
             }
             .textFieldStyle(ImportTextFieldStyle())
+
+            sectionTitle("Permisos")
+
+            SecureField("Clave de importación", text: $importSecret)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+                .textFieldStyle(ImportTextFieldStyle())
 
             sectionTitle("Archivo")
 
@@ -133,7 +142,7 @@ struct ExcelImportView: View {
                     } else {
                         Image(systemName: "icloud.and.arrow.up.fill")
                     }
-                    Text(isUploading ? "Subiendo" : "Subir Excel")
+                    Text(isUploading ? "Importando" : "Importar Excel")
                 }
                 .font(.headline.weight(.black))
                 .frame(maxWidth: .infinity)
@@ -174,7 +183,7 @@ struct ExcelImportView: View {
                 ImportStatusRow(
                     icon: "checkmark.circle.fill",
                     title: lastUpload.eventName,
-                    detail: "\(lastUpload.fileName) enviado",
+                    detail: "\(lastUpload.routineCount ?? 0) rutinas importadas",
                     tint: .green
                 )
             }
@@ -182,7 +191,7 @@ struct ExcelImportView: View {
             if let errorMessage {
                 ImportStatusRow(
                     icon: "exclamationmark.triangle.fill",
-                    title: "No se pudo subir",
+                    title: "No se pudo importar",
                     detail: errorMessage,
                     tint: .red
                 )
@@ -226,7 +235,8 @@ struct ExcelImportView: View {
             lastUpload = try await store.uploadExcelImport(
                 fileURL: selectedFileURL,
                 eventName: eventName,
-                eventSlug: eventSlug
+                eventSlug: eventSlug,
+                importSecret: importSecret
             )
         } catch {
             errorMessage = error.localizedDescription

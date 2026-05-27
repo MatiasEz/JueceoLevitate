@@ -25,6 +25,7 @@ enum PDFExporter {
         let margin: CGFloat = 24
         let renderer = UIGraphicsPDFRenderer(bounds: page, format: format)
         let groups = groupedResults(results)
+        let placementsByRoutineID = dictamenPlacements(from: results)
 
         do {
             try renderer.writePDF(to: url) { context in
@@ -53,7 +54,7 @@ enum PDFExporter {
                         let fill = routineIndex.isMultiple(of: 2) ? Theme.paleYellow : .white
                         drawRoutineRows(
                             result: result,
-                            position: routineIndex + 1,
+                            placement: placementsByRoutineID[result.routine.id] ?? .position(routineIndex + 1),
                             y: y,
                             judges: judges,
                             criteria: criteria,
@@ -76,6 +77,73 @@ enum PDFExporter {
         } catch {
             return nil
         }
+    }
+
+    static func exportDictamen(
+        results: [RoutineResult],
+        sourceName: String,
+        title: String = "Dictamen final"
+    ) -> URL? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent(filename(for: title))
+            .appendingPathExtension("pdf")
+
+        let format = UIGraphicsPDFRendererFormat()
+        format.documentInfo = [
+            kCGPDFContextCreator as String: "Jueceo Coreografías",
+            kCGPDFContextTitle as String: title
+        ]
+
+        let page = CGRect(x: 0, y: 0, width: 842, height: 595)
+        let margin: CGFloat = 24
+        let renderer = UIGraphicsPDFRenderer(bounds: page, format: format)
+        let sections = DictamenBuilder.sections(from: results)
+
+        do {
+            try renderer.writePDF(to: url) { context in
+                var didStartPage = false
+
+                for section in sections {
+                    var y = margin
+                    context.beginPage()
+                    didStartPage = true
+                    y = drawDictamenTitle(sectionTitle: section.genre, y: y, margin: margin, page: page)
+                    y += 14
+
+                    for category in section.categories {
+                        let neededHeight = DictamenPDFLayout.categoryCardHeight(rowCount: category.rows.count)
+                        if y + neededHeight > page.height - margin {
+                            context.beginPage()
+                            y = margin
+                            y = drawDictamenTitle(sectionTitle: section.genre, y: y, margin: margin, page: page)
+                            y += 14
+                        }
+
+                        y = drawDictamenCategoryCard(category, y: y, margin: margin, page: page)
+                    }
+                }
+
+                if !didStartPage {
+                    context.beginPage()
+                    _ = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
+                }
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    private static func dictamenPlacements(from results: [RoutineResult]) -> [String: CompetitionPlacement] {
+        var placements: [String: CompetitionPlacement] = [:]
+        for section in DictamenBuilder.sections(from: results) {
+            for category in section.categories {
+                for row in category.rows {
+                    placements[row.result.routine.id] = row.placement
+                }
+            }
+        }
+        return placements
     }
 
     private static func groupedResults(_ results: [RoutineResult]) -> [(title: String, results: [RoutineResult])] {
@@ -182,7 +250,7 @@ enum PDFExporter {
 
     private static func drawRoutineRows(
         result: RoutineResult,
-        position: Int,
+        placement: CompetitionPlacement,
         y: CGFloat,
         judges: [String],
         criteria: [Criterion],
@@ -263,12 +331,233 @@ enum PDFExporter {
 
             drawCell(
                 rect: CGRect(x: x, y: rowY, width: metrics.placeWidth, height: Layout.rowHeight),
-                text: isFirstJudge && result.total > 0 ? "\(position)°" : "",
+                text: isFirstJudge && result.total > 0 ? placement.shortLabel : "",
                 fill: fill,
-                fontSize: 7.3,
+                fontSize: placement.isParticipation ? 5.7 : 7.3,
                 weight: .bold
             )
         }
+    }
+
+    private static func drawDictamenTitle(sectionTitle: String, y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        drawDictamenCell(
+            rect: CGRect(x: margin, y: y, width: page.width - margin * 2, height: DictamenPDFLayout.titleHeight),
+            text: "GENERO \(sectionTitle.uppercased())",
+            fill: Theme.dictamenTitleFill,
+            fontSize: 22,
+            weight: .bold,
+            color: .white
+        )
+        if let context = UIGraphicsGetCurrentContext() {
+            context.setFillColor(Theme.dictamenAccent.cgColor)
+            context.fill(CGRect(x: margin, y: y, width: 6, height: DictamenPDFLayout.titleHeight))
+        }
+        return y + DictamenPDFLayout.titleHeight
+    }
+
+    private static func drawDictamenCategoryCard(_ category: DictamenCategorySection, y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        guard UIGraphicsGetCurrentContext() != nil else { return y }
+
+        let cardWidth = page.width - margin * 2
+        let cardHeight = DictamenPDFLayout.categoryCardHeight(rowCount: category.rows.count) - DictamenPDFLayout.categorySpacing
+        let cardRect = CGRect(x: margin, y: y, width: cardWidth, height: cardHeight)
+        drawRoundedRect(cardRect, radius: 10, fill: .white, stroke: Theme.dictamenSoftStroke)
+
+        let contentX = cardRect.minX + DictamenPDFLayout.cardInset
+        let contentWidth = cardRect.width - DictamenPDFLayout.cardInset * 2
+        var currentY = cardRect.minY + DictamenPDFLayout.cardInset
+
+        drawText(
+            category.title.uppercased(),
+            in: CGRect(x: contentX, y: currentY + 2, width: contentWidth * 0.72, height: 20),
+            size: 13.5,
+            weight: .bold,
+            color: .black,
+            alignment: .left
+        )
+
+        let countRect = CGRect(x: cardRect.maxX - DictamenPDFLayout.cardInset - 74, y: currentY, width: 74, height: 22)
+        drawRoundedRect(countRect, radius: 11, fill: Theme.dictamenHeaderFill, stroke: Theme.dictamenSoftStroke)
+        drawText(
+            "\(category.rows.count) rutinas",
+            in: countRect.insetBy(dx: 6, dy: 4),
+            size: 8.5,
+            weight: .bold,
+            color: .darkGray
+        )
+
+        currentY += DictamenPDFLayout.cardHeaderHeight
+
+        for (index, row) in category.rows.enumerated() {
+            let rowRect = CGRect(x: contentX, y: currentY, width: contentWidth, height: DictamenPDFLayout.cardRowHeight)
+            let fill = row.placement.isFirstPlace ? Theme.dictamenPink.withAlphaComponent(0.70) : Theme.dictamenAltFill
+            drawRoundedRect(rowRect, radius: 9, fill: fill, stroke: Theme.dictamenSoftStroke)
+
+            let badgeSize: CGFloat = 28
+            let badgeWidth = row.placement.isParticipation ? CGFloat(38) : badgeSize
+            let badgeRect = CGRect(x: rowRect.minX + 9, y: rowRect.midY - badgeSize / 2, width: badgeWidth, height: badgeSize)
+            drawRoundedRect(
+                badgeRect,
+                radius: badgeSize / 2,
+                fill: row.placement.isFirstPlace ? Theme.dictamenAccent : Theme.dictamenHeaderFill,
+                stroke: Theme.dictamenSoftStroke
+            )
+            drawText(
+                row.placement.shortLabel,
+                in: badgeRect.insetBy(dx: 2, dy: 7),
+                size: row.placement.isParticipation ? 7.4 : 9.5,
+                weight: .bold,
+                color: row.placement.isFirstPlace ? .white : Theme.dictamenAccent
+            )
+
+            let scoreWidth: CGFloat = 58
+            let textX = badgeRect.maxX + 10
+            let textWidth = rowRect.width - (textX - rowRect.minX) - scoreWidth - 18
+            drawText(
+                clean(row.result.routine.name, fallback: "SIN DATO"),
+                in: CGRect(x: textX, y: rowRect.minY + 7, width: textWidth, height: 16),
+                size: 11.5,
+                weight: .bold,
+                color: .black,
+                alignment: .left
+            )
+            let metaText = "\(clean(row.result.routine.academy, fallback: "SIN DATO").uppercased())   \(clean(row.result.routine.state, fallback: "SIN DATO").uppercased())"
+            drawText(
+                metaText,
+                in: CGRect(x: textX, y: rowRect.minY + 24, width: textWidth, height: 12),
+                size: 7.5,
+                weight: .bold,
+                color: .darkGray,
+                alignment: .left
+            )
+
+            let scoreRect = CGRect(x: rowRect.maxX - scoreWidth - 10, y: rowRect.minY + 7, width: scoreWidth, height: 30)
+            drawText(
+                row.result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1))),
+                in: CGRect(x: scoreRect.minX, y: scoreRect.minY, width: scoreRect.width, height: 18),
+                size: 14,
+                weight: .bold,
+                color: .black,
+                alignment: .right
+            )
+            drawText(
+                "pts",
+                in: CGRect(x: scoreRect.minX, y: scoreRect.minY + 17, width: scoreRect.width, height: 10),
+                size: 7,
+                weight: .bold,
+                color: .darkGray,
+                alignment: .right
+            )
+
+            currentY += DictamenPDFLayout.cardRowHeight + (index == category.rows.count - 1 ? 0 : DictamenPDFLayout.cardRowSpacing)
+        }
+
+        return cardRect.maxY + DictamenPDFLayout.categorySpacing
+    }
+
+    private static func drawDictamenHeader(y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        let metrics = DictamenPDFLayout.metrics(pageWidth: page.width, margin: margin)
+        var x = margin
+
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.categoryWidth, height: DictamenPDFLayout.headerHeight), text: "CATEGORIA", fill: Theme.dictamenHeaderFill, fontSize: 13, weight: .bold)
+        x += metrics.categoryWidth
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.stateWidth, height: DictamenPDFLayout.headerHeight), text: "ESTADO", fill: Theme.dictamenHeaderFill, fontSize: 13, weight: .bold)
+        x += metrics.stateWidth
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.academyWidth, height: DictamenPDFLayout.headerHeight), text: "ACADEMIA", fill: Theme.dictamenHeaderFill, fontSize: 13, weight: .bold)
+        x += metrics.academyWidth
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.choreographyWidth, height: DictamenPDFLayout.headerHeight), text: "COREOGRAFÍA", fill: Theme.dictamenHeaderFill, fontSize: 13, weight: .bold)
+        x += metrics.choreographyWidth
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.scoreWidth, height: DictamenPDFLayout.headerHeight), text: "PUNTAJE", fill: Theme.dictamenHeaderFill, fontSize: 13, weight: .bold)
+        x += metrics.scoreWidth
+        drawDictamenCell(rect: CGRect(x: x, y: y, width: metrics.positionWidth, height: DictamenPDFLayout.headerHeight), text: "TABLA DE\nPOSICIONES", fill: Theme.dictamenHeaderFill, fontSize: 12, weight: .bold)
+
+        return y + DictamenPDFLayout.headerHeight
+    }
+
+    private static func drawDictamenCategory(_ category: DictamenCategorySection, y: CGFloat, margin: CGFloat, page: CGRect) {
+        let metrics = DictamenPDFLayout.metrics(pageWidth: page.width, margin: margin)
+        let blockHeight = CGFloat(max(category.rows.count, 1)) * DictamenPDFLayout.rowHeight
+        var x = margin
+
+        drawDictamenCell(
+            rect: CGRect(x: x, y: y, width: metrics.categoryWidth, height: blockHeight),
+            text: category.title.uppercased(),
+            fill: Theme.dictamenPink,
+            fontSize: 13,
+            weight: .bold
+        )
+        x += metrics.categoryWidth
+
+        for (index, row) in category.rows.enumerated() {
+            let rowY = y + CGFloat(index) * DictamenPDFLayout.rowHeight
+            let fill = index.isMultiple(of: 2) ? Theme.dictamenRowFill : Theme.dictamenAltFill
+            x = margin + metrics.categoryWidth
+
+            drawDictamenCell(rect: CGRect(x: x, y: rowY, width: metrics.stateWidth, height: DictamenPDFLayout.rowHeight), text: clean(row.result.routine.state, fallback: "SIN DATO").uppercased(), fill: fill, fontSize: 12, weight: .bold)
+            x += metrics.stateWidth
+            drawDictamenCell(rect: CGRect(x: x, y: rowY, width: metrics.academyWidth, height: DictamenPDFLayout.rowHeight), text: clean(row.result.routine.academy, fallback: "SIN DATO").uppercased(), fill: fill, fontSize: 11.5, weight: .bold)
+            x += metrics.academyWidth
+            drawDictamenCell(rect: CGRect(x: x, y: rowY, width: metrics.choreographyWidth, height: DictamenPDFLayout.rowHeight), text: clean(row.result.routine.name, fallback: "SIN DATO"), fill: fill, fontSize: 12.2, weight: .bold)
+            x += metrics.choreographyWidth
+            drawDictamenCell(rect: CGRect(x: x, y: rowY, width: metrics.scoreWidth, height: DictamenPDFLayout.rowHeight), text: row.result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1))), fill: fill, fontSize: 13, weight: .bold)
+            x += metrics.scoreWidth
+            drawDictamenCell(rect: CGRect(x: x, y: rowY, width: metrics.positionWidth, height: DictamenPDFLayout.rowHeight), text: row.placement.tableLabel, fill: fill, fontSize: row.placement.isParticipation ? 8.4 : 13, weight: .bold)
+        }
+    }
+
+    private static func drawDictamenCell(
+        rect: CGRect,
+        text: String,
+        fill: UIColor,
+        fontSize: CGFloat,
+        weight: UIFont.Weight,
+        color: UIColor = .black
+    ) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(fill.cgColor)
+        context.fill(rect)
+        context.setStrokeColor(Theme.grid.cgColor)
+        context.setLineWidth(0.75)
+        context.stroke(rect)
+
+        let textRect = rect.insetBy(dx: 4, dy: 3)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.minimumLineHeight = fontSize * 1.03
+        paragraph.maximumLineHeight = fontSize * 1.16
+
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: UIFont.systemFont(ofSize: fontSize, weight: weight),
+            .foregroundColor: color,
+            .paragraphStyle: paragraph
+        ]
+        let attributedText = NSAttributedString(string: text, attributes: attributes)
+        let textHeight = ceil(attributedText.boundingRect(
+            with: CGSize(width: textRect.width, height: CGFloat.greatestFiniteMagnitude),
+            options: [.usesLineFragmentOrigin],
+            context: nil
+        ).height)
+        let drawHeight = min(textRect.height, textHeight)
+        let drawRect = CGRect(
+            x: textRect.minX,
+            y: textRect.midY - drawHeight / 2,
+            width: textRect.width,
+            height: drawHeight
+        )
+        attributedText.draw(with: drawRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+    }
+
+    private static func drawRoundedRect(_ rect: CGRect, radius: CGFloat, fill: UIColor, stroke: UIColor) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        let path = UIBezierPath(roundedRect: rect, cornerRadius: radius)
+        context.setFillColor(fill.cgColor)
+        context.addPath(path.cgPath)
+        context.fillPath()
+        context.setStrokeColor(stroke.cgColor)
+        context.setLineWidth(0.8)
+        context.addPath(path.cgPath)
+        context.strokePath()
     }
 
     private static func sectionSpans(for criteria: [Criterion]) -> [(title: String, start: Int, count: Int)] {
@@ -360,6 +649,7 @@ enum PDFExporter {
         level: "",
         category: "",
         choreographer: "",
+        participant: nil,
         state: "",
         time: "",
         duration: ""
@@ -369,6 +659,58 @@ enum PDFExporter {
         static let paleYellow = UIColor(red: 0.996, green: 0.949, blue: 0.796, alpha: 1)
         static let headerFill = UIColor(red: 0.92, green: 0.92, blue: 0.92, alpha: 1)
         static let grid = UIColor(white: 0.12, alpha: 1)
+        static let dictamenAccent = UIColor(red: 0.93, green: 0.16, blue: 0.45, alpha: 1)
+        static let dictamenTitleFill = UIColor(red: 0.12, green: 0.13, blue: 0.17, alpha: 1)
+        static let dictamenHeaderFill = UIColor(red: 0.98, green: 0.90, blue: 0.94, alpha: 1)
+        static let dictamenSoftStroke = UIColor(white: 0.0, alpha: 0.10)
+        static let dictamenPink = UIColor(red: 0.95, green: 0.84, blue: 0.91, alpha: 1)
+        static let dictamenRowFill = UIColor(white: 0.84, alpha: 1)
+        static let dictamenAltFill = UIColor(white: 0.93, alpha: 1)
+    }
+
+    private enum DictamenPDFLayout {
+        static let titleHeight: CGFloat = 38
+        static let headerHeight: CGFloat = 58
+        static let rowHeight: CGFloat = 36
+        static let categorySpacing: CGFloat = 14
+        static let cardInset: CGFloat = 12
+        static let cardHeaderHeight: CGFloat = 34
+        static let cardRowHeight: CGFloat = 44
+        static let cardRowSpacing: CGFloat = 7
+
+        static func categoryCardHeight(rowCount: Int) -> CGFloat {
+            let rows = CGFloat(max(rowCount, 1))
+            let gaps = CGFloat(max(rowCount - 1, 0)) * cardRowSpacing
+            return cardInset * 2 + cardHeaderHeight + rows * cardRowHeight + gaps + categorySpacing
+        }
+
+        static func metrics(pageWidth: CGFloat, margin: CGFloat) -> DictamenMetrics {
+            let availableWidth = pageWidth - margin * 2
+            let categoryWidth: CGFloat = 94
+            let stateWidth: CGFloat = 74
+            let academyWidth: CGFloat = 190
+            let scoreWidth: CGFloat = 76
+            let positionWidth: CGFloat = 92
+            let choreographyWidth = availableWidth - categoryWidth - stateWidth - academyWidth - scoreWidth - positionWidth
+
+            return DictamenMetrics(
+                categoryWidth: categoryWidth,
+                stateWidth: stateWidth,
+                academyWidth: academyWidth,
+                choreographyWidth: choreographyWidth,
+                scoreWidth: scoreWidth,
+                positionWidth: positionWidth
+            )
+        }
+
+        struct DictamenMetrics {
+            let categoryWidth: CGFloat
+            let stateWidth: CGFloat
+            let academyWidth: CGFloat
+            let choreographyWidth: CGFloat
+            let scoreWidth: CGFloat
+            let positionWidth: CGFloat
+        }
     }
 
     private enum Layout {

@@ -25,6 +25,8 @@ enum GoogleDriveServiceError: LocalizedError {
     case invalidCallback
     case missingRefreshToken
     case invalidResponse
+    case folderNotFound(String)
+    case fileNotFound(String)
     case requestFailed(String)
 
     var errorDescription: String? {
@@ -39,6 +41,10 @@ enum GoogleDriveServiceError: LocalizedError {
             "No hay sesion de Google guardada. Vuelve a iniciar sesion."
         case .invalidResponse:
             "Google devolvió una respuesta inválida."
+        case let .folderNotFound(name):
+            "No se encontró la carpeta \(name) en Drive. Primero exporta todas las coreografías."
+        case let .fileNotFound(name):
+            "No se encontró \(name) en Drive. Primero exporta todas las coreografías."
         case let .requestFailed(message):
             message
         }
@@ -65,10 +71,21 @@ final class GoogleDriveService {
 
     var rootFolderName: String { config.rootFolderName }
 
+    func folderExists(folderPath: [String]) async throws -> Bool {
+        let accessToken = try await validAccessToken()
+        return try await optionalFolderPath(folderPath, accessToken: accessToken) != nil
+    }
+
     func uploadPDF(fileURL: URL, fileName: String, folderPath: [String]) async throws -> GoogleDriveUploadedFile {
         let accessToken = try await validAccessToken()
         let folderID = try await ensureFolderPath(folderPath, accessToken: accessToken)
         return try await upsertPDF(fileURL: fileURL, fileName: fileName, parentFolderID: folderID, accessToken: accessToken)
+    }
+
+    func replaceExistingPDF(fileURL: URL, fileName: String, folderPath: [String]) async throws -> GoogleDriveUploadedFile {
+        let accessToken = try await validAccessToken()
+        let folderID = try await existingFolderPath(folderPath, accessToken: accessToken)
+        return try await replacePDF(fileURL: fileURL, fileName: fileName, parentFolderID: folderID, accessToken: accessToken)
     }
 
     private func ensureFolderPath(_ folderPath: [String], accessToken: String) async throws -> String {
@@ -85,6 +102,29 @@ final class GoogleDriveService {
                 let created = try await createFolder(named: folderName, parentID: parentID, accessToken: accessToken)
                 parentID = created.id
             }
+        }
+        return parentID
+    }
+
+    private func existingFolderPath(_ folderPath: [String], accessToken: String) async throws -> String {
+        guard let folderID = try await optionalFolderPath(folderPath, accessToken: accessToken) else {
+            throw GoogleDriveServiceError.folderNotFound(folderPath.last ?? "")
+        }
+        return folderID
+    }
+
+    private func optionalFolderPath(_ folderPath: [String], accessToken: String) async throws -> String? {
+        var parentID = "root"
+        for folderName in folderPath {
+            guard let existing = try await findFile(
+                named: folderName,
+                parentID: parentID,
+                mimeType: GoogleDriveMIME.folder,
+                accessToken: accessToken
+            ) else {
+                return nil
+            }
+            parentID = existing.id
         }
         return parentID
     }
@@ -290,6 +330,36 @@ final class GoogleDriveService {
         return try JSONDecoder().decode(GoogleDriveUploadedFile.self, from: data)
     }
 
+    private func replacePDF(fileURL: URL, fileName: String, parentFolderID: String, accessToken: String) async throws -> GoogleDriveUploadedFile {
+        guard let existing = try await findFile(named: fileName, parentID: parentFolderID, mimeType: GoogleDriveMIME.pdf, accessToken: accessToken) else {
+            throw GoogleDriveServiceError.fileNotFound(fileName)
+        }
+
+        let metadata = GoogleDriveMetadata(
+            name: fileName,
+            mimeType: GoogleDriveMIME.pdf,
+            parents: nil
+        )
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let body = try GoogleDriveHelpers.multipartBody(
+            metadata: metadata,
+            fileURL: fileURL,
+            mimeType: GoogleDriveMIME.pdf,
+            boundary: boundary
+        )
+        guard let url = URL(string: "https://www.googleapis.com/upload/drive/v3/files/\(existing.id)?uploadType=multipart&fields=id,name,webViewLink") else {
+            throw GoogleDriveServiceError.invalidResponse
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/related; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+
+        let data = try await authorizedData(for: request)
+        return try JSONDecoder().decode(GoogleDriveUploadedFile.self, from: data)
+    }
+
     private func authorizedData(for request: URLRequest) async throws -> Data {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validate(response: response, data: data)
@@ -420,7 +490,7 @@ struct GoogleDriveConfig: Sendable {
             ?? Bundle.main.object(forInfoDictionaryKey: "GOOGLE_REVERSED_CLIENT_ID") as? String
         let rootFolder = environment["GOOGLE_DRIVE_ROOT_FOLDER"]
             ?? Bundle.main.object(forInfoDictionaryKey: "GOOGLE_DRIVE_ROOT_FOLDER") as? String
-            ?? "Levitate CDMX 2026"
+            ?? "FEEDBACK LEVITATE MX"
 
         guard
             let clientID = clean(rawClientID),
@@ -431,7 +501,7 @@ struct GoogleDriveConfig: Sendable {
         return GoogleDriveConfig(
             clientID: clientID,
             reversedClientID: reversedClientID,
-            rootFolderName: clean(rootFolder) ?? "Levitate CDMX 2026"
+            rootFolderName: clean(rootFolder) ?? "FEEDBACK LEVITATE MX"
         )
     }
 

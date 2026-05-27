@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import datetime
 import json
 import os
@@ -11,24 +12,40 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
+import warnings as py_warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from openpyxl import load_workbook
 
+py_warnings.filterwarnings(
+    "ignore",
+    message="DrawingML support is incomplete*",
+    category=UserWarning,
+    module="openpyxl.reader.drawings",
+)
+
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "JueceoCoreografias" / "Resources" / "app_data.json"
 DEFAULT_XLSX = ROOT / "JueceoCoreografias" / "Resources" / "Bloque2.xlsx"
+DEFAULT_TEMPLATE_XLSX = DEFAULT_XLSX
 DEFAULT_ENV = ROOT / ".env"
 
 REQUIRED_BLOCK_COLUMNS = {
     "name": "COREOGRAFIA",
     "academy": "ACADEMIA",
     "division": "DIVISION",
-    "genre": "GENERO",
+    "genre": "GENERO/SUBGENERO",
     "category": "CATEGORIA",
+}
+
+TEMPLATE_ALIASES = {
+    "ARO": "DANZA AEREA",
+    "TELA": "DANZA AEREA",
+    "URBANOS": "HIP HOP",
+    "OPEN": "CONTEMPORANEO",
 }
 
 
@@ -55,10 +72,41 @@ def stable_id(value: Any) -> str:
     return base or "sin-dato"
 
 
+def clean_text(value: Any) -> str:
+    return str(value or "").strip()
+
+
+def row_text(row: list[Any], index: int | None) -> str:
+    if index is None or index < 0 or index >= len(row):
+        return ""
+    return clean_text(row[index])
+
+
+def compact_number_text(value: Any) -> str:
+    text = clean_text(value).replace(",", ".")
+    try:
+        number = float(text)
+    except ValueError:
+        return text
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:g}"
+
+
+def routine_id_text(value: Any) -> str:
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    if isinstance(value, int):
+        return str(value)
+    return clean_text(value).replace(".0", "")
+
+
 def cell_value(value: Any) -> Any:
     if value is None:
         return ""
     if isinstance(value, datetime.time):
+        if value.second or value.microsecond:
+            return f"{value.hour:02d}:{value.minute:02d}:{value.second:02d}"
         return f"{value.hour:02d}:{value.minute:02d}"
     if isinstance(value, datetime.datetime):
         if value.year == 1900:
@@ -74,6 +122,26 @@ def sheet_rows(sheet) -> list[list[Any]]:
     ]
 
 
+def inferred_duration(formula_rows: list[list[Any]], row_number: int, time_index: int | None) -> str:
+    if time_index is None:
+        return ""
+    next_row_index = row_number
+    if next_row_index >= len(formula_rows) or time_index >= len(formula_rows[next_row_index]):
+        return ""
+    next_time_formula = formula_rows[next_row_index][time_index]
+    if not isinstance(next_time_formula, str):
+        return ""
+
+    match = re.match(
+        r"^=\s*\$?[A-Z]+\$?(\d+)\s*\+\s*([0-9]+(?:[.,][0-9]+)?)\s*/\s*1440\s*$",
+        next_time_formula,
+        flags=re.IGNORECASE,
+    )
+    if not match or int(match.group(1)) != row_number:
+        return ""
+    return compact_number_text(match.group(2))
+
+
 def load_env(path: Path = DEFAULT_ENV) -> None:
     if not path.exists():
         return
@@ -85,10 +153,11 @@ def load_env(path: Path = DEFAULT_ENV) -> None:
         os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
-def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
+def parse_block(sheet, formula_sheet=None) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     warnings: list[str] = []
     errors: list[str] = []
     rows = sheet_rows(sheet)
+    formula_rows = sheet_rows(formula_sheet) if formula_sheet is not None else rows
     header_index = None
     for index, row in enumerate(rows):
         headers = [normalized(value) for value in row]
@@ -107,7 +176,7 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
             column_map["academy"] = index
         if "DIVISION" in key:
             column_map["division"] = index
-        if "GENERO" in key:
+        if "GENERO" in key or "MODALIDAD" in key:
             column_map["genre"] = index
         if "NIVEL" in key:
             column_map["level"] = index
@@ -115,6 +184,8 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
             column_map["category"] = index
         if "COREOGRAFO" in key:
             column_map["choreographer"] = index
+        if "PARTICIPANTE" in key:
+            column_map["participant"] = index
         if "ESTADO" in key:
             column_map["state"] = index
         if "HORARIO" in key:
@@ -132,29 +203,33 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     for row_number, row in enumerate(rows[header_index + 1 :], start=header_index + 2):
         if not row or not str(row[0]).strip():
             continue
-        name = str(row[column_map["name"]] or "").strip()
+        name = row_text(row, column_map["name"])
         if not name:
             warnings.append(f"{sheet.title} fila {row_number}: coreografia vacia, se omite.")
             continue
-        routine_id = str(row[0]).replace(".0", "").strip()
+        routine_id = routine_id_text(row[0])
         if not routine_id:
             warnings.append(f"{sheet.title} fila {row_number}: numero de rutina vacio, se omite.")
             continue
+        duration = row_text(row, column_map.get("duration"))
+        if not duration:
+            duration = inferred_duration(formula_rows, row_number, column_map.get("time"))
         routines.append(
             {
                 "id": routine_id,
                 "blockID": block_id,
                 "block": sheet.title,
                 "name": name.title(),
-                "academy": str(row[column_map.get("academy", 0)] or "").strip(),
-                "division": str(row[column_map.get("division", 0)] or "").strip(),
-                "genre": str(row[column_map.get("genre", 0)] or "").strip(),
-                "level": str(row[column_map.get("level", 0)] or "").strip(),
-                "category": str(row[column_map.get("category", 0)] or "").strip(),
-                "choreographer": str(row[column_map.get("choreographer", 0)] or "").strip(),
-                "state": str(row[column_map.get("state", 0)] or "").strip(),
-                "time": str(row[column_map.get("time", 0)] or "").strip(),
-                "duration": str(row[column_map.get("duration", 0)] or "").strip(),
+                "academy": row_text(row, column_map.get("academy")),
+                "division": row_text(row, column_map.get("division")),
+                "genre": row_text(row, column_map.get("genre")),
+                "level": row_text(row, column_map.get("level")),
+                "category": row_text(row, column_map.get("category")),
+                "choreographer": row_text(row, column_map.get("choreographer")),
+                "participant": row_text(row, column_map.get("participant")),
+                "state": row_text(row, column_map.get("state")),
+                "time": row_text(row, column_map.get("time")),
+                "duration": duration,
             }
         )
 
@@ -179,13 +254,25 @@ def parse_block(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
 def parse_template(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
     warnings: list[str] = []
     errors: list[str] = []
+    sheet_key = normalized(sheet.title)
+    if sheet_key.startswith("JUECEO") or sheet_key.startswith("COPIA DE JUECEO") or sheet_key in {
+        "CALIFICACIONES",
+        "DICTAMEN FINAL",
+    }:
+        return None, warnings, errors
+
     rows = sheet_rows(sheet)
     title = next(
         (str(value) for row in rows for value in row if "HOJA DE JUECEO" in normalized(value)),
         None,
     )
-    if not title:
-        return None, warnings, errors
+    template_markers = {"TECNICA", "EJECUCION COREOGRAFICA", "INTERPRETACION", "ARTISTICO"}
+    has_template_marker = any(
+        normalized(value) in template_markers
+        for row in rows
+        for value in row
+        if value
+    )
 
     section = "General"
     criteria: list[dict[str, Any]] = []
@@ -213,8 +300,13 @@ def parse_template(sheet) -> tuple[dict[str, Any] | None, list[str], list[str]]:
             )
 
     if not criteria:
-        errors.append(f"{sheet.title}: hoja de jueceo sin criterios validos.")
+        if title:
+            errors.append(f"{sheet.title}: hoja de jueceo sin criterios validos.")
         return None, warnings, errors
+    if not title:
+        if not has_template_marker:
+            return None, warnings, errors
+        title = f"HOJA DE JUECEO {sheet.title}"
 
     return {
         "genre": sheet.title,
@@ -264,15 +356,72 @@ def role_for_person(name: str) -> str:
     return "admin" if stable_id(name) == "ati" else "judge"
 
 
-def parse_workbook(source: Path) -> ImportResult:
-    workbook = load_workbook(source, data_only=False)
+def load_templates(source: Path) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    if not source.exists():
+        return [], [f"No se encontro fuente de plantillas: {source}."], []
+
+    workbook = load_workbook(source, data_only=True)
+    warnings: list[str] = []
+    errors: list[str] = []
+    templates: list[dict[str, Any]] = []
+    for sheet in workbook.worksheets:
+        template, template_warnings, template_errors = parse_template(sheet)
+        warnings.extend(template_warnings)
+        errors.extend(template_errors)
+        if template:
+            templates.append(template)
+    return templates, warnings, errors
+
+
+def alias_base_for_genre(genre: str) -> str | None:
+    genre_key = normalized(genre)
+    if genre_key.startswith("OPEN:"):
+        return "DANZA AEREA"
+    return TEMPLATE_ALIASES.get(genre_key)
+
+
+def aliased_template(base_template: dict[str, Any], genre: str) -> dict[str, Any]:
+    template = copy.deepcopy(base_template)
+    template["genre"] = genre
+    template["title"] = f"HOJA DE JUECEO {genre}"
+    return template
+
+
+def ensure_templates_for_routines(
+    templates: list[dict[str, Any]],
+    routines: list[dict[str, Any]],
+) -> tuple[list[str], list[str]]:
+    warnings: list[str] = []
+    errors: list[str] = []
+    templates_by_genre = {normalized(template["genre"]): template for template in templates}
+    for genre in sorted({routine["genre"] for routine in routines if routine.get("genre")}, key=normalized):
+        genre_key = normalized(genre)
+        if genre_key in templates_by_genre:
+            continue
+
+        base_key = alias_base_for_genre(genre)
+        base_template = templates_by_genre.get(base_key or "")
+        if base_template:
+            templates.append(aliased_template(base_template, genre))
+            templates_by_genre[genre_key] = templates[-1]
+            warnings.append(f"{genre}: se usa la plantilla base {base_template['genre']}.")
+            continue
+
+        errors.append(f"Genero sin hoja de jueceo: {genre}.")
+    return warnings, errors
+
+
+def parse_workbook(source: Path, template_source: Path | None = DEFAULT_TEMPLATE_XLSX) -> ImportResult:
+    workbook = load_workbook(source, data_only=True)
+    formula_workbook = load_workbook(source, data_only=False)
     warnings: list[str] = []
     errors: list[str] = []
     blocks: list[dict[str, Any]] = []
     templates: list[dict[str, Any]] = []
 
     for sheet in workbook.worksheets:
-        block, block_warnings, block_errors = parse_block(sheet)
+        formula_sheet = formula_workbook[sheet.title] if sheet.title in formula_workbook.sheetnames else None
+        block, block_warnings, block_errors = parse_block(sheet, formula_sheet)
         warnings.extend(block_warnings)
         errors.extend(block_errors)
         if block:
@@ -285,6 +434,14 @@ def parse_workbook(source: Path) -> ImportResult:
             templates.append(template)
 
     routines = [routine for block in blocks for routine in block["routines"]]
+    if routines and not templates and template_source:
+        fallback_templates, fallback_warnings, fallback_errors = load_templates(template_source)
+        warnings.extend(fallback_warnings)
+        errors.extend(fallback_errors)
+        if fallback_templates:
+            templates = fallback_templates
+            warnings.append(f"Se usan plantillas base desde {template_source.name}.")
+
     judges, judge_warnings, judge_errors = parse_judges(workbook)
     judges = with_required_people(judges)
     warnings.extend(judge_warnings)
@@ -296,10 +453,9 @@ def parse_workbook(source: Path) -> ImportResult:
             errors.append(f"Rutina duplicada: #{routine['id']}.")
         routine_ids.add(routine["id"])
 
-    template_genres = {normalized(template["genre"]) for template in templates}
-    for genre in sorted({routine["genre"] for routine in routines}, key=normalized):
-        if normalized(genre) not in template_genres:
-            errors.append(f"Genero sin hoja de jueceo: {genre}.")
+    template_warnings, template_errors = ensure_templates_for_routines(templates, routines)
+    warnings.extend(template_warnings)
+    errors.extend(template_errors)
 
     app_data = {
         "sourceName": source.name,
@@ -370,9 +526,17 @@ def upsert_rows(table: str, rows: list[dict[str, Any]], conflict: str) -> None:
                 prefer="resolution=merge-duplicates,return=minimal",
             )
         except RuntimeError as error:
-            if table != "judges" or "role" not in str(error):
+            fallback_columns = {
+                "judges": ["role"],
+                "routines": ["participant"],
+            }.get(table, [])
+            missing_columns = [column for column in fallback_columns if column in str(error)]
+            if not missing_columns:
                 raise
-            fallback_chunk = [{key: value for key, value in row.items() if key != "role"} for row in chunk]
+            fallback_chunk = [
+                {key: value for key, value in row.items() if key not in missing_columns}
+                for row in chunk
+            ]
             supabase_request(
                 "POST",
                 f"{table}?{query}",
@@ -504,6 +668,7 @@ def upload_to_supabase(
             "level": routine["level"],
             "category": routine["category"],
             "choreographer": routine["choreographer"],
+            "participant": routine.get("participant", ""),
             "state": routine["state"],
             "scheduled_time": routine["time"],
             "duration": routine["duration"],
@@ -567,6 +732,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--strict", action="store_true", help="Cancela tambien la salida JSON local si hay errores.")
     parser.add_argument("--replace-event", action="store_true", help="Reemplaza todo el evento remoto en vez de solo los bloques importados.")
     parser.add_argument("--force-replace", action="store_true", help="Permite reemplazar bloques/eventos que ya tienen puntajes o feedback.")
+    parser.add_argument(
+        "--template-source",
+        default=os.environ.get("JUECEO_TEMPLATE_SOURCE", str(DEFAULT_TEMPLATE_XLSX)),
+        help="Excel con hojas de jueceo base para programas que solo traen bloques/rutinas.",
+    )
+    parser.add_argument(
+        "--no-template-fallback",
+        action="store_true",
+        help="No completar plantillas desde el Excel base cuando el origen no las incluye.",
+    )
     return parser
 
 
@@ -577,10 +752,11 @@ def main() -> int:
 
     source = Path(args.source).expanduser().resolve()
     output = Path(args.output).expanduser().resolve()
+    template_source = None if args.no_template_fallback else Path(args.template_source).expanduser().resolve()
     slug = args.event_slug or stable_id(source.stem)
     name = args.event_name or source.stem
 
-    result = parse_workbook(source)
+    result = parse_workbook(source, template_source=template_source)
     for warning in result.warnings:
         print(f"WARNING: {warning}", file=sys.stderr)
     for error in result.errors:

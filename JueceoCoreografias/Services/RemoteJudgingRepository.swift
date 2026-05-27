@@ -191,6 +191,92 @@ struct ExcelImportUploadRow: Encodable, Sendable {
     }
 }
 
+struct ExcelImportResponse: Decodable, Sendable {
+    let eventID: String
+    let eventSlug: String
+    let eventName: String
+    let routines: Int
+    let blocks: Int
+    let templates: Int
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case eventSlug = "event_slug"
+        case eventName = "event_name"
+        case routines
+        case blocks
+        case templates
+    }
+}
+
+struct EventArchiveRequest: Encodable, Sendable {
+    let eventID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+    }
+}
+
+struct EventArchiveResponse: Decodable, Sendable {
+    let eventID: String
+    let eventName: String
+    let archived: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case eventName = "event_name"
+        case archived
+    }
+}
+
+struct RoutineDeleteRequest: Encodable, Sendable {
+    let eventID: String
+    let routineID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+    }
+}
+
+struct RoutineDeleteResponse: Decodable, Sendable {
+    let eventID: String
+    let routineID: String
+    let routineName: String
+    let deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+        case routineName = "routine_name"
+        case deleted
+    }
+}
+
+struct JudgeDeleteRequest: Encodable, Sendable {
+    let eventID: String
+    let judgeID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+    }
+}
+
+struct JudgeDeleteResponse: Decodable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let judgeName: String
+    let deleted: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+        case judgeName = "judge_name"
+        case deleted
+    }
+}
+
 actor RemoteJudgingRepository {
     private let config: SupabaseConfig
     private let decoder = JSONDecoder()
@@ -335,12 +421,28 @@ actor RemoteJudgingRepository {
         }
     }
 
-    func uploadExcelImport(_ row: ExcelImportUploadRow) async throws {
-        try await post(
-            "excel_imports",
-            row,
-            prefer: "return=minimal"
-        )
+    func importExcel(_ row: ExcelImportUploadRow, importSecret: String) async throws -> ExcelImportResponse {
+        let data = try encoder.encode(row)
+        let response = try await functionRequest(name: "import-excel", body: data, importSecret: importSecret)
+        return try decoder.decode(ExcelImportResponse.self, from: response)
+    }
+
+    func archiveEvent(eventID: String, importSecret: String) async throws -> EventArchiveResponse {
+        let data = try encoder.encode(EventArchiveRequest(eventID: eventID))
+        let response = try await functionRequest(name: "archive-event", body: data, importSecret: importSecret)
+        return try decoder.decode(EventArchiveResponse.self, from: response)
+    }
+
+    func deleteRoutine(eventID: String, routineID: String, importSecret: String) async throws -> RoutineDeleteResponse {
+        let data = try encoder.encode(RoutineDeleteRequest(eventID: eventID, routineID: routineID))
+        let response = try await functionRequest(name: "delete-routine", body: data, importSecret: importSecret)
+        return try decoder.decode(RoutineDeleteResponse.self, from: response)
+    }
+
+    func deleteJudge(eventID: String, judgeID: String, importSecret: String) async throws -> JudgeDeleteResponse {
+        let data = try encoder.encode(JudgeDeleteRequest(eventID: eventID, judgeID: judgeID))
+        let response = try await functionRequest(name: "delete-judge", body: data, importSecret: importSecret)
+        return try decoder.decode(JudgeDeleteResponse.self, from: response)
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
@@ -398,6 +500,28 @@ actor RemoteJudgingRepository {
         if let prefer {
             request.setValue(prefer, forHTTPHeaderField: "Prefer")
         }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw RemoteJudgingError.invalidResponse
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let detail = String(data: data, encoding: .utf8) ?? "sin detalle"
+            throw RemoteJudgingError.http(status: http.statusCode, detail: detail)
+        }
+        return data.isEmpty ? Data("null".utf8) : data
+    }
+
+    private func functionRequest(name: String, body: Data, importSecret: String) async throws -> Data {
+        guard let endpoint = URL(string: "\(config.url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/functions/v1/\(name)") else {
+            throw RemoteJudgingError.invalidURL
+        }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.httpBody = body
+        request.setValue(config.apiKey, forHTTPHeaderField: "apikey")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(importSecret, forHTTPHeaderField: "x-import-secret")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -483,6 +607,7 @@ private struct RoutineRow: Codable, Sendable {
     let level: String
     let category: String
     let choreographer: String
+    let participant: String?
     let state: String
     let scheduledTime: String
     let duration: String
@@ -499,6 +624,7 @@ private struct RoutineRow: Codable, Sendable {
             level: level,
             category: category,
             choreographer: choreographer,
+            participant: participant,
             state: state,
             time: scheduledTime,
             duration: duration
@@ -519,6 +645,7 @@ private struct RoutineRow: Codable, Sendable {
         case level
         case category
         case choreographer
+        case participant
         case state
         case scheduledTime = "scheduled_time"
         case duration
@@ -529,12 +656,14 @@ private struct JudgeRow: Codable, Sendable {
     let judgeID: String
     let name: String
     let role: String?
+    let heroImageName: String?
 
     var profile: JudgeProfile {
         JudgeProfile(
             judgeID: judgeID,
             name: name,
-            role: UserRole(rawValue: role ?? "") ?? (judgeID == "ati" ? .admin : .judge)
+            role: UserRole(rawValue: role ?? "") ?? (judgeID == "ati" ? .admin : .judge),
+            heroImageName: heroImageName
         )
     }
 
@@ -542,6 +671,7 @@ private struct JudgeRow: Codable, Sendable {
         case judgeID = "judge_id"
         case name
         case role
+        case heroImageName = "hero_image_name"
     }
 }
 

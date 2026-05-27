@@ -17,11 +17,16 @@ class SupabaseApi {
     return Uri.parse('$cleanURL/rest/v1/$path');
   }
 
+  Uri _functionEndpoint(String name) {
+    final cleanURL = url.replaceAll(RegExp(r'/+$'), '');
+    return Uri.parse('$cleanURL/functions/v1/$name');
+  }
+
   Map<String, String> get _headers => {
-    'apikey': anonKey,
-    'Authorization': 'Bearer $anonKey',
-    'Content-Type': 'application/json',
-  };
+        'apikey': anonKey,
+        'Authorization': 'Bearer $anonKey',
+        'Content-Type': 'application/json',
+      };
 
   Future<List<EventSummary>> fetchEvents() async {
     final response = await http.get(
@@ -197,6 +202,26 @@ class SupabaseApi {
         'Prefer': 'resolution=merge-duplicates,return=minimal',
       },
       body: jsonEncode(rows),
+    );
+    _throwIfFailed(response);
+  }
+
+  Future<void> deleteRoutine({
+    required String eventID,
+    required String routineID,
+    required String importSecret,
+  }) async {
+    final response = await http.post(
+      _functionEndpoint('delete-routine'),
+      headers: {
+        'apikey': anonKey,
+        'Content-Type': 'application/json',
+        'x-import-secret': importSecret,
+      },
+      body: jsonEncode({
+        'event_id': eventID,
+        'routine_id': routineID,
+      }),
     );
     _throwIfFailed(response);
   }

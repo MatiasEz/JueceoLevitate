@@ -16,3 +16,6 @@ xcuserdata/
 .flutter-plugins-dependencies
 android_tablet_flutter/build/
 android_tablet_flutter/.packages
+
+# Supabase
+supabase/.temp/

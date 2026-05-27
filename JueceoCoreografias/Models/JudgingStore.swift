@@ -3,11 +3,14 @@ import SwiftUI
 
 private enum DriveExportError: LocalizedError {
     case pdfGenerationFailed
+    case routineBlockNotFound
 
     var errorDescription: String? {
         switch self {
         case .pdfGenerationFailed:
             "No se pudo generar el PDF de calificaciones."
+        case .routineBlockNotFound:
+            "No se pudo ubicar el bloque de esta coreografía."
         }
     }
 }
@@ -145,10 +148,16 @@ final class JudgingStore: ObservableObject {
                 || routine.blockID == blockID
                 || routine.block == selectedBlock.name
         }
+        if visible.isEmpty && selectedBlock.routines.isEmpty {
+            return []
+        }
         return visible.isEmpty ? routines : visible
     }
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
     var hasGoogleDriveConfiguration: Bool { GoogleDriveConfig.load() != nil }
+    var defaultDriveRootFolderName: String {
+        GoogleDriveConfig.load()?.rootFolderName ?? "FEEDBACK LEVITATE MX"
+    }
     var pendingSyncCount: Int {
         pendingScoreKeys.count + pendingFeedbackKeys.count + pendingPenaltyKeys.count + pendingFavoriteKeys.count
     }
@@ -265,9 +274,42 @@ final class JudgingStore: ObservableObject {
         appData.judges.contains(judge) && role(for: judge) != .admin
     }
 
-    func deleteJudge(_ judge: String) {
+    func deleteJudge(_ judge: String, importSecret: String = "") async throws {
         guard canDeleteJudge(judge) else { return }
 
+        if let remoteRepository {
+            guard isAdmin else {
+                throw JudgeDeletionError.notAllowed
+            }
+            guard let eventID = selectedEventID else {
+                throw JudgeDeletionError.missingSelectedEvent
+            }
+            let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !cleanImportSecret.isEmpty else {
+                throw JudgeDeletionError.missingImportSecret
+            }
+
+            syncStatus = .syncing
+            syncMessage = "Borrando juez \(judge)..."
+            let response = try await remoteRepository.deleteJudge(
+                eventID: eventID,
+                judgeID: judge.stableRemoteID,
+                importSecret: cleanImportSecret
+            )
+
+            purgeLocalState(forJudge: judge)
+            let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+            applyRemoteBundle(bundle)
+            await syncPending()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            let deletedName = response.judgeName.isEmpty ? judge : response.judgeName
+            syncMessage = "Juez \(deletedName) borrado."
+        } else {
+            purgeLocalState(forJudge: judge)
+        }
+    }
+
+    private func purgeLocalState(forJudge judge: String) {
         appData.judges.removeAll { $0 == judge }
         if var profiles = appData.judgeProfiles {
             profiles.removeAll {
@@ -493,6 +535,72 @@ final class JudgingStore: ObservableObject {
         }
     }
 
+    func deleteEvent(_ event: EventSummary, importSecret: String) async throws {
+        guard let remoteRepository else {
+            throw EventDeletionError.missingRemoteConfiguration
+        }
+        guard isAdmin else {
+            throw EventDeletionError.notAllowed
+        }
+        let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanImportSecret.isEmpty else {
+            throw EventDeletionError.missingImportSecret
+        }
+
+        syncStatus = .syncing
+        syncMessage = "Borrando \(event.name)..."
+        _ = try await remoteRepository.archiveEvent(eventID: event.id, importSecret: cleanImportSecret)
+
+        let events = try await remoteRepository.fetchEvents()
+        availableEvents = events
+        if selectedEventID == event.id {
+            selectedEventID = nil
+            UserDefaults.standard.removeObject(forKey: selectedEventKey)
+
+            if let nextEvent = events.first(where: \.isActive) ?? events.first {
+                await selectEvent(nextEvent)
+            } else {
+                syncStatus = .offline("No hay eventos en Supabase.")
+                syncMessage = "\(event.name) borrado. No hay programas cargados."
+            }
+        } else {
+            syncStatus = .online
+            syncMessage = "\(event.name) borrado."
+        }
+    }
+
+    func deleteRoutine(_ routine: Routine, importSecret: String) async throws {
+        guard let remoteRepository else {
+            throw RoutineDeletionError.missingRemoteConfiguration
+        }
+        guard isAdmin else {
+            throw RoutineDeletionError.notAllowed
+        }
+        guard let eventID = selectedEventID else {
+            throw RoutineDeletionError.missingSelectedEvent
+        }
+        let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanImportSecret.isEmpty else {
+            throw RoutineDeletionError.missingImportSecret
+        }
+
+        let label = "#\(routine.id) \(routine.name)"
+        syncStatus = .syncing
+        syncMessage = "Borrando \(label)..."
+        _ = try await remoteRepository.deleteRoutine(
+            eventID: eventID,
+            routineID: routine.id,
+            importSecret: cleanImportSecret
+        )
+
+        purgeLocalState(forRoutineID: routine.id)
+        let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+        applyRemoteBundle(bundle)
+        await syncPending()
+        syncStatus = pendingSyncCount > 0 ? .pending : .online
+        syncMessage = "\(label) borrada."
+    }
+
     func syncPending() async {
         guard let remoteRepository, let eventID = selectedEventID else {
             syncStatus = remoteRepository == nil ? .localOnly : .pending
@@ -696,7 +804,22 @@ final class JudgingStore: ObservableObject {
         )
     }
 
-    func exportSelectedBlockToDrive() async {
+    func exportDictamenPDF(results exportResults: [RoutineResult]? = nil, title: String = "Dictamen final") {
+        let sourceName = selectedBlock?.name ?? appData.sourceName
+        lastPDFURL = PDFExporter.exportDictamen(
+            results: exportResults ?? rankings,
+            sourceName: sourceName,
+            title: title
+        )
+    }
+
+    func driveFolderExists(named folderName: String) async throws -> Bool {
+        let drive = try GoogleDriveService.configured()
+        let rootFolderName = driveSafeName(folderName, fallback: drive.rootFolderName)
+        return try await drive.folderExists(folderPath: [rootFolderName])
+    }
+
+    func exportSelectedBlockToDrive(rootFolderName customRootFolderName: String? = nil) async {
         guard let block = selectedBlock else {
             driveExportStatus = .failed("No hay bloque seleccionado.")
             driveExportMessage = "No hay bloque seleccionado."
@@ -716,9 +839,11 @@ final class JudgingStore: ObservableObject {
 
         do {
             let drive = try GoogleDriveService.configured()
+            let rootFolderName = driveSafeName(customRootFolderName ?? drive.rootFolderName, fallback: drive.rootFolderName)
             let blockRoutines = routines(in: block)
             let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
             var uploadedFiles: [GoogleDriveUploadedFile] = []
+            var skippedEmptySheets = 0
 
             for academy in uniqueAcademies(in: blockRoutines) {
                 let academyRoutines = blockRoutines.filter {
@@ -728,13 +853,18 @@ final class JudgingStore: ObservableObject {
                 for routine in academyRoutines {
                     let routineFolderName = driveSafeName("#\(routine.id) \(routine.name)", fallback: "Coreografía \(routine.id)")
                     for judge in exportJudges {
+                        guard hasRecordedScores(for: routine, judge: judge) else {
+                            skippedEmptySheets += 1
+                            continue
+                        }
+
                         let fileName = "\(routineFolderName) - \(driveSafeName(judge, fallback: "Juez")).pdf"
                         guard let pdfURL = exportJudgingSheetPDF(
                             routine: routine,
                             judge: judge,
                             blockName: block.name,
                             fileName: fileName,
-                            rootFolderName: drive.rootFolderName
+                            rootFolderName: rootFolderName
                         ) else {
                             throw DriveExportError.pdfGenerationFailed
                         }
@@ -743,7 +873,7 @@ final class JudgingStore: ObservableObject {
                         let uploaded = try await drive.uploadPDF(
                             fileURL: pdfURL,
                             fileName: fileName,
-                            folderPath: [drive.rootFolderName, blockFolderName, academyFolderName, routineFolderName]
+                            folderPath: [rootFolderName, blockFolderName, academyFolderName, routineFolderName]
                         )
                         uploadedFiles.append(uploaded)
                     }
@@ -751,20 +881,98 @@ final class JudgingStore: ObservableObject {
             }
 
             lastDriveExportSummary = GoogleDriveExportSummary(
-                rootFolderName: drive.rootFolderName,
+                rootFolderName: rootFolderName,
                 uploadedFiles: uploadedFiles
             )
             driveExportStatus = .completed(uploadedFiles.count)
-            driveExportMessage = "\(uploadedFiles.count) PDFs exportados a \(drive.rootFolderName)."
+            if uploadedFiles.isEmpty {
+                driveExportMessage = "No había hojas calificadas para exportar. \(skippedEmptySheets) hojas vacías omitidas."
+            } else if skippedEmptySheets > 0 {
+                driveExportMessage = "\(uploadedFiles.count) PDFs exportados a \(rootFolderName). \(skippedEmptySheets) hojas vacías omitidas."
+            } else {
+                driveExportMessage = "\(uploadedFiles.count) PDFs exportados a \(rootFolderName)."
+            }
         } catch {
             driveExportStatus = .failed(error.localizedDescription)
             driveExportMessage = error.localizedDescription
         }
     }
 
-    func uploadExcelImport(fileURL: URL, eventName: String, eventSlug: String) async throws -> ExcelImportSummary {
+    func exportRoutineToDrive(routine: Routine, judge: String) async {
+        guard isAdmin else {
+            driveExportStatus = .failed("Solo un admin puede exportar esta coreografía.")
+            driveExportMessage = "Solo un admin puede exportar esta coreografía."
+            return
+        }
+
+        guard appData.judges.contains(judge), role(for: judge) == .judge else {
+            driveExportStatus = .failed("Elegí un juez para exportar esta coreografía.")
+            driveExportMessage = "Elegí un juez para exportar esta coreografía."
+            return
+        }
+
+        guard let block = block(containing: routine) else {
+            driveExportStatus = .failed(DriveExportError.routineBlockNotFound.localizedDescription)
+            driveExportMessage = DriveExportError.routineBlockNotFound.localizedDescription
+            return
+        }
+
+        guard hasRecordedScores(for: routine, judge: judge) else {
+            driveExportStatus = .failed("Esta hoja no tiene notas cargadas.")
+            driveExportMessage = "No se exportó porque esta hoja todavía está vacía."
+            return
+        }
+
+        driveExportStatus = .exporting
+        driveExportMessage = "Preparando #\(routine.id) \(routine.name)..."
+        lastDriveExportSummary = nil
+
+        do {
+            let drive = try GoogleDriveService.configured()
+            let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
+            let academyFolderName = driveSafeName(driveAcademyName(for: routine), fallback: "Academia")
+            let routineFolderName = driveSafeName("#\(routine.id) \(routine.name)", fallback: "Coreografía \(routine.id)")
+            let fileName = "\(routineFolderName) - \(driveSafeName(judge, fallback: "Juez")).pdf"
+
+            guard let pdfURL = exportJudgingSheetPDF(
+                routine: routine,
+                judge: judge,
+                blockName: block.name,
+                fileName: fileName,
+                rootFolderName: drive.rootFolderName
+            ) else {
+                throw DriveExportError.pdfGenerationFailed
+            }
+
+            driveExportMessage = "Sobrescribiendo \(fileName)..."
+            let uploaded = try await drive.replaceExistingPDF(
+                fileURL: pdfURL,
+                fileName: fileName,
+                folderPath: [drive.rootFolderName, blockFolderName, academyFolderName, routineFolderName]
+            )
+
+            lastDriveExportSummary = GoogleDriveExportSummary(
+                rootFolderName: drive.rootFolderName,
+                uploadedFiles: [uploaded]
+            )
+            driveExportStatus = .completed(1)
+            driveExportMessage = "\(fileName) actualizado en Drive."
+        } catch {
+            driveExportStatus = .failed(error.localizedDescription)
+            driveExportMessage = error.localizedDescription
+        }
+    }
+
+    func uploadExcelImport(fileURL: URL, eventName: String, eventSlug: String, importSecret: String) async throws -> ExcelImportSummary {
         guard let remoteRepository else {
             throw ExcelImportError.missingRemoteConfiguration
+        }
+        guard isAdmin else {
+            throw ExcelImportError.notAllowed
+        }
+        let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanImportSecret.isEmpty else {
+            throw ExcelImportError.missingImportSecret
         }
 
         let didStartAccessing = fileURL.startAccessingSecurityScopedResource()
@@ -790,7 +998,9 @@ final class JudgingStore: ObservableObject {
             fileName: fileURL.lastPathComponent,
             eventName: cleanEventName,
             eventSlug: cleanSlug,
-            fileSize: data.count
+            fileSize: data.count,
+            eventID: nil,
+            routineCount: nil
         )
         let row = ExcelImportUploadRow(
             eventSlug: cleanSlug,
@@ -802,11 +1012,27 @@ final class JudgingStore: ObservableObject {
         )
 
         syncStatus = .syncing
-        syncMessage = "Subiendo \(summary.fileName)..."
-        try await remoteRepository.uploadExcelImport(row)
-        syncStatus = .online
-        syncMessage = "Excel subido: \(summary.eventName)."
-        return summary
+        syncMessage = "Importando \(summary.fileName) en Supabase..."
+        let response = try await remoteRepository.importExcel(row, importSecret: cleanImportSecret)
+        let importedSummary = ExcelImportSummary(
+            fileName: summary.fileName,
+            eventName: response.eventName,
+            eventSlug: response.eventSlug,
+            fileSize: summary.fileSize,
+            eventID: response.eventID,
+            routineCount: response.routines
+        )
+
+        let events = try await remoteRepository.fetchEvents()
+        availableEvents = events
+        if let importedEvent = events.first(where: { $0.id == response.eventID })
+            ?? events.first(where: { $0.slug == response.eventSlug }) {
+            await selectEvent(importedEvent)
+        } else {
+            syncStatus = .online
+            syncMessage = "Evento importado: \(response.eventName)."
+        }
+        return importedSummary
     }
 
     private func applyRemoteBundle(_ bundle: RemoteEventBundle) {
@@ -918,6 +1144,57 @@ final class JudgingStore: ObservableObject {
         persistPendingFavoriteKeys()
         syncStatus = .pending
         Task { await syncPending() }
+    }
+
+    private func purgeLocalState(forRoutineID routineID: String) {
+        appData.routines.removeAll { $0.id == routineID }
+        appData.blocks = appData.blocks.map { block in
+            DanceBlock(
+                blockID: block.blockID,
+                name: block.name,
+                title: block.title,
+                sortOrder: block.sortOrder,
+                isActive: block.isActive,
+                routines: block.routines.filter { $0.id != routineID }
+            )
+        }
+
+        if selectedRoutineID == routineID {
+            selectedRoutineID = visibleRoutines.first?.id ?? appData.routines.first?.id ?? ""
+        }
+
+        scores = scores.filter { entry in
+            parseScoreKey(entry.key)?.routineID != routineID
+        }
+        feedback = feedback.filter { entry in
+            parseFeedbackKey(entry.key)?.routineID != routineID
+        }
+        penalties = penalties.filter { entry in
+            parsePenaltyKey(entry.key)?.routineID != routineID
+        }
+
+        let removedFavoriteKeys = Set(favoriteSelections.compactMap { key, value in
+            value == routineID ? key : nil
+        })
+        favoriteSelections = favoriteSelections.filter { _, value in
+            value != routineID
+        }
+
+        pendingScoreKeys = Set(pendingScoreKeys.filter { key in
+            parseScoreKey(key)?.routineID != routineID
+        })
+        pendingFeedbackKeys = Set(pendingFeedbackKeys.filter { key in
+            parseFeedbackKey(key)?.routineID != routineID
+        })
+        pendingPenaltyKeys = Set(pendingPenaltyKeys.filter { key in
+            parsePenaltyKey(key)?.routineID != routineID
+        })
+        pendingFavoriteKeys.subtract(removedFavoriteKeys)
+
+        persistPendingScoreKeys()
+        persistPendingFeedbackKeys()
+        persistPendingPenaltyKeys()
+        persistPendingFavoriteKeys()
     }
 
     private func persistScores() {
@@ -1060,17 +1337,24 @@ final class JudgingStore: ObservableObject {
         return academy.isEmpty ? "Sin academia" : academy
     }
 
-    private func scoreSheetPositions(for results: [RoutineResult], judges: [String]) -> [String: Int] {
+    private func hasRecordedScores(for routine: Routine, judge: String) -> Bool {
+        template(for: routine).criteria.contains { criterion in
+            score(for: routine, judge: judge, criterion: criterion) > 0
+        }
+    }
+
+    private func scoreSheetPositions(for results: [RoutineResult], judges: [String]) -> [String: CompetitionPlacement] {
         let grouped = Dictionary(grouping: results) { result in
             [
                 result.routine.genre,
                 result.routine.division,
+                result.routine.level,
                 result.routine.category
             ]
             .map(\.normalizedKey)
             .joined(separator: "|")
         }
-        var positions: [String: Int] = [:]
+        var positions: [String: CompetitionPlacement] = [:]
 
         for items in grouped.values {
             let rankedItems = items
@@ -1083,6 +1367,11 @@ final class JudgingStore: ObservableObject {
                     return lhs.total > rhs.total
                 }
 
+            if rankedItems.count == 1, let item = rankedItems.first {
+                positions[item.result.routine.id] = CompetitionPlacement.solo(for: item.total)
+                continue
+            }
+
             var currentRank = 0
             var previousTotal: Double?
             for (index, item) in rankedItems.enumerated() {
@@ -1090,7 +1379,7 @@ final class JudgingStore: ObservableObject {
                     currentRank = index + 1
                     previousTotal = item.total
                 }
-                positions[item.result.routine.id] = currentRank
+                positions[item.result.routine.id] = .position(currentRank)
             }
         }
         return positions

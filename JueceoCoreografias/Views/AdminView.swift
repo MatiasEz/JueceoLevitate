@@ -8,6 +8,15 @@ struct AdminView: View {
     @State private var selectedJudgeForEdit = ""
     @State private var selectedRoutineIDForEdit = ""
     @State private var searchText = ""
+    @State private var routinePendingDeletion: Routine?
+    @State private var deleteRoutineImportSecret = ""
+    @State private var isDeletingRoutine = false
+    @State private var routineDeleteErrorMessage: String?
+    @State private var driveFolderName = ""
+    @State private var isDriveFolderPromptPresented = false
+    @State private var driveFolderPendingOverwrite: String?
+    @State private var driveFolderErrorMessage: String?
+    @State private var isCheckingDriveFolder = false
 
     private var currentEventTitle: String {
         store.availableEvents.first { $0.id == store.selectedEventID }?.name
@@ -42,6 +51,11 @@ struct AdminView: View {
         sortedRoutines.first { $0.id == selectedRoutineIDForEdit } ?? sortedRoutines.first
     }
 
+    private var routineDeletionTitle: String {
+        guard let routinePendingDeletion else { return "esta coreografía" }
+        return "#\(routinePendingDeletion.id) \(routinePendingDeletion.name)"
+    }
+
     private var completedRoutines: Int {
         store.rankings.filter { $0.total > 0 }.count
     }
@@ -63,10 +77,80 @@ struct AdminView: View {
         }
         .background(LevitTheme.paper.ignoresSafeArea())
         .foregroundStyle(LevitTheme.ink)
-        .onAppear(perform: normalizeSelection)
+        .onAppear {
+            normalizeSelection()
+            prepareDefaultDriveFolderName()
+        }
         .onChange(of: store.selectedBlock?.id ?? "") { _, _ in normalizeSelection() }
         .onChange(of: store.judges) { _, _ in normalizeSelection() }
         .onChange(of: store.visibleRoutines) { _, _ in normalizeSelection() }
+        .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
+            TextField("Nombre de carpeta", text: $driveFolderName)
+                .textInputAutocapitalization(.words)
+                .disableAutocorrection(true)
+
+            Button("Continuar") {
+                Task { await prepareDriveExport() }
+            }
+            .disabled(cleanDriveFolderName.isEmpty || isCheckingDriveFolder || store.driveExportStatus.isExporting)
+
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Elegí el nombre de la carpeta principal donde se van a guardar los PDFs.")
+        }
+        .alert("Carpeta existente", isPresented: Binding(
+            get: { driveFolderPendingOverwrite != nil },
+            set: { if !$0 { driveFolderPendingOverwrite = nil } }
+        )) {
+            Button("Exportar igual") {
+                guard let folderName = driveFolderPendingOverwrite else { return }
+                Task { await exportDrive(named: folderName) }
+            }
+            Button("Cancelar", role: .cancel) {
+                driveFolderPendingOverwrite = nil
+            }
+        } message: {
+            Text("La carpeta \(driveFolderPendingOverwrite ?? "") ya existe en Drive. Los PDFs con el mismo nombre se van a actualizar.")
+        }
+        .alert("No se pudo revisar Drive", isPresented: Binding(
+            get: { driveFolderErrorMessage != nil },
+            set: { if !$0 { driveFolderErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                driveFolderErrorMessage = nil
+            }
+        } message: {
+            Text(driveFolderErrorMessage ?? "")
+        }
+        .alert("Borrar coreografía", isPresented: Binding(
+            get: { routinePendingDeletion != nil },
+            set: { if !$0 { resetPendingRoutineDeletion() } }
+        )) {
+            SecureField("Clave de importación", text: $deleteRoutineImportSecret)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            Button("Borrar", role: .destructive) {
+                Task { await deletePendingRoutine() }
+            }
+            .disabled(deleteRoutineImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingRoutine)
+
+            Button("Cancelar", role: .cancel) {
+                resetPendingRoutineDeletion()
+            }
+        } message: {
+            Text("Se va a borrar \(routineDeletionTitle) de \(currentEventTitle). También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos.")
+        }
+        .alert("No se pudo borrar", isPresented: Binding(
+            get: { routineDeleteErrorMessage != nil },
+            set: { if !$0 { routineDeleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                routineDeleteErrorMessage = nil
+            }
+        } message: {
+            Text(routineDeleteErrorMessage ?? "")
+        }
     }
 
     private var header: some View {
@@ -140,8 +224,7 @@ struct AdminView: View {
             Spacer()
 
             Button {
-                guard !store.driveExportStatus.isExporting else { return }
-                Task { await store.exportSelectedBlockToDrive() }
+                presentDriveFolderPrompt()
             } label: {
                 Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
                     .font(.callout.weight(.black))
@@ -153,8 +236,8 @@ struct AdminView: View {
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
-            .disabled(store.driveExportStatus.isExporting)
-            .opacity(store.driveExportStatus.isExporting ? 0.58 : 1)
+            .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
+            .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
         }
         .padding(18)
         .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
@@ -248,7 +331,11 @@ struct AdminView: View {
                                 routine: routine,
                                 total: judgeTotal(for: routine, judge: selectedJudgeForEdit),
                                 maxScore: store.template(for: routine).maxScore,
-                                isSelected: routine.id == selectedRoutineForEdit?.id
+                                isSelected: routine.id == selectedRoutineForEdit?.id,
+                                onDelete: {
+                                    routinePendingDeletion = routine
+                                    deleteRoutineImportSecret = ""
+                                }
                             ) {
                                 selectedRoutineIDForEdit = routine.id
                             }
@@ -272,6 +359,28 @@ struct AdminView: View {
         }
     }
 
+    @MainActor
+    private func deletePendingRoutine() async {
+        guard let routine = routinePendingDeletion else { return }
+        let secret = deleteRoutineImportSecret
+        isDeletingRoutine = true
+        defer { isDeletingRoutine = false }
+
+        do {
+            try await store.deleteRoutine(routine, importSecret: secret)
+            resetPendingRoutineDeletion()
+            normalizeSelection()
+        } catch {
+            resetPendingRoutineDeletion()
+            routineDeleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetPendingRoutineDeletion() {
+        routinePendingDeletion = nil
+        deleteRoutineImportSecret = ""
+    }
+
     private func judgeTotal(for routine: Routine, judge: String) -> Double {
         guard !judge.isEmpty else { return 0 }
         let subtotal = store.template(for: routine).criteria.reduce(0) { sum, criterion in
@@ -288,6 +397,47 @@ struct AdminView: View {
             return "Crea carpetas por bloque, academia y coreografía; sube una hoja de jueceo por juez."
         }
         return "Faltan GOOGLE_CLIENT_ID y GOOGLE_REVERSED_CLIENT_ID para habilitar Drive."
+    }
+
+    private var cleanDriveFolderName: String {
+        driveFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func prepareDefaultDriveFolderName() {
+        guard cleanDriveFolderName.isEmpty else { return }
+        driveFolderName = store.defaultDriveRootFolderName
+    }
+
+    private func presentDriveFolderPrompt() {
+        guard !store.driveExportStatus.isExporting, !isCheckingDriveFolder else { return }
+        prepareDefaultDriveFolderName()
+        isDriveFolderPromptPresented = true
+    }
+
+    @MainActor
+    private func prepareDriveExport() async {
+        let folderName = cleanDriveFolderName
+        guard !folderName.isEmpty else { return }
+
+        isCheckingDriveFolder = true
+        do {
+            let exists = try await store.driveFolderExists(named: folderName)
+            isCheckingDriveFolder = false
+            if exists {
+                driveFolderPendingOverwrite = folderName
+            } else {
+                await exportDrive(named: folderName)
+            }
+        } catch {
+            isCheckingDriveFolder = false
+            driveFolderErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func exportDrive(named folderName: String) async {
+        driveFolderPendingOverwrite = nil
+        await store.exportSelectedBlockToDrive(rootFolderName: folderName)
     }
 
     private var driveStatusColor: Color {
@@ -479,54 +629,69 @@ private struct AdminRoutineEditRow: View {
     let total: Double
     let maxScore: Double
     let isSelected: Bool
+    let onDelete: (() -> Void)?
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 14) {
-                Text("#\(routine.id)")
-                    .font(.callout.monospacedDigit().weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 56, height: 46)
-                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 13))
-
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(routine.name)
-                        .font(.callout.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                    HStack(spacing: 7) {
-                        Text(routine.academy)
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(LevitTheme.muted)
-                            .lineLimit(1)
-                        LevitTag(routine.division)
-                        LevitTag(routine.category)
-                        LevitTag(routine.genre)
-                    }
-                }
-
-                Spacer()
-
-                VStack(alignment: .trailing, spacing: 4) {
-                    Text(total > 0 ? "Cargada" : "Pendiente")
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(total > 0 ? .green : LevitTheme.muted)
-                    Text("\(total.formatted(.number.precision(.fractionLength(0...1)))) / \(resolvedMax.formatted(.number.precision(.fractionLength(0...1))))")
+        HStack(spacing: 10) {
+            Button(action: action) {
+                HStack(spacing: 14) {
+                    Text("#\(routine.id)")
                         .font(.callout.monospacedDigit().weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                }
+                        .foregroundStyle(LevitTheme.pink)
+                        .frame(width: 56, height: 46)
+                        .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 13))
 
-                Image(systemName: isSelected ? "checkmark.circle.fill" : "chevron.right")
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(routine.name)
+                            .font(.callout.weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                            .lineLimit(1)
+                        HStack(spacing: 7) {
+                            Text(routine.academy)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(LevitTheme.muted)
+                                .lineLimit(1)
+                            LevitTag(routine.division)
+                            LevitTag(routine.category)
+                            LevitTag(routine.genre)
+                        }
+                    }
+
+                    Spacer()
+
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text(total > 0 ? "Cargada" : "Pendiente")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(total > 0 ? .green : LevitTheme.muted)
+                        Text("\(total.formatted(.number.precision(.fractionLength(0...1)))) / \(resolvedMax.formatted(.number.precision(.fractionLength(0...1))))")
+                            .font(.callout.monospacedDigit().weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                    }
+
+                    Image(systemName: isSelected ? "checkmark.circle.fill" : "chevron.right")
+                        .font(.headline.weight(.bold))
+                        .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
+                }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
-            .overlay(RoundedRectangle(cornerRadius: 17).stroke(isSelected ? LevitTheme.pink.opacity(0.32) : LevitTheme.line))
+            .buttonStyle(.plain)
+
+            if let onDelete {
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                        .font(.headline.weight(.bold))
+                        .frame(width: 42, height: 42)
+                        .foregroundStyle(.red)
+                        .background(Color.red.opacity(0.10), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Borrar coreografía \(routine.name)")
+            }
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
+        .overlay(RoundedRectangle(cornerRadius: 17).stroke(isSelected ? LevitTheme.pink.opacity(0.32) : LevitTheme.line))
     }
 
     private var resolvedMax: Double {

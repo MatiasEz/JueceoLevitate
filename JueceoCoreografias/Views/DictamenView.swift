@@ -1,47 +1,36 @@
 import SwiftUI
 
 struct DictamenView: View {
-    @EnvironmentObject private var store: JudgingStore
     let results: [RoutineResult]
-    let onExportPDF: ([RoutineResult], String) -> Void
+    @State private var filters = DictamenFilters()
 
-    @State private var selectedGroupID: String?
-
-    private var dictamenGroups: [DictamenGroup] {
-        Dictionary(grouping: results) { result in
-            DictamenGroup.id(
-                genre: emptyFallback(result.routine.genre),
-                age: emptyFallback(result.routine.division),
-                amount: emptyFallback(result.routine.category)
-            )
-        }
-        .compactMap { _, items -> DictamenGroup? in
-            guard let sample = items.first?.routine else { return nil }
-            return DictamenGroup(
-                genre: emptyFallback(sample.genre),
-                age: emptyFallback(sample.division),
-                amount: emptyFallback(sample.category),
-                results: sortedResults(items)
-            )
-        }
-        .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    private var filteredResults: [RoutineResult] {
+        DictamenBuilder.filteredResults(results, filters: filters)
     }
 
-    private var selectedGroup: DictamenGroup? {
-        if let selectedGroupID,
-           let group = dictamenGroups.first(where: { $0.id == selectedGroupID }) {
-            return group
+    private var sections: [DictamenGenreSection] {
+        DictamenBuilder.sections(from: filteredResults)
+    }
+
+    private var filterOptions: DictamenFilterOptions {
+        DictamenFilterOptions(results: results)
+    }
+
+    private var totalRoutines: Int {
+        sections.reduce(0) { total, section in
+            total + section.rowCount
         }
-        return dictamenGroups.first
+    }
+
+    private var completedCount: Int {
+        filteredResults.filter { $0.aggregateTotal > 0 }.count
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: 20) {
             header
-            selectedGroupSummary
-            podiumView(group: selectedGroup)
-            actionButtons
-            groupsGrid
+            toolbar
+            dictamenList
         }
         .padding(30)
         .foregroundStyle(LevitTheme.ink)
@@ -62,235 +51,850 @@ struct DictamenView: View {
 
             Spacer()
 
-            EventPill()
+            BlockPill()
         }
     }
 
-    @ViewBuilder
-    private var selectedGroupSummary: some View {
-        if let selectedGroup {
-            HStack(spacing: 12) {
-                Label("Categoría seleccionada", systemImage: "trophy.fill")
-                    .font(.callout.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-
-                Text(selectedGroup.title)
-                    .font(.title3.weight(.black))
-                    .foregroundStyle(LevitTheme.ink)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-
+    private var toolbar: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 14) {
+                summaryBar
                 Spacer()
-
-                Text("\(selectedGroup.completedCount) / \(selectedGroup.results.count) calificadas")
-                    .font(.callout.monospacedDigit().weight(.bold))
-                    .foregroundStyle(LevitTheme.muted)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
-            .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
-        }
-    }
-
-    private func podiumView(group: DictamenGroup?) -> some View {
-        let podium = group?.podium ?? []
-        return HStack(alignment: .bottom, spacing: 18) {
-            PodiumCard(result: podium.indices.contains(1) ? podium[1] : nil, title: "Segundo lugar", rank: 2, height: 210, color: LevitTheme.silverPodium)
-            PodiumCard(result: podium.indices.contains(0) ? podium[0] : nil, title: "Primer lugar", rank: 1, height: 270, color: LevitTheme.pink)
-            PodiumCard(result: podium.indices.contains(2) ? podium[2] : nil, title: "Tercer lugar", rank: 3, height: 210, color: LevitTheme.bronzePodium)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 10)
-    }
-
-    private var actionButtons: some View {
-        VStack(spacing: 12) {
-            Button {
-                guard let selectedGroup else { return }
-                onExportPDF(selectedGroup.results, "Dictamen final - \(selectedGroup.title)")
-            } label: {
-                Label("Descargar PDF del dictamen seleccionado", systemImage: "doc.richtext")
-                    .font(.headline.weight(.bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 15)
-                    .foregroundStyle(.white)
-                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 17))
-            }
-            .buttonStyle(.plain)
-            .disabled(dictamenGroups.isEmpty)
-            .opacity(dictamenGroups.isEmpty ? 0.45 : 1)
-        }
-    }
-
-    private var groupsGrid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 300), spacing: 14)], spacing: 14) {
-                ForEach(dictamenGroups) { group in
+                if filters.hasActiveFilters {
                     Button {
-                        selectedGroupID = group.id
+                        filters.reset()
                     } label: {
-                        DictamenGroupCard(
-                            group: group,
-                            isSelected: isSelected(group)
-                        )
+                        Label("Limpiar filtros", systemImage: "xmark.circle.fill")
+                            .font(.callout.weight(.black))
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(LevitTheme.pink)
+                            .background(LevitTheme.palePink, in: Capsule())
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.bottom, 24)
+
+            DictamenFilterBar(filters: $filters, options: filterOptions)
         }
     }
 
-    private func sortedResults(_ items: [RoutineResult]) -> [RoutineResult] {
-        items.sorted {
-            if $0.aggregateTotal == $1.aggregateTotal {
-                return (Int($0.routine.id) ?? 0) < (Int($1.routine.id) ?? 0)
+    private var summaryBar: some View {
+        HStack(spacing: 10) {
+            DictamenMetricPill(icon: "rectangle.stack.fill", value: "\(sections.count)", title: "Géneros")
+            DictamenMetricPill(icon: "square.grid.2x2.fill", value: "\(sections.reduce(0) { $0 + $1.categories.count })", title: "Categorías")
+            DictamenMetricPill(icon: "checkmark.seal.fill", value: "\(completedCount)/\(totalRoutines)", title: "Calificadas")
+        }
+    }
+
+    @ViewBuilder
+    private var dictamenList: some View {
+        if sections.isEmpty {
+            DictamenEmptyState(
+                title: filters.hasActiveFilters ? "Sin resultados" : "Sin dictamen",
+                detail: filters.hasActiveFilters
+                    ? "No hay coreografías que coincidan con los filtros."
+                    : "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
+            )
+        } else {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    ForEach(sections) { section in
+                        DictamenGenreTable(section: section, layout: .regular)
+                    }
+                }
+                .padding(.bottom, 24)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+}
+
+struct DictamenFilters: Equatable {
+    var genre = ""
+    var level = ""
+    var academy = ""
+    var choreography = ""
+    var category = ""
+    var division = ""
+    var state = ""
+
+    var hasActiveFilters: Bool {
+        [genre, level, academy, choreography, category, division, state].contains { !$0.isEmpty }
+    }
+
+    mutating func reset() {
+        genre = ""
+        level = ""
+        academy = ""
+        choreography = ""
+        category = ""
+        division = ""
+        state = ""
+    }
+
+    func matches(_ routine: Routine) -> Bool {
+        matches(genre, routine.genre)
+            && matches(level, routine.level)
+            && matches(academy, routine.academy)
+            && matches(choreography, routine.name)
+            && matches(category, routine.category)
+            && matches(division, routine.division)
+            && matches(state, routine.state)
+    }
+
+    private func matches(_ selectedValue: String, _ routineValue: String) -> Bool {
+        selectedValue.isEmpty || selectedValue.normalizedKey == Self.displayValue(routineValue).normalizedKey
+    }
+
+    static func displayValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "SIN DATO" : trimmed
+    }
+}
+
+struct DictamenFilterOptions {
+    let genres: [String]
+    let levels: [String]
+    let academies: [String]
+    let choreographies: [String]
+    let categories: [String]
+    let divisions: [String]
+    let states: [String]
+
+    init(results: [RoutineResult]) {
+        let routines = results.map(\.routine)
+        genres = Self.options(routines.map(\.genre))
+        levels = Self.options(routines.map(\.level))
+        academies = Self.options(routines.map(\.academy))
+        choreographies = Self.options(routines.map(\.name))
+        categories = Self.options(routines.map(\.category))
+        divisions = Self.options(routines.map(\.division))
+        states = Self.options(routines.map(\.state))
+    }
+
+    private static func options(_ values: [String]) -> [String] {
+        var seen: Set<String> = []
+        return values
+            .map(DictamenFilters.displayValue)
+            .filter { value in
+                let key = value.normalizedKey
+                guard !seen.contains(key) else { return false }
+                seen.insert(key)
+                return true
+            }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+}
+
+enum DictamenBuilder {
+    static func filteredResults(_ results: [RoutineResult], filters: DictamenFilters) -> [RoutineResult] {
+        guard filters.hasActiveFilters else { return results }
+
+        return results.filter { result in
+            filters.matches(result.routine)
+        }
+    }
+
+    static func sections(from results: [RoutineResult]) -> [DictamenGenreSection] {
+        let usesCustomGenreOrder = !isBlockFour(results)
+
+        return Dictionary(grouping: results) { result in
+            clean(result.routine.genre, fallback: "SIN GÉNERO")
+        }
+        .map { genre, items in
+            let categories = Dictionary(grouping: items) { result in
+                categoryID(
+                    genre: genre,
+                    division: clean(result.routine.division, fallback: "SIN DATO"),
+                    level: clean(result.routine.level, fallback: "SIN DATO"),
+                    category: clean(result.routine.category, fallback: "SIN DATO")
+                )
+            }
+            .compactMap { _, categoryItems -> DictamenCategorySection? in
+                guard let sample = categoryItems.first?.routine else { return nil }
+                let division = clean(sample.division, fallback: "SIN DATO")
+                let level = clean(sample.level, fallback: "SIN DATO")
+                let category = clean(sample.category, fallback: "SIN DATO")
+                return DictamenCategorySection(
+                    genre: genre,
+                    division: division,
+                    level: level,
+                    category: category,
+                    title: categoryTitle(division: division, level: level, category: category),
+                    rows: rankedRows(categoryItems)
+                )
+            }
+            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+
+            return DictamenGenreSection(genre: genre, categories: categories)
+        }
+        .filter { !$0.categories.isEmpty }
+        .sorted { compareGenres($0.genre, $1.genre, usesCustomOrder: usesCustomGenreOrder) }
+    }
+
+    private static func rankedRows(_ results: [RoutineResult]) -> [DictamenStandingRow] {
+        let sortedResults = results.sorted {
+            if abs($0.aggregateTotal - $1.aggregateTotal) < 0.0001 {
+                return routineOrder($0.routine, $1.routine)
             }
             return $0.aggregateTotal > $1.aggregateTotal
         }
+
+        if sortedResults.count == 1, let result = sortedResults.first {
+            return [
+                DictamenStandingRow(
+                    result: result,
+                    placement: CompetitionPlacement.solo(for: result.aggregateTotal)
+                )
+            ]
+        }
+
+        var rows: [DictamenStandingRow] = []
+        var currentPosition = 0
+        var previousScore: Double?
+
+        for (index, result) in sortedResults.enumerated() {
+            if previousScore == nil || abs(result.aggregateTotal - (previousScore ?? 0)) >= 0.0001 {
+                currentPosition = index + 1
+                previousScore = result.aggregateTotal
+            }
+            rows.append(DictamenStandingRow(result: result, placement: .position(currentPosition)))
+        }
+
+        return rows
     }
 
-    private func isSelected(_ group: DictamenGroup) -> Bool {
-        group.id == (selectedGroup?.id ?? dictamenGroups.first?.id ?? "")
+    private static func categoryTitle(division: String, level: String, category: String) -> String {
+        var values: [String] = []
+        for value in [division, level, category] {
+            let cleaned = clean(value, fallback: "")
+            guard !cleaned.isEmpty, cleaned.normalizedKey != "SIN DATO" else { continue }
+            if !values.contains(where: { $0.normalizedKey == cleaned.normalizedKey }) {
+                values.append(cleaned)
+            }
+        }
+        return values.isEmpty ? "SIN DATO" : values.joined(separator: " ")
     }
 
-    private func emptyFallback(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "SIN DATO" : value
+    private static func categoryID(genre: String, division: String, level: String, category: String) -> String {
+        [genre, division, level, category].map(\.normalizedKey).joined(separator: "|")
+    }
+
+    private static func compareGenres(_ lhs: String, _ rhs: String, usesCustomOrder: Bool) -> Bool {
+        guard usesCustomOrder else {
+            return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+        }
+
+        let lhsPriority = genrePriority(lhs)
+        let rhsPriority = genrePriority(rhs)
+        if lhsPriority != rhsPriority {
+            return lhsPriority < rhsPriority
+        }
+        return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+    }
+
+    private static func genrePriority(_ genre: String) -> Int {
+        let key = genre.stableRemoteID
+        if key.contains("tela") {
+            return 0
+        }
+        if key.contains("aro") {
+            return 1
+        }
+        if key.contains("open") {
+            return 2
+        }
+        return 3
+    }
+
+    private static func isBlockFour(_ results: [RoutineResult]) -> Bool {
+        results.contains { result in
+            [result.routine.blockID ?? "", result.routine.block].contains { value in
+                isBlockFourIdentifier(value)
+            }
+        }
+    }
+
+    private static func isBlockFourIdentifier(_ value: String) -> Bool {
+        let tokens = value.stableRemoteID.split(separator: "-")
+        for index in tokens.indices where tokens[index] == "bloque" || tokens[index] == "block" {
+            let nextIndex = tokens.index(after: index)
+            if nextIndex < tokens.endIndex, tokens[nextIndex] == "4" {
+                return true
+            }
+        }
+        return false
+    }
+
+    private static func clean(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private static func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
+        let lhsNumber = Int(lhs.id) ?? Int.max
+        let rhsNumber = Int(rhs.id) ?? Int.max
+        if lhsNumber == rhsNumber {
+            return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+        }
+        return lhsNumber < rhsNumber
+    }
+
+    private static func searchableText(for result: RoutineResult) -> String {
+        let routine = result.routine
+        return [
+            routine.id,
+            routine.block,
+            routine.name,
+            routine.academy,
+            routine.division,
+            routine.genre,
+            routine.level,
+            routine.category,
+            routine.choreographer,
+            routine.participant ?? "",
+            routine.state,
+            result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1)))
+        ]
+        .joined(separator: " ")
     }
 }
 
-private struct DictamenGroup: Identifiable {
+struct DictamenGenreSection: Identifiable {
     let genre: String
-    let age: String
-    let amount: String
-    let results: [RoutineResult]
+    let categories: [DictamenCategorySection]
 
-    var id: String { Self.id(genre: genre, age: age, amount: amount) }
-    var title: String { "\(genre) · \(age) · \(amount)" }
-    var completedCount: Int { results.filter { $0.aggregateTotal > 0 }.count }
-    var podium: [RoutineResult] { Array(results.filter { $0.aggregateTotal > 0 }.prefix(3)) }
+    var id: String { genre.normalizedKey }
+    var rowCount: Int { categories.reduce(0) { $0 + $1.rows.count } }
+}
 
-    static func id(genre: String, age: String, amount: String) -> String {
-        [genre, age, amount].map(\.normalizedKey).joined(separator: "|")
+struct DictamenCategorySection: Identifiable {
+    let genre: String
+    let division: String
+    let level: String
+    let category: String
+    let title: String
+    let rows: [DictamenStandingRow]
+
+    var id: String {
+        [genre, division, level, category].map(\.normalizedKey).joined(separator: "|")
     }
 }
 
-private struct DictamenGroupCard: View {
-    let group: DictamenGroup
-    let isSelected: Bool
+struct DictamenStandingRow: Identifiable {
+    let result: RoutineResult
+    let placement: CompetitionPlacement
+
+    var id: String { result.id }
+    var position: Int { placement.order }
+}
+
+struct DictamenTableLayout {
+    let categoryWidth: CGFloat
+    let stateWidth: CGFloat
+    let academyWidth: CGFloat
+    let choreographyWidth: CGFloat
+    let scoreWidth: CGFloat
+    let positionWidth: CGFloat
+    let titleHeight: CGFloat
+    let headerHeight: CGFloat
+    let rowHeight: CGFloat
+    let titleFontSize: CGFloat
+    let headerFontSize: CGFloat
+    let bodyFontSize: CGFloat
+    let emphasisFontSize: CGFloat
+    let categorySpacing: CGFloat
+
+    var totalWidth: CGFloat {
+        categoryWidth + stateWidth + academyWidth + choreographyWidth + scoreWidth + positionWidth
+    }
+
+    static let regular = DictamenTableLayout(
+        categoryWidth: 140,
+        stateWidth: 112,
+        academyWidth: 270,
+        choreographyWidth: 350,
+        scoreWidth: 116,
+        positionWidth: 150,
+        titleHeight: 50,
+        headerHeight: 64,
+        rowHeight: 74,
+        titleFontSize: 25,
+        headerFontSize: 18,
+        bodyFontSize: 17,
+        emphasisFontSize: 19,
+        categorySpacing: 24
+    )
+
+    static let compact = DictamenTableLayout(
+        categoryWidth: 116,
+        stateWidth: 76,
+        academyWidth: 166,
+        choreographyWidth: 220,
+        scoreWidth: 78,
+        positionWidth: 102,
+        titleHeight: 42,
+        headerHeight: 56,
+        rowHeight: 68,
+        titleFontSize: 18,
+        headerFontSize: 12,
+        bodyFontSize: 12,
+        emphasisFontSize: 13,
+        categorySpacing: 16
+    )
+}
+
+struct DictamenGenreTable: View {
+    let section: DictamenGenreSection
+    let layout: DictamenTableLayout
+
+    private var isCompact: Bool {
+        layout.totalWidth < 900
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 10) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(group.genre)
-                        .font(.headline.weight(.black))
+        VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Género")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.white.opacity(0.68))
+                    Text(section.genre.uppercased())
+                        .font(.system(size: layout.titleFontSize, weight: .black, design: .rounded))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.72)
+                }
+
+                Spacer()
+
+                Label("\(section.rowCount)", systemImage: "person.2.fill")
+                    .font(.callout.monospacedDigit().weight(.black))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .background(.white.opacity(0.14), in: Capsule())
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, isCompact ? 14 : 18)
+            .padding(.vertical, isCompact ? 12 : 16)
+            .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .shadow(color: LevitTheme.pink.opacity(0.18), radius: 16, x: 0, y: 8)
+
+            VStack(alignment: .leading, spacing: layout.categorySpacing) {
+                ForEach(section.categories) { category in
+                    DictamenCategoryBlock(category: category, layout: layout)
+                }
+            }
+        }
+        .padding(isCompact ? 12 : 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct DictamenHeaderRow: View {
+    let layout: DictamenTableLayout
+
+    var body: some View {
+        HStack(spacing: 0) {
+            DictamenCell(text: "CATEGORIA", width: layout.categoryWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+            DictamenCell(text: "ESTADO", width: layout.stateWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+            DictamenCell(text: "ACADEMIA", width: layout.academyWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+            DictamenCell(text: "COREOGRAFÍA", width: layout.choreographyWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+            DictamenCell(text: "PUNTAJE", width: layout.scoreWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+            DictamenCell(text: "TABLA DE\nPOSICIONES", width: layout.positionWidth, height: layout.headerHeight, fill: tableHeaderFill, fontSize: layout.headerFontSize, weight: .black, lineLimit: 2)
+        }
+    }
+}
+
+private struct DictamenCategoryBlock: View {
+    let category: DictamenCategorySection
+    let layout: DictamenTableLayout
+
+    private var isCompact: Bool {
+        layout.totalWidth < 900
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(category.title.uppercased())
+                    .font(.system(size: layout.emphasisFontSize, weight: .black, design: .rounded))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+
+                Spacer()
+
+                Text("\(category.rows.count) rutinas")
+                    .font(.caption.monospacedDigit().weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(LevitTheme.softFill, in: Capsule())
+            }
+
+            VStack(alignment: .leading, spacing: isCompact ? 8 : 10) {
+                ForEach(Array(category.rows.enumerated()), id: \.element.id) { index, row in
+                    DictamenStandingRowView(row: row, rowIndex: index, layout: layout)
+                }
+            }
+        }
+        .padding(isCompact ? 10 : 12)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(LevitTheme.line))
+    }
+}
+
+private struct DictamenStandingRowView: View {
+    let row: DictamenStandingRow
+    let rowIndex: Int
+    let layout: DictamenTableLayout
+
+    private var isCompact: Bool {
+        layout.totalWidth < 900
+    }
+
+    private var routine: Routine {
+        row.result.routine
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: isCompact ? 10 : 14) {
+            DictamenRankBadge(placement: row.placement, size: isCompact ? 42 : 50)
+
+            VStack(alignment: .leading, spacing: isCompact ? 7 : 8) {
+                Text(display(routine.name))
+                    .font(.system(size: layout.emphasisFontSize, weight: .black, design: .rounded))
+                    .lineLimit(isCompact ? 2 : 1)
+                    .minimumScaleFactor(0.75)
+
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 7) {
+                        DictamenInfoPill(text: display(routine.academy), systemImage: "building.2.fill")
+                        DictamenInfoPill(text: display(routine.state).uppercased(), systemImage: "mappin.circle.fill")
+                    }
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        DictamenInfoPill(text: display(routine.academy), systemImage: "building.2.fill")
+                        DictamenInfoPill(text: display(routine.state).uppercased(), systemImage: "mappin.circle.fill")
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            DictamenScoreBadge(text: scoreText, isCompact: isCompact)
+        }
+        .padding(isCompact ? 10 : 12)
+        .foregroundStyle(LevitTheme.ink)
+        .background(row.placement.isFirstPlace ? LevitTheme.palePink.opacity(0.74) : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(row.placement.isFirstPlace ? LevitTheme.pink.opacity(0.20) : LevitTheme.line))
+    }
+
+    private var scoreText: String {
+        row.result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    private func display(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "SIN DATO" : trimmed
+    }
+}
+
+private struct DictamenRankBadge: View {
+    let placement: CompetitionPlacement
+    let size: CGFloat
+
+    var body: some View {
+        Text(placement.shortLabel)
+            .font(.system(size: placement.isParticipation ? size * 0.24 : size * 0.34, weight: .black, design: .rounded).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .foregroundStyle(placement.isFirstPlace ? .white : LevitTheme.pink)
+            .frame(width: badgeWidth, height: size)
+            .background(badgeFill, in: RoundedRectangle(cornerRadius: size / 2, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: size / 2, style: .continuous).stroke(placement.isFirstPlace ? .white.opacity(0.24) : LevitTheme.pink.opacity(0.24), lineWidth: 1))
+            .shadow(color: placement.isFirstPlace ? LevitTheme.pink.opacity(0.22) : .clear, radius: 10, x: 0, y: 6)
+    }
+
+    private var badgeWidth: CGFloat {
+        placement.isParticipation ? size * 1.32 : size
+    }
+
+    private var badgeFill: LinearGradient {
+        placement.isFirstPlace
+            ? LevitTheme.pinkGradient
+            : LinearGradient(colors: [LevitTheme.palePink, LevitTheme.palePink], startPoint: .top, endPoint: .bottom)
+    }
+}
+
+private struct DictamenInfoPill: View {
+    let text: String
+    let systemImage: String
+
+    var body: some View {
+        Label(text.uppercased(), systemImage: systemImage)
+            .font(.caption.weight(.black))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .foregroundStyle(LevitTheme.muted)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(LevitTheme.solidSurface.opacity(0.72), in: Capsule())
+            .overlay(Capsule().stroke(LevitTheme.line))
+    }
+}
+
+private struct DictamenScoreBadge: View {
+    let text: String
+    let isCompact: Bool
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 1) {
+            Text(text)
+                .font(.system(size: isCompact ? 18 : 22, weight: .black, design: .rounded).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.72)
+            Text("pts")
+                .font(.caption2.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+        }
+        .frame(width: isCompact ? 54 : 68, alignment: .trailing)
+    }
+}
+
+private struct DictamenCell: View {
+    let text: String
+    let width: CGFloat
+    let height: CGFloat
+    let fill: Color
+    let fontSize: CGFloat
+    let weight: Font.Weight
+    var lineLimit = 1
+    var textColor: Color = LevitTheme.ink
+    var borderColor: Color = tableStroke
+    var monospacedDigit = false
+
+    var body: some View {
+        Text(text)
+            .font(font)
+            .multilineTextAlignment(.center)
+            .lineLimit(lineLimit)
+            .minimumScaleFactor(0.68)
+            .foregroundStyle(textColor)
+            .padding(.horizontal, 8)
+            .frame(width: width, height: height)
+            .background(fill)
+            .overlay(Rectangle().stroke(borderColor, lineWidth: 0.72))
+    }
+
+    private var font: Font {
+        let font = Font.system(size: fontSize, weight: weight, design: .rounded)
+        return monospacedDigit ? font.monospacedDigit() : font
+    }
+}
+
+private struct DictamenScoreCell: View {
+    let text: String
+    let width: CGFloat
+    let height: CGFloat
+    let fill: Color
+    let fontSize: CGFloat
+
+    var body: some View {
+        ZStack {
+            fill
+            Text(text)
+                .font(.system(size: fontSize, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(LevitTheme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 8)
+                .frame(width: min(width - 14, 54), height: min(height - 22, 30))
+                .background(LevitTheme.solidSurface.opacity(0.68), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(LevitTheme.line))
+        }
+        .frame(width: width, height: height)
+        .overlay(Rectangle().stroke(tableStroke, lineWidth: 0.72))
+    }
+}
+
+private struct DictamenPositionCell: View {
+    let placement: CompetitionPlacement
+    let width: CGFloat
+    let height: CGFloat
+    let fill: Color
+    let fontSize: CGFloat
+
+    var body: some View {
+        ZStack {
+            fill
+            Text(placement.shortLabel)
+                .font(.system(size: placement.isParticipation ? fontSize * 0.78 : fontSize, weight: .black, design: .rounded).monospacedDigit())
+                .foregroundStyle(placement.isFirstPlace ? .white : LevitTheme.pink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 10)
+                .frame(width: min(width - 18, placement.isParticipation ? 74 : 54), height: min(height - 22, 30))
+                .background(badgeFill, in: Capsule())
+                .overlay(Capsule().stroke(placement.isFirstPlace ? .white.opacity(0.28) : LevitTheme.pink.opacity(0.26)))
+        }
+        .frame(width: width, height: height)
+        .overlay(Rectangle().stroke(tableStroke, lineWidth: 0.72))
+    }
+
+    private var badgeFill: LinearGradient {
+        placement.isFirstPlace
+            ? LevitTheme.pinkGradient
+            : LinearGradient(colors: [LevitTheme.palePink, LevitTheme.palePink], startPoint: .top, endPoint: .bottom)
+    }
+}
+
+private struct DictamenMetricPill: View {
+    let icon: String
+    let value: String
+    let title: String
+
+    var body: some View {
+        Label {
+            HStack(spacing: 5) {
+                Text(value)
+                    .font(.callout.monospacedDigit().weight(.black))
+                Text(title)
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+        } icon: {
+            Image(systemName: icon)
+                .foregroundStyle(LevitTheme.pink)
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 10)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.solidSurface, in: Capsule())
+        .overlay(Capsule().stroke(LevitTheme.line))
+    }
+}
+
+struct DictamenFilterBar: View {
+    @Binding var filters: DictamenFilters
+    let options: DictamenFilterOptions
+    var isCompact = false
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 10) {
+                filterMenus
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: isCompact ? 142 : 166), spacing: 10)], spacing: 10) {
+                filterMenus
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var filterMenus: some View {
+        DictamenFilterMenu(title: "Género", icon: "rectangle.stack.fill", selection: $filters.genre, options: options.genres, isCompact: isCompact)
+        DictamenFilterMenu(title: "Nivel", icon: "slider.horizontal.3", selection: $filters.level, options: options.levels, isCompact: isCompact)
+        DictamenFilterMenu(title: "Academia", icon: "building.2.fill", selection: $filters.academy, options: options.academies, isCompact: isCompact)
+        DictamenFilterMenu(title: "Coreografía", icon: "figure.dance", selection: $filters.choreography, options: options.choreographies, isCompact: isCompact)
+        DictamenFilterMenu(title: "Categoría", icon: "square.grid.2x2.fill", selection: $filters.category, options: options.categories, isCompact: isCompact)
+        DictamenFilterMenu(title: "División", icon: "person.2.fill", selection: $filters.division, options: options.divisions, isCompact: isCompact)
+        DictamenFilterMenu(title: "Estado", icon: "mappin.circle.fill", selection: $filters.state, options: options.states, isCompact: isCompact)
+    }
+}
+
+private struct DictamenFilterMenu: View {
+    let title: String
+    let icon: String
+    @Binding var selection: String
+    let options: [String]
+    var isCompact = false
+
+    var body: some View {
+        Menu {
+            Button {
+                selection = ""
+            } label: {
+                Label("Todos", systemImage: selection.isEmpty ? "checkmark.circle.fill" : "circle")
+            }
+
+            if !options.isEmpty {
+                Divider()
+            }
+
+            ForEach(options, id: \.self) { option in
+                Button {
+                    selection = option
+                } label: {
+                    Label(option, systemImage: option.normalizedKey == selection.normalizedKey ? "checkmark.circle.fill" : "circle")
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 18)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+                    Text(selection.isEmpty ? "Todos" : selection)
+                        .font((isCompact ? Font.caption : .callout).weight(.black))
                         .foregroundStyle(LevitTheme.ink)
                         .lineLimit(1)
-                    HStack(spacing: 6) {
-                        LevitTag(group.age)
-                        LevitTag(group.amount)
-                    }
+                        .minimumScaleFactor(0.68)
                 }
 
-                Spacer()
+                Spacer(minLength: 8)
 
-                Image(systemName: isSelected ? "trophy.fill" : "arrow.up.forward")
-                    .font(.headline.weight(.black))
-                    .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
-            }
-
-            VStack(spacing: 8) {
-                ForEach(Array(group.results.prefix(3).enumerated()), id: \.element.id) { index, result in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.caption.weight(.black))
-                            .foregroundStyle(index == 0 ? .white : LevitTheme.ink)
-                            .frame(width: 28, height: 28)
-                            .background(index == 0 ? LevitTheme.pink : LevitTheme.softFill, in: Circle())
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(result.routine.academy.isEmpty ? result.routine.name : result.routine.academy)
-                                .font(.callout.weight(.bold))
-                                .foregroundStyle(LevitTheme.ink)
-                                .lineLimit(1)
-                            Text("#\(result.routine.id) \(result.routine.name)")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(LevitTheme.muted)
-                                .lineLimit(1)
-                        }
-
-                        Spacer()
-
-                        Text(result.aggregateTotal > 0 ? result.aggregateTotal.formatted(.number.precision(.fractionLength(1))) : "-")
-                            .font(.headline.monospacedDigit().weight(.black))
-                            .foregroundStyle(LevitTheme.ink)
-                    }
-                }
-            }
-
-            Spacer(minLength: 0)
-
-            HStack {
-                Text("\(group.completedCount) / \(group.results.count) calificadas")
-                    .font(.caption.monospacedDigit().weight(.bold))
-                    .foregroundStyle(LevitTheme.muted)
-                Spacer()
-                Text("Ver podio")
+                Image(systemName: "chevron.down")
                     .font(.caption.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
+                    .foregroundStyle(LevitTheme.muted)
             }
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 190, alignment: .topLeading)
-        .background(isSelected ? LevitTheme.palePink.opacity(0.76) : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(isSelected ? LevitTheme.pink.opacity(0.34) : LevitTheme.line, lineWidth: isSelected ? 1.4 : 1))
-        .shadow(color: .black.opacity(isSelected ? 0.08 : 0.035), radius: 18, x: 0, y: 10)
+        .buttonStyle(.plain)
+        .padding(.horizontal, isCompact ? 12 : 14)
+        .padding(.vertical, isCompact ? 9 : 11)
+        .frame(minWidth: isCompact ? 142 : 166, maxWidth: isCompact ? .infinity : 196)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: isCompact ? 14 : 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: isCompact ? 14 : 16, style: .continuous).stroke(LevitTheme.line))
     }
 }
 
-private struct PodiumCard: View {
-    let result: RoutineResult?
+private struct DictamenEmptyState: View {
     let title: String
-    let rank: Int
-    let height: CGFloat
-    let color: Color
-
-    private var isWinner: Bool { rank == 1 }
+    let detail: String
 
     var body: some View {
-        VStack(spacing: 14) {
-            Text(title)
-                .font(.callout.weight(.black))
-                .foregroundStyle(isWinner ? .white.opacity(0.74) : LevitTheme.muted)
+        HStack(spacing: 14) {
+            Image(systemName: "trophy")
+                .font(.title2.weight(.bold))
+                .foregroundStyle(LevitTheme.muted)
+                .frame(width: 48, height: 48)
+                .background(LevitTheme.softFill, in: Circle())
 
-            ZStack {
-                Circle()
-                    .fill(isWinner ? Color.yellow.opacity(0.95) : LevitTheme.softFill)
-                    .frame(width: 46, height: 46)
-                Text("\(rank)")
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
                     .font(.headline.weight(.black))
-                    .foregroundStyle(isWinner ? LevitTheme.pink : LevitTheme.muted)
+                Text(detail)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
             }
-
-            Spacer()
-
-            Text(result?.routine.academy ?? "SIN RESULTADO")
-                .font(.headline.weight(.black))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(isWinner ? .white : LevitTheme.ink)
-                .lineLimit(3)
-                .minimumScaleFactor(0.75)
-
-            Text(result.map { $0.aggregateTotal.formatted(.number.precision(.fractionLength(1))) } ?? "-")
-                .font(.title2.monospacedDigit().weight(.black))
-                .foregroundStyle(isWinner ? .white : LevitTheme.ink)
         }
-        .padding(20)
-        .frame(maxWidth: 230, minHeight: height, maxHeight: height)
-        .background(isWinner ? LevitTheme.pinkGradient : LinearGradient(colors: [color, color], startPoint: .top, endPoint: .bottom), in: RoundedRectangle(cornerRadius: 20))
-        .overlay(RoundedRectangle(cornerRadius: 20).stroke(isWinner ? .white.opacity(0.28) : LevitTheme.line))
-        .shadow(color: isWinner ? LevitTheme.pink.opacity(0.24) : .black.opacity(0.04), radius: 24, x: 0, y: 12)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
     }
+}
+
+private var tableStroke: Color {
+    LevitTheme.ink.opacity(0.38)
+}
+
+private var tableHeaderFill: Color {
+    LevitTheme.palePink.opacity(0.48)
 }

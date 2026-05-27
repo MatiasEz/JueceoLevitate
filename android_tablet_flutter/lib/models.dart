@@ -57,6 +57,7 @@ class Routine {
     required this.level,
     required this.category,
     required this.choreographer,
+    required this.participant,
     required this.state,
     required this.time,
     required this.duration,
@@ -71,6 +72,7 @@ class Routine {
   final String level;
   final String category;
   final String choreographer;
+  final String participant;
   final String state;
   final String time;
   final String duration;
@@ -85,6 +87,7 @@ class Routine {
     level: json['level'] as String? ?? '',
     category: json['category'] as String? ?? '',
     choreographer: json['choreographer'] as String? ?? '',
+    participant: json['participant'] as String? ?? '',
     state: json['state'] as String? ?? '',
     time: json['scheduled_time'] as String? ?? json['time'] as String? ?? '',
     duration: json['duration'] as String? ?? '',

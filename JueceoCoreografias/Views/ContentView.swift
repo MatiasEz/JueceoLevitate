@@ -12,7 +12,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case jueceo = "Jueceo"
     case calificaciones = "Ranking en vivo"
     case dictamen = "Dictamen final"
-    case importar = "Subir Excel"
+    case importar = "Importar Excel"
 
     var id: String { rawValue }
 
@@ -146,9 +146,7 @@ struct ContentView: View {
                         case .calificaciones:
                             ScoresView(results: store.rankings, onExportPDF: exportPDF)
                         case .dictamen:
-                            DictamenView(results: store.rankings) { results, title in
-                                exportPDF(results: results, title: title)
-                            }
+                            DictamenView(results: store.rankings)
                         case .importar:
                             ExcelImportView()
                         }
@@ -408,7 +406,7 @@ private struct DashboardView: View {
                 .foregroundStyle(LevitTheme.pink)
                 .lineLimit(1)
                 .minimumScaleFactor(0.55)
-            Text("Estás lista para calificar.\n¡Que comience el flow!")
+            Text("¡Que comience el flow!")
                 .font((isPhoneLandscape ? Font.callout : .title3).weight(.medium))
                 .foregroundStyle(LevitTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -616,6 +614,10 @@ struct LevitBrand: View {
 struct EventPill: View {
     @EnvironmentObject private var store: JudgingStore
     var isCompact = false
+    @State private var eventPendingDeletion: EventSummary?
+    @State private var deleteImportSecret = ""
+    @State private var isDeletingEvent = false
+    @State private var deleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -638,6 +640,23 @@ struct EventPill: View {
             } label: {
                 Label("Actualizar eventos", systemImage: "arrow.clockwise")
             }
+
+            if !store.availableEvents.isEmpty && store.isAdmin {
+                Divider()
+
+                Menu {
+                    ForEach(store.availableEvents) { event in
+                        Button(role: .destructive) {
+                            eventPendingDeletion = event
+                            deleteImportSecret = ""
+                        } label: {
+                            Label(event.name, systemImage: "trash")
+                        }
+                    }
+                } label: {
+                    Label("Borrar programa", systemImage: "trash")
+                }
+            }
         } label: {
             VStack(alignment: .leading, spacing: isCompact ? 1 : 4) {
                 HStack(spacing: 6) {
@@ -656,11 +675,61 @@ struct EventPill: View {
             }
             .foregroundStyle(LevitTheme.ink)
         }
+        .alert("Borrar programa", isPresented: Binding(
+            get: { eventPendingDeletion != nil },
+            set: { if !$0 { resetPendingDeletion() } }
+        )) {
+            SecureField("Clave de importación", text: $deleteImportSecret)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+
+            Button("Borrar", role: .destructive) {
+                Task { await deletePendingEvent() }
+            }
+            .disabled(deleteImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingEvent)
+
+            Button("Cancelar", role: .cancel) {
+                resetPendingDeletion()
+            }
+        } message: {
+            Text("Se va a quitar \(eventPendingDeletion?.name ?? "este programa") de la lista online.")
+        }
+        .alert("No se pudo borrar", isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: { if !$0 { deleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                deleteErrorMessage = nil
+            }
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
     }
 
     private var currentTitle: String {
         store.availableEvents.first { $0.id == store.selectedEventID }?.name
             ?? (store.blocks.first?.name.capitalized ?? "Bloque")
+    }
+
+    @MainActor
+    private func deletePendingEvent() async {
+        guard let event = eventPendingDeletion else { return }
+        let secret = deleteImportSecret
+        isDeletingEvent = true
+        defer { isDeletingEvent = false }
+
+        do {
+            try await store.deleteEvent(event, importSecret: secret)
+            resetPendingDeletion()
+        } catch {
+            resetPendingDeletion()
+            deleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetPendingDeletion() {
+        eventPendingDeletion = nil
+        deleteImportSecret = ""
     }
 }
 
@@ -707,6 +776,9 @@ struct JudgePill: View {
     @Binding var addingJudge: Bool
     var isCompact = false
     @State private var judgePendingDeletion: String?
+    @State private var deleteJudgeImportSecret = ""
+    @State private var isDeletingJudge = false
+    @State private var judgeDeleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -729,6 +801,7 @@ struct JudgePill: View {
                     ForEach(store.deletableJudges, id: \.self) { judge in
                         Button(role: .destructive) {
                             judgePendingDeletion = judge
+                            deleteJudgeImportSecret = ""
                         } label: {
                             Label(judge, systemImage: "trash")
                         }
@@ -772,20 +845,58 @@ struct JudgePill: View {
         }
         .alert("Borrar juez", isPresented: Binding(
             get: { judgePendingDeletion != nil },
-            set: { if !$0 { judgePendingDeletion = nil } }
+            set: { if !$0 { resetPendingJudgeDeletion() } }
         )) {
-            Button("Borrar", role: .destructive) {
-                if let judgePendingDeletion {
-                    store.deleteJudge(judgePendingDeletion)
-                }
-                judgePendingDeletion = nil
+            if store.hasRemoteConfiguration {
+                SecureField("Clave de importación", text: $deleteJudgeImportSecret)
+                    .textInputAutocapitalization(.never)
+                    .disableAutocorrection(true)
             }
+
+            Button("Borrar", role: .destructive) {
+                Task { await deletePendingJudge() }
+            }
+            .disabled((store.hasRemoteConfiguration && deleteJudgeImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || isDeletingJudge)
+
             Button("Cancelar", role: .cancel) {
-                judgePendingDeletion = nil
+                resetPendingJudgeDeletion()
             }
         } message: {
-            Text("Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
+            Text(store.hasRemoteConfiguration
+                ? "Se va a borrar \(judgePendingDeletion ?? "este juez") del programa actual. También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos."
+                : "Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
         }
+        .alert("No se pudo borrar", isPresented: Binding(
+            get: { judgeDeleteErrorMessage != nil },
+            set: { if !$0 { judgeDeleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                judgeDeleteErrorMessage = nil
+            }
+        } message: {
+            Text(judgeDeleteErrorMessage ?? "")
+        }
+    }
+
+    @MainActor
+    private func deletePendingJudge() async {
+        guard let judge = judgePendingDeletion else { return }
+        let secret = deleteJudgeImportSecret
+        isDeletingJudge = true
+        defer { isDeletingJudge = false }
+
+        do {
+            try await store.deleteJudge(judge, importSecret: secret)
+            resetPendingJudgeDeletion()
+        } catch {
+            resetPendingJudgeDeletion()
+            judgeDeleteErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func resetPendingJudgeDeletion() {
+        judgePendingDeletion = nil
+        deleteJudgeImportSecret = ""
     }
 }
 
@@ -965,9 +1076,41 @@ struct DashboardBackground: View {
 }
 
 struct DashboardHeroBackground: View {
+    @EnvironmentObject private var store: JudgingStore
     @Environment(\.colorScheme) private var colorScheme
 
     let widthFraction: CGFloat
+
+    private let judgeHeroImages = [
+        ("alex", "JudgeHeroAlex"),
+        ("angela", "JudgeHeroAngela"),
+        ("daniel", "JudgeHeroDaniel"),
+        ("vladimir", "JudgeHeroVladimir"),
+        ("yoli", "JudgeHeroYoli")
+    ]
+
+    private var heroImageName: String {
+        let judgeID = store.scoringJudge.stableRemoteID
+        let judgeTokens = Set(judgeID.split(separator: "-").map(String.init))
+        if let configuredImageName = store.judgeProfiles
+            .first(where: { $0.judgeID == judgeID || $0.name.normalizedKey == store.scoringJudge.normalizedKey })?
+            .heroImageName?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !configuredImageName.isEmpty {
+            return configuredImageName
+        }
+        if let exactMatch = judgeHeroImages.first(where: { $0.0 == judgeID }) {
+            return exactMatch.1
+        }
+        if let tokenMatch = judgeHeroImages.first(where: { judgeTokens.contains($0.0) }) {
+            return tokenMatch.1
+        }
+        return "LevitateDancerHero"
+    }
+
+    private var showsHeroImage: Bool {
+        store.role(for: store.scoringJudge) != .admin
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -976,44 +1119,47 @@ struct DashboardHeroBackground: View {
             ZStack(alignment: .trailing) {
                 Color.clear
 
-                Image("LevitateDancerHero")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: imageWidth, height: proxy.size.height, alignment: .trailing)
-                    .clipped()
+                if showsHeroImage {
+                    Image(heroImageName)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(width: imageWidth, height: proxy.size.height, alignment: .trailing)
+                        .clipped()
+                        .id(heroImageName)
 
-                LinearGradient(
-                    colors: [
-                        LevitTheme.paper.opacity(colorScheme == .dark ? 0.98 : 0.88),
-                        LevitTheme.paper.opacity(colorScheme == .dark ? 0.72 : 0.50),
-                        .clear
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(width: imageWidth, height: proxy.size.height)
+                    LinearGradient(
+                        colors: [
+                            LevitTheme.paper.opacity(colorScheme == .dark ? 0.98 : 0.88),
+                            LevitTheme.paper.opacity(colorScheme == .dark ? 0.72 : 0.50),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: imageWidth, height: proxy.size.height)
 
-                LinearGradient(
-                    colors: [
-                        .clear,
-                        .clear,
-                        LevitTheme.paper.opacity(colorScheme == .dark ? 0.96 : 0.82)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .frame(width: imageWidth, height: proxy.size.height)
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .clear,
+                            LevitTheme.paper.opacity(colorScheme == .dark ? 0.96 : 0.82)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(width: imageWidth, height: proxy.size.height)
 
-                RadialGradient(
-                    colors: [
-                        LevitTheme.pink.opacity(colorScheme == .dark ? 0.20 : 0.14),
-                        .clear
-                    ],
-                    center: .trailing,
-                    startRadius: 70,
-                    endRadius: max(360, imageWidth * 0.70)
-                )
-                .frame(width: imageWidth, height: proxy.size.height)
+                    RadialGradient(
+                        colors: [
+                            LevitTheme.pink.opacity(colorScheme == .dark ? 0.20 : 0.14),
+                            .clear
+                        ],
+                        center: .trailing,
+                        startRadius: 70,
+                        endRadius: max(360, imageWidth * 0.70)
+                    )
+                    .frame(width: imageWidth, height: proxy.size.height)
+                }
             }
         }
         .allowsHitTesting(false)

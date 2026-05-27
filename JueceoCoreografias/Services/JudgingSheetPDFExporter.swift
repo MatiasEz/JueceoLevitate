@@ -720,16 +720,26 @@ enum JudgingSheetPDFExporter {
         context.restoreGState()
     }
 
-    private static func drawBrandLogo(in rect: CGRect, alpha: CGFloat = 1) {
-        guard let image = UIImage(named: "LevitateLogo"),
-              let context = UIGraphicsGetCurrentContext()
-        else {
+    private static func drawBrandLogo(in rect: CGRect, alpha: CGFloat = 1, color: UIColor = Theme.white) {
+        guard let context = UIGraphicsGetCurrentContext() else {
             return
         }
 
         context.saveGState()
         context.setAlpha(alpha)
-        image.draw(in: aspectFit(image.size, in: rect))
+        if let image = UIImage(named: "LevitateLogo") {
+            image.withTintColor(color, renderingMode: .alwaysOriginal)
+                .draw(in: aspectFit(image.size, in: rect))
+        } else {
+            drawText(
+                "Levitate",
+                in: rect,
+                size: min(rect.height * 0.72, 42),
+                weight: .black,
+                color: color,
+                alignment: .left
+            )
+        }
         context.restoreGState()
     }
 

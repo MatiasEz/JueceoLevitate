@@ -14,6 +14,59 @@ enum UserRole: String, Codable, Sendable {
     case admin
 }
 
+enum CompetitionPlacement: Equatable, Sendable {
+    case position(Int)
+    case participation
+
+    var order: Int {
+        switch self {
+        case let .position(value):
+            value
+        case .participation:
+            4
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case let .position(value):
+            "\(value)°"
+        case .participation:
+            "PART."
+        }
+    }
+
+    var tableLabel: String {
+        switch self {
+        case let .position(value):
+            "\(value)°"
+        case .participation:
+            "PARTICIPACIÓN"
+        }
+    }
+
+    var isFirstPlace: Bool {
+        self == .position(1)
+    }
+
+    var isParticipation: Bool {
+        self == .participation
+    }
+
+    static func solo(for score: Double) -> CompetitionPlacement {
+        if score >= 181 {
+            return .position(1)
+        }
+        if score >= 161 {
+            return .position(2)
+        }
+        if score >= 141 {
+            return .position(3)
+        }
+        return .participation
+    }
+}
+
 enum FavoriteCategory: String, CaseIterable, Identifiable, Codable, Sendable {
     case costume
     case choreography
@@ -43,6 +96,14 @@ struct JudgeProfile: Codable, Identifiable, Hashable, Sendable {
     let judgeID: String
     let name: String
     let role: UserRole
+    let heroImageName: String?
+
+    init(judgeID: String, name: String, role: UserRole, heroImageName: String? = nil) {
+        self.judgeID = judgeID
+        self.name = name
+        self.role = role
+        self.heroImageName = heroImageName
+    }
 }
 
 struct DanceBlock: Codable, Identifiable, Sendable {
@@ -66,6 +127,7 @@ struct Routine: Codable, Identifiable, Hashable, Sendable {
     let level: String
     let category: String
     let choreographer: String
+    let participant: String?
     let state: String
     let time: String
     let duration: String
@@ -154,10 +216,14 @@ struct ExcelImportSummary: Sendable {
     let eventName: String
     let eventSlug: String
     let fileSize: Int
+    let eventID: String?
+    let routineCount: Int?
 }
 
 enum ExcelImportError: LocalizedError {
     case missingRemoteConfiguration
+    case missingImportSecret
+    case notAllowed
     case invalidFile
     case fileTooLarge(maxMegabytes: Int)
 
@@ -165,10 +231,68 @@ enum ExcelImportError: LocalizedError {
         switch self {
         case .missingRemoteConfiguration:
             "Supabase no está configurado."
+        case .missingImportSecret:
+            "Falta la clave de importación."
+        case .notAllowed:
+            "Solo un admin puede importar Excel."
         case .invalidFile:
             "No se pudo leer el Excel seleccionado."
         case let .fileTooLarge(maxMegabytes):
             "El archivo supera el máximo de \(maxMegabytes) MB."
+        }
+    }
+}
+
+enum EventDeletionError: LocalizedError {
+    case missingRemoteConfiguration
+    case missingImportSecret
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .missingImportSecret:
+            "Ingresá la clave de importación para borrar el programa."
+        case .notAllowed:
+            "Solo un admin puede borrar programas."
+        }
+    }
+}
+
+enum RoutineDeletionError: LocalizedError {
+    case missingRemoteConfiguration
+    case missingSelectedEvent
+    case missingImportSecret
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de borrar una coreografía."
+        case .missingImportSecret:
+            "Ingresá la clave de importación para borrar la coreografía."
+        case .notAllowed:
+            "Solo un admin puede borrar coreografías."
+        }
+    }
+}
+
+enum JudgeDeletionError: LocalizedError {
+    case missingSelectedEvent
+    case missingImportSecret
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de borrar un juez."
+        case .missingImportSecret:
+            "Ingresá la clave de importación para borrar el juez."
+        case .notAllowed:
+            "Solo un admin puede borrar jueces."
         }
     }
 }

@@ -165,6 +165,7 @@ def migrate(args: argparse.Namespace) -> None:
                     "level": routine.get("level", ""),
                     "category": routine.get("category", ""),
                     "choreographer": routine.get("choreographer", ""),
+                    "participant": routine.get("participant", ""),
                     "state": routine.get("state", ""),
                     "scheduled_time": routine.get("scheduled_time", ""),
                     "duration": routine.get("duration", ""),

@@ -208,6 +208,32 @@ class JudgingStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> deleteRoutine(Routine routine, String importSecret) async {
+    final event = selectedEvent;
+    final cleanSecret = importSecret.trim();
+    if (!api.isConfigured || event == null || event.id.isEmpty) {
+      throw StateError('Elegí un programa online antes de borrar.');
+    }
+    if (cleanSecret.isEmpty) {
+      throw StateError('Ingresá la clave de importación.');
+    }
+
+    syncState = SyncState.syncing;
+    syncMessage = 'Borrando #${routine.id} ${routine.name}...';
+    notifyListeners();
+
+    await api.deleteRoutine(
+      eventID: event.id,
+      routineID: routine.id,
+      importSecret: cleanSecret,
+    );
+    await _purgeRoutineState(routine.id);
+    await selectEvent(event);
+    syncState = pendingCount > 0 ? SyncState.pending : SyncState.online;
+    syncMessage = '#${routine.id} ${routine.name} borrada.';
+    notifyListeners();
+  }
+
   Future<void> submitScores(
     Routine routine,
     Map<int, double> values, {
@@ -367,6 +393,26 @@ class JudgingStore extends ChangeNotifier {
       'pendingPenaltyKeys',
       pendingPenaltyKeys.toList()..sort(),
     );
+  }
+
+  Future<void> _purgeRoutineState(String routineId) async {
+    appData?.routines.removeWhere((routine) => routine.id == routineId);
+    for (final block in appData?.blocks ?? const <DanceBlock>[]) {
+      block.routines.removeWhere((routine) => routine.id == routineId);
+    }
+    if (selectedRoutineId == routineId) {
+      selectedRoutineId = routines.isEmpty ? '' : routines.first.id;
+      await _prefs?.setString('selectedRoutineId', selectedRoutineId);
+    }
+
+    scores.removeWhere((key, _) => key.split('::').first == routineId);
+    feedback.removeWhere((key, _) => key.split('::').first == routineId);
+    penalties.removeWhere((key, _) => key.split('::').first == routineId);
+    pendingScoreKeys.removeWhere((key) => key.split('::').first == routineId);
+    pendingFeedbackKeys
+        .removeWhere((key) => key.split('::').first == routineId);
+    pendingPenaltyKeys.removeWhere((key) => key.split('::').first == routineId);
+    await _persistAll();
   }
 
   Map<String, double> _decodeDoubleMap(String raw) {

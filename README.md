@@ -33,7 +33,7 @@ xcodebuild archive \
 
 La distribucion publica fuera del Mac App Store requiere certificado `Developer ID Application` y notarizacion de Apple antes de subir el `.dmg` a la web.
 
-## Cargar otro Excel
+## Cargar otro Excel local
 
 Para reemplazar el contenido base por otro Excel con la misma estructura:
 
@@ -59,6 +59,23 @@ python3 scripts/import_excel_to_app_data.py "/ruta/Bloque3.xlsx" --supabase --ev
 
 El importador reemplaza solo el bloque incluido en el Excel y corta si ese bloque ya tiene puntajes o feedback. Para un reset admin deliberado, usa `--force-replace`.
 
+## Importar Excel desde la app
+
+La pestaña `Importar Excel` ya no deja el archivo en cola. La app llama a la Edge Function `import-excel`, la Function procesa el `.xlsx` en Supabase con permisos admin y devuelve el evento creado para que la Home lo refresque al momento.
+
+Para habilitarlo en Supabase:
+
+```bash
+supabase login
+supabase link --project-ref bozkbpirrwjtpmjqcexx
+supabase secrets set IMPORT_SECRET="una-clave-larga-para-admins"
+supabase functions deploy import-excel
+```
+
+La app pide esa `IMPORT_SECRET` como `Clave de importación`. Solo aparece la seccion a usuarios admin de la app, y la Function vuelve a validar la clave antes de escribir en `events`, `blocks`, `routines`, `judges` y `criteria`. No pongas la service role key dentro de la app.
+
+El flujo legacy sigue disponible para cargas manuales: `scripts/process_excel_imports.py` procesa filas pendientes de `excel_imports`, pero ya no es el camino principal desde la app.
+
 ## Backend Supabase
 
 La migracion inicial esta en `supabase/migrations/0001_initial_schema.sql`. Crea las tablas `events`, `routines`, `judges`, `criteria_templates`, `criteria`, `scores` y `feedback`.
@@ -81,17 +98,17 @@ Los favoritos de vestuario/coreografia/musica se guardan en `supabase/migrations
 
 Las penalizaciones por rutina y juez se guardan en `supabase/migrations/0006_routine_penalties.sql` y se aplican al total final.
 
+La columna `participant` para guardar el/la participante del programa esta en `supabase/migrations/0007_routine_participants.sql`.
+
 La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback/penalizaciones/favoritos pendientes.
 
-La tab `Excel` sube archivos a `excel_imports` como importaciones pendientes. Para habilitarla, corre tambien `supabase/migrations/0002_excel_imports.sql`. Luego procesa esas cargas con una key admin:
+La importacion directa desde la app requiere la Edge Function `supabase/functions/import-excel`, `supabase/config.toml` desplegado con `verify_jwt = false`, y el secreto `IMPORT_SECRET` configurado en Supabase.
 
-```bash
-python3 scripts/process_excel_imports.py --allow-errors
-```
+Para Excels que son solo programa (bloques/rutinas sin hojas de jueceo), el importador completa plantillas desde `JueceoCoreografias/Resources/Bloque2.xlsx` por defecto. Se puede cambiar con `--template-source`.
 
 ## Exportar a Google Drive
 
-El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `Levitate CDMX 2026`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` se lee desde Supabase/local y se resta del total.
+El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `FEEDBACK LEVITATE MX`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` se lee desde Supabase/local y se resta del total.
 
 Para habilitarlo:
 

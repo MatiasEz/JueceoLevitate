@@ -1,0 +1,11 @@
+[functions.import-excel]
+verify_jwt = false
+
+[functions.archive-event]
+verify_jwt = false
+
+[functions.delete-routine]
+verify_jwt = false
+
+[functions.delete-judge]
+verify_jwt = false

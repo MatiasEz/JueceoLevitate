@@ -9,7 +9,7 @@ enum ScoreSheetPDFExporter {
         blockName: String,
         academyName: String?,
         fileName: String,
-        positions: [String: Int],
+        positions: [String: CompetitionPlacement],
         templateForRoutine: (Routine) -> JudgingTemplate,
         scoreForCriterion: (Routine, String, Criterion) -> Double,
         penaltyForRoutine: (Routine, String) -> Double
@@ -219,7 +219,7 @@ enum ScoreSheetPDFExporter {
         result: RoutineResult,
         judges: [String],
         criteria: [Criterion],
-        position: Int?,
+        position: CompetitionPlacement?,
         y: CGFloat,
         page: CGRect,
         margin: CGFloat,
@@ -265,7 +265,7 @@ enum ScoreSheetPDFExporter {
             x += metrics.scoreWidth
             drawCell(rect: CGRect(x: x, y: rowY, width: metrics.penaltyWidth, height: Layout.rowHeight), text: isFirstJudge && aggregatePenalty != 0 ? formatScore(aggregatePenalty) : "", fill: fill, fontSize: 6.9, weight: .bold)
             x += metrics.penaltyWidth
-            drawCell(rect: CGRect(x: x, y: rowY, width: metrics.positionWidth, height: Layout.rowHeight), text: isFirstJudge ? positionText(position, aggregate: aggregate) : "", fill: fill, fontSize: 6.9, weight: .bold)
+            drawCell(rect: CGRect(x: x, y: rowY, width: metrics.positionWidth, height: Layout.rowHeight), text: isFirstJudge ? positionText(position, aggregate: aggregate) : "", fill: fill, fontSize: position?.isParticipation == true ? 5.5 : 6.9, weight: .bold)
         }
     }
 
@@ -283,9 +283,9 @@ enum ScoreSheetPDFExporter {
         }
     }
 
-    private static func positionText(_ position: Int?, aggregate: Double) -> String {
+    private static func positionText(_ position: CompetitionPlacement?, aggregate: Double) -> String {
         guard aggregate > 0, let position else { return "" }
-        return "\(position)°"
+        return position.shortLabel
     }
 
     private static func sectionSpans(for criteria: [Criterion]) -> [(title: String, start: Int, count: Int)] {
@@ -394,6 +394,7 @@ enum ScoreSheetPDFExporter {
         level: "",
         category: "",
         choreographer: "",
+        participant: nil,
         state: "",
         time: "",
         duration: ""

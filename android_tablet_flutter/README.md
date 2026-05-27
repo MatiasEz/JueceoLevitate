@@ -1,4 +1,4 @@
-# Jueceo Coreografias Android Tablet
+# Levitate Android Tablet
 
 Companion Flutter app for Android tablets. It uses the same Supabase schema as the iPad app and keeps the same core workflow: event, judge, routines, score sheet, feedback, scores, dictamen and PDF share.
 
