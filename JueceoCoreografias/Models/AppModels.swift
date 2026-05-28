@@ -303,6 +303,20 @@ enum JudgeDeletionError: LocalizedError {
     }
 }
 
+enum JudgeSaveError: LocalizedError {
+    case missingSelectedEvent
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de agregar un juez."
+        case .notAllowed:
+            "Solo un admin puede agregar jueces."
+        }
+    }
+}
+
 enum SyncStatus: Equatable, Sendable {
     case localOnly
     case connecting

@@ -264,12 +264,42 @@ final class JudgingStore: ObservableObject {
             ?? JudgingTemplate(genre: "General", title: "Hoja de jueceo", maxScore: 0, criteria: [])
     }
 
-    func addJudge(_ name: String) {
+    @discardableResult
+    func addJudge(_ name: String) async throws -> String? {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        guard !cleanName.isEmpty, !appData.judges.contains(cleanName) else { return }
+        guard !cleanName.isEmpty, !appData.judges.contains(cleanName) else { return nil }
+        let role: UserRole = cleanName.stableRemoteID == "ati" ? .admin : .judge
+
+        if let remoteRepository {
+            guard isAdmin else {
+                throw JudgeSaveError.notAllowed
+            }
+            guard let eventID = selectedEventID else {
+                throw JudgeSaveError.missingSelectedEvent
+            }
+
+            syncStatus = .syncing
+            syncMessage = "Agregando juez \(cleanName)..."
+            let response = try await remoteRepository.upsertJudge(
+                eventID: eventID,
+                judgeID: cleanName.stableRemoteID,
+                name: cleanName,
+                role: role
+            )
+            let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+            applyRemoteBundle(bundle)
+            await syncPending()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            let savedName = response.judgeName.isEmpty ? cleanName : response.judgeName
+            syncMessage = "Juez \(savedName) agregado."
+            selectJudge(savedName)
+            return savedName
+        }
+
         appData.judges.append(cleanName)
-        appendOrUpdateJudgeProfile(name: cleanName, role: cleanName.stableRemoteID == "ati" ? .admin : .judge)
+        appendOrUpdateJudgeProfile(name: cleanName, role: role)
         selectJudge(cleanName)
+        return cleanName
     }
 
     func canDeleteJudge(_ judge: String) -> Bool {
@@ -289,10 +319,22 @@ final class JudgingStore: ObservableObject {
 
             syncStatus = .syncing
             syncMessage = "Borrando juez \(judge)..."
-            let response = try await remoteRepository.deleteJudge(
-                eventID: eventID,
-                judgeID: judge.stableRemoteID
-            )
+            let response: JudgeDeleteResponse
+            do {
+                response = try await remoteRepository.deleteJudge(
+                    eventID: eventID,
+                    judgeID: judge.stableRemoteID
+                )
+            } catch RemoteJudgingError.http(let status, let detail)
+                where status == 404 && detail.localizedCaseInsensitiveContains("No se encontro el juez") {
+                purgeLocalState(forJudge: judge)
+                let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+                applyRemoteBundle(bundle)
+                await syncPending()
+                syncStatus = pendingSyncCount > 0 ? .pending : .online
+                syncMessage = "Juez \(judge) quitado localmente; no existía en Supabase."
+                return
+            }
 
             purgeLocalState(forJudge: judge)
             let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
@@ -318,36 +360,36 @@ final class JudgingStore: ObservableObject {
 
         scores = scores.filter { key, _ in
             guard let parsed = parseScoreKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         feedback = feedback.filter { key, _ in
             guard let parsed = parseFeedbackKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         penalties = penalties.filter { key, _ in
             guard let parsed = parsePenaltyKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         favoriteSelections = favoriteSelections.filter { key, _ in
             guard let parsed = parseFavoriteKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(parsed.eventID == currentDataScopeKey && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
 
         pendingScoreKeys = pendingScoreKeys.filter { key in
             guard let parsed = parseScoreKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         pendingFeedbackKeys = pendingFeedbackKeys.filter { key in
             guard let parsed = parseFeedbackKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         pendingPenaltyKeys = pendingPenaltyKeys.filter { key in
             guard let parsed = parsePenaltyKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(isCurrentDataScope(parsed.eventID) && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         pendingFavoriteKeys = pendingFavoriteKeys.filter { key in
             guard let parsed = parseFavoriteKey(key) else { return true }
-            return !matchesJudgeKey(parsed.judgeKey, judge: judge)
+            return !(parsed.eventID == currentDataScopeKey && matchesJudgeKey(parsed.judgeKey, judge: judge))
         }
         persistPendingScoreKeys()
         persistPendingFeedbackKeys()
@@ -427,23 +469,33 @@ final class JudgingStore: ObservableObject {
     }
 
     func scoreKey(routineID: String, judge: String, criterionID: Int) -> String {
-        "\(routineID)::\(judge.normalizedKey)::\(criterionID)"
+        "\(currentDataScopeKey)::\(routineID)::\(judge.normalizedKey)::\(criterionID)"
     }
 
     func feedbackKey(routineID: String, judge: String) -> String {
-        "\(routineID)::\(judge.normalizedKey)"
+        "\(currentDataScopeKey)::\(routineID)::\(judge.normalizedKey)"
     }
 
     func penaltyKey(routineID: String, judge: String) -> String {
-        "\(routineID)::\(judge.normalizedKey)"
+        "\(currentDataScopeKey)::\(routineID)::\(judge.normalizedKey)"
     }
 
     func score(for routine: Routine, judge: String, criterion: Criterion) -> Double {
-        scores[scoreKey(routineID: routine.id, judge: judge, criterionID: criterion.id)] ?? 0
+        scores[scoreKey(routineID: routine.id, judge: judge, criterionID: criterion.id)]
+            ?? scores[legacyScoreKey(routineID: routine.id, judge: judge, criterionID: criterion.id)]
+            ?? 0
+    }
+
+    func feedbackBody(for routine: Routine, judge: String) -> String {
+        feedback[feedbackKey(routineID: routine.id, judge: judge)]
+            ?? feedback[legacyFeedbackKey(routineID: routine.id, judge: judge)]
+            ?? ""
     }
 
     func penalty(for routine: Routine, judge: String) -> Double {
-        penalties[penaltyKey(routineID: routine.id, judge: judge)] ?? 0
+        penalties[penaltyKey(routineID: routine.id, judge: judge)]
+            ?? penalties[legacyPenaltyKey(routineID: routine.id, judge: judge)]
+            ?? 0
     }
 
     func setScore(_ value: Double, routine: Routine, judge: String, criterion: Criterion) {
@@ -621,70 +673,75 @@ final class JudgingStore: ObservableObject {
 
         syncStatus = .syncing
         do {
-            let scoreRows = pendingScoreKeys.compactMap { key -> ScoreUpsertRow? in
+            let scoreUploads = pendingScoreKeys.compactMap { key -> (key: String, row: ScoreUpsertRow)? in
                 guard
                     let parsed = parseScoreKey(key),
                     let value = scores[key],
-                    judgeName(forNormalizedKey: parsed.judgeKey) != nil
-                else {
-                    return nil
-                }
-                return ScoreUpsertRow(
-                    eventID: eventID,
-                    routineID: parsed.routineID,
-                    judgeID: parsed.judgeKey.stableRemoteID,
-                    criterionID: parsed.criterionID,
-                    value: value,
-                    deviceID: deviceID
-                )
-            }
-            if !scoreRows.isEmpty {
-                try await remoteRepository.upsertScores(scoreRows)
-                pendingScoreKeys.subtract(scoreRows.map { scoreKey(routineID: $0.routineID, judge: $0.judgeID, criterionID: $0.criterionID) })
-                pendingScoreKeys.removeAll()
-                persistPendingScoreKeys()
-            }
-
-            let feedbackRows = pendingFeedbackKeys.compactMap { key -> FeedbackUpsertRow? in
-                guard
-                    let parsed = parseFeedbackKey(key),
+                    keyEventMatchesCurrentSelection(parsed.eventID, selectedEventID: eventID),
                     let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
                 else {
                     return nil
                 }
-                return FeedbackUpsertRow(
+                return (key, ScoreUpsertRow(
+                    eventID: eventID,
+                    routineID: parsed.routineID,
+                    judgeID: judgeName.stableRemoteID,
+                    criterionID: parsed.criterionID,
+                    value: value,
+                    deviceID: deviceID
+                ))
+            }
+            let scoreRows = scoreUploads.map { $0.row }
+            if !scoreRows.isEmpty {
+                try await remoteRepository.upsertScores(scoreRows)
+                pendingScoreKeys.subtract(scoreUploads.map { $0.key })
+                persistPendingScoreKeys()
+            }
+
+            let feedbackUploads = pendingFeedbackKeys.compactMap { key -> (key: String, row: FeedbackUpsertRow)? in
+                guard
+                    let parsed = parseFeedbackKey(key),
+                    keyEventMatchesCurrentSelection(parsed.eventID, selectedEventID: eventID),
+                    let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
+                else {
+                    return nil
+                }
+                return (key, FeedbackUpsertRow(
                     eventID: eventID,
                     routineID: parsed.routineID,
                     judgeID: judgeName.stableRemoteID,
                     body: feedback[key] ?? "",
                     deviceID: deviceID
-                )
+                ))
             }
+            let feedbackRows = feedbackUploads.map { $0.row }
             if !feedbackRows.isEmpty {
                 try await remoteRepository.upsertFeedback(feedbackRows)
-                pendingFeedbackKeys.removeAll()
+                pendingFeedbackKeys.subtract(feedbackUploads.map { $0.key })
                 persistPendingFeedbackKeys()
             }
 
-            let penaltyRows = pendingPenaltyKeys.compactMap { key -> PenaltyUpsertRow? in
+            let penaltyUploads = pendingPenaltyKeys.compactMap { key -> (key: String, row: PenaltyUpsertRow)? in
                 guard
                     let parsed = parsePenaltyKey(key),
+                    keyEventMatchesCurrentSelection(parsed.eventID, selectedEventID: eventID),
                     let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
                 else {
                     return nil
                 }
-                return PenaltyUpsertRow(
+                return (key, PenaltyUpsertRow(
                     eventID: eventID,
                     blockID: blockID(forRoutineID: parsed.routineID),
                     routineID: parsed.routineID,
                     judgeID: judgeName.stableRemoteID,
                     value: penalties[key] ?? 0,
                     deviceID: deviceID
-                )
+                ))
             }
+            let penaltyRows = penaltyUploads.map { $0.row }
             if !penaltyRows.isEmpty {
                 try await remoteRepository.upsertPenalties(penaltyRows)
-                pendingPenaltyKeys.removeAll()
+                pendingPenaltyKeys.subtract(penaltyUploads.map { $0.key })
                 persistPendingPenaltyKeys()
             }
 
@@ -1067,6 +1124,7 @@ final class JudgingStore: ObservableObject {
         }
 
         let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
+        removeSyncedCacheForCurrentEvent()
         for remoteScore in bundle.scores {
             guard let judge = judgeNamesByID[remoteScore.judgeID] else { continue }
             let key = scoreKey(routineID: remoteScore.routineID, judge: judge, criterionID: remoteScore.criterionID)
@@ -1153,6 +1211,21 @@ final class JudgingStore: ObservableObject {
         Task { await syncPending() }
     }
 
+    private func removeSyncedCacheForCurrentEvent() {
+        scores = scores.filter { key, _ in
+            guard let parsed = parseScoreKey(key), isCurrentDataScope(parsed.eventID) else { return true }
+            return pendingScoreKeys.contains(key)
+        }
+        feedback = feedback.filter { key, _ in
+            guard let parsed = parseFeedbackKey(key), isCurrentDataScope(parsed.eventID) else { return true }
+            return pendingFeedbackKeys.contains(key)
+        }
+        penalties = penalties.filter { key, _ in
+            guard let parsed = parsePenaltyKey(key), isCurrentDataScope(parsed.eventID) else { return true }
+            return pendingPenaltyKeys.contains(key)
+        }
+    }
+
     private func purgeLocalState(forRoutineID routineID: String) {
         appData.routines.removeAll { $0.id == routineID }
         appData.blocks = appData.blocks.map { block in
@@ -1171,30 +1244,40 @@ final class JudgingStore: ObservableObject {
         }
 
         scores = scores.filter { entry in
-            parseScoreKey(entry.key)?.routineID != routineID
+            guard let parsed = parseScoreKey(entry.key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         }
         feedback = feedback.filter { entry in
-            parseFeedbackKey(entry.key)?.routineID != routineID
+            guard let parsed = parseFeedbackKey(entry.key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         }
         penalties = penalties.filter { entry in
-            parsePenaltyKey(entry.key)?.routineID != routineID
+            guard let parsed = parsePenaltyKey(entry.key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         }
 
-        let removedFavoriteKeys = Set(favoriteSelections.compactMap { key, value in
-            value == routineID ? key : nil
+        let removedFavoriteKeys = Set<String>(favoriteSelections.compactMap { entry -> String? in
+            guard let parsed = parseFavoriteKey(entry.key), parsed.eventID == currentDataScopeKey, entry.value == routineID else {
+                return nil
+            }
+            return entry.key
         })
-        favoriteSelections = favoriteSelections.filter { _, value in
-            value != routineID
+        favoriteSelections = favoriteSelections.filter { key, value in
+            guard let parsed = parseFavoriteKey(key), parsed.eventID == currentDataScopeKey else { return true }
+            return value != routineID
         }
 
         pendingScoreKeys = Set(pendingScoreKeys.filter { key in
-            parseScoreKey(key)?.routineID != routineID
+            guard let parsed = parseScoreKey(key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         })
         pendingFeedbackKeys = Set(pendingFeedbackKeys.filter { key in
-            parseFeedbackKey(key)?.routineID != routineID
+            guard let parsed = parseFeedbackKey(key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         })
         pendingPenaltyKeys = Set(pendingPenaltyKeys.filter { key in
-            parsePenaltyKey(key)?.routineID != routineID
+            guard let parsed = parsePenaltyKey(key) else { return true }
+            return !(isCurrentDataScope(parsed.eventID) && parsed.routineID == routineID)
         })
         pendingFavoriteKeys.subtract(removedFavoriteKeys)
 
@@ -1249,22 +1332,53 @@ final class JudgingStore: ObservableObject {
         return created
     }
 
-    private func parseScoreKey(_ key: String) -> (routineID: String, judgeKey: String, criterionID: Int)? {
-        let parts = key.components(separatedBy: "::")
-        guard parts.count == 3, let criterionID = Int(parts[2]) else { return nil }
-        return (parts[0], parts[1], criterionID)
+    private var currentDataScopeKey: String {
+        selectedEventID ?? appData.sourceName.stableRemoteID
     }
 
-    private func parseFeedbackKey(_ key: String) -> (routineID: String, judgeKey: String)? {
-        let parts = key.components(separatedBy: "::")
-        guard parts.count == 2 else { return nil }
-        return (parts[0], parts[1])
+    private func legacyScoreKey(routineID: String, judge: String, criterionID: Int) -> String {
+        "\(routineID)::\(judge.normalizedKey)::\(criterionID)"
     }
 
-    private func parsePenaltyKey(_ key: String) -> (routineID: String, judgeKey: String)? {
+    private func legacyFeedbackKey(routineID: String, judge: String) -> String {
+        "\(routineID)::\(judge.normalizedKey)"
+    }
+
+    private func legacyPenaltyKey(routineID: String, judge: String) -> String {
+        "\(routineID)::\(judge.normalizedKey)"
+    }
+
+    private func parseScoreKey(_ key: String) -> (eventID: String?, routineID: String, judgeKey: String, criterionID: Int)? {
         let parts = key.components(separatedBy: "::")
-        guard parts.count == 2 else { return nil }
-        return (parts[0], parts[1])
+        if parts.count == 4, let criterionID = Int(parts[3]) {
+            return (parts[0], parts[1], parts[2], criterionID)
+        }
+        if parts.count == 3, let criterionID = Int(parts[2]) {
+            return (nil, parts[0], parts[1], criterionID)
+        }
+        return nil
+    }
+
+    private func parseFeedbackKey(_ key: String) -> (eventID: String?, routineID: String, judgeKey: String)? {
+        let parts = key.components(separatedBy: "::")
+        if parts.count == 3 {
+            return (parts[0], parts[1], parts[2])
+        }
+        if parts.count == 2 {
+            return (nil, parts[0], parts[1])
+        }
+        return nil
+    }
+
+    private func parsePenaltyKey(_ key: String) -> (eventID: String?, routineID: String, judgeKey: String)? {
+        let parts = key.components(separatedBy: "::")
+        if parts.count == 3 {
+            return (parts[0], parts[1], parts[2])
+        }
+        if parts.count == 2 {
+            return (nil, parts[0], parts[1])
+        }
+        return nil
     }
 
     private func parseFavoriteKey(_ key: String) -> (eventID: String, blockID: String, judgeKey: String, category: FavoriteCategory)? {
@@ -1275,6 +1389,14 @@ final class JudgingStore: ObservableObject {
 
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
         appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
+    }
+
+    private func isCurrentDataScope(_ eventID: String?) -> Bool {
+        eventID == nil || eventID == currentDataScopeKey
+    }
+
+    private func keyEventMatchesCurrentSelection(_ eventID: String?, selectedEventID: String) -> Bool {
+        eventID == nil || eventID == selectedEventID
     }
 
     private func matchesJudgeKey(_ judgeKey: String, judge: String) -> Bool {
@@ -1318,7 +1440,7 @@ final class JudgingStore: ObservableObject {
         rootFolderName: String
     ) -> URL? {
         let template = template(for: routine)
-        let feedbackBody = feedback[feedbackKey(routineID: routine.id, judge: judge)] ?? ""
+        let feedbackBody = feedbackBody(for: routine, judge: judge)
         return JudgingSheetPDFExporter.export(
             routine: routine,
             judge: judge,

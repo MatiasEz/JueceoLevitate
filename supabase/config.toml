@@ -9,3 +9,6 @@ verify_jwt = false
 
 [functions.delete-judge]
 verify_jwt = false
+
+[functions.upsert-judge]
+verify_jwt = false

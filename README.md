@@ -101,6 +101,7 @@ supabase login
 supabase link --project-ref bozkbpirrwjtpmjqcexx
 supabase secrets set IMPORT_SECRET="levitate2026"
 supabase functions deploy import-excel
+supabase functions deploy upsert-judge
 ```
 
 La app pide esa `IMPORT_SECRET` como `Clave de importación`; para esta instalacion la clave es `levitate2026`. Solo aparece la seccion a usuarios admin de la app, y la Function vuelve a validar la clave antes de escribir en `events`, `blocks`, `routines`, `judges` y `criteria`. No pongas la service role key dentro de la app.

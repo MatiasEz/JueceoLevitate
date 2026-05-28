@@ -102,6 +102,7 @@ struct ContentView: View {
     @State private var section: AppSection = .inicio
     @State private var addingJudge = false
     @State private var newJudgeName = ""
+    @State private var isSavingJudge = false
     @State private var sharing = false
 
     var body: some View {
@@ -180,9 +181,11 @@ struct ContentView: View {
         .alert("Nuevo juez", isPresented: $addingJudge) {
             TextField("Nombre", text: $newJudgeName)
             Button("Agregar") {
-                store.addJudge(newJudgeName)
+                let name = newJudgeName
                 newJudgeName = ""
+                Task { await addJudge(name) }
             }
+            .disabled(isSavingJudge)
             Button("Cancelar", role: .cancel) {
                 newJudgeName = ""
             }
@@ -216,6 +219,20 @@ struct ContentView: View {
     private func exportPDF(results: [RoutineResult]?, title: String) {
         store.exportPDF(results: results, title: title)
         sharing = store.lastPDFURL != nil
+    }
+
+    @MainActor
+    private func addJudge(_ name: String) async {
+        isSavingJudge = true
+        defer { isSavingJudge = false }
+
+        do {
+            if let savedName = try await store.addJudge(name) {
+                store.showOperationSuccess("Juez agregado", message: "\(savedName) quedó guardado en el programa actual.")
+            }
+        } catch {
+            store.showOperationFailure("No se pudo agregar juez", message: error.localizedDescription)
+        }
     }
 
     private var shouldRouteAdminToJudgePicker: Bool {
@@ -458,10 +475,8 @@ private struct DashboardView: View {
 
             Spacer()
 
-            if store.isAdmin {
-                EventPill(isCompact: isCompact)
-                BlockPill(isCompact: isCompact)
-            }
+            EventPill(isCompact: isCompact)
+            BlockPill(isCompact: isCompact)
             SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount, isCompact: isCompact)
             JudgePill(addingJudge: $addingJudge, isCompact: isCompact)
         }

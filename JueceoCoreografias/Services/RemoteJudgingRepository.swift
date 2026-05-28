@@ -253,6 +253,38 @@ struct RoutineDeleteResponse: Decodable, Sendable {
     }
 }
 
+struct JudgeUpsertRequest: Encodable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let name: String
+    let role: String
+    let heroImageName: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+        case name
+        case role
+        case heroImageName = "hero_image_name"
+    }
+}
+
+struct JudgeUpsertResponse: Decodable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let judgeName: String
+    let role: String
+    let saved: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+        case judgeName = "judge_name"
+        case role
+        case saved
+    }
+}
+
 struct JudgeDeleteRequest: Encodable, Sendable {
     let eventID: String
     let judgeID: String
@@ -437,6 +469,20 @@ actor RemoteJudgingRepository {
         let data = try encoder.encode(RoutineDeleteRequest(eventID: eventID, routineID: routineID))
         let response = try await functionRequest(name: "delete-routine", body: data, importSecret: importSecret)
         return try decoder.decode(RoutineDeleteResponse.self, from: response)
+    }
+
+    func upsertJudge(eventID: String, judgeID: String, name: String, role: UserRole, heroImageName: String = "") async throws -> JudgeUpsertResponse {
+        let data = try encoder.encode(
+            JudgeUpsertRequest(
+                eventID: eventID,
+                judgeID: judgeID,
+                name: name,
+                role: role.rawValue,
+                heroImageName: heroImageName
+            )
+        )
+        let response = try await functionRequest(name: "upsert-judge", body: data)
+        return try decoder.decode(JudgeUpsertResponse.self, from: response)
     }
 
     func deleteJudge(eventID: String, judgeID: String) async throws -> JudgeDeleteResponse {

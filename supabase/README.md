@@ -36,9 +36,10 @@ supabase functions deploy import-excel
 supabase functions deploy archive-event
 supabase functions deploy delete-routine
 supabase functions deploy delete-judge
+supabase functions deploy upsert-judge
 ```
 
-`supabase/config.toml` deja `verify_jwt = false` para `import-excel`, `archive-event`, `delete-routine` y `delete-judge` porque esta app todavia no usa Supabase Auth. `import-excel` y `delete-routine` validan el header `x-import-secret`; para esta instalacion esa clave es `levitate2026`. `archive-event` y `delete-judge` no piden clave desde la app. Despues usan una secret key disponible en el runtime de Supabase para escribir tablas admin. No pongas esa secret key en iOS.
+`supabase/config.toml` deja `verify_jwt = false` para `import-excel`, `archive-event`, `delete-routine`, `delete-judge` y `upsert-judge` porque esta app todavia no usa Supabase Auth. `import-excel` y `delete-routine` validan el header `x-import-secret`; para esta instalacion esa clave es `levitate2026`. `archive-event`, `delete-judge` y `upsert-judge` no piden clave desde la app. Despues usan una secret key disponible en el runtime de Supabase para escribir tablas admin. No pongas esa secret key en iOS.
 
 By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback or penalties. Use `force_replace` only for deliberate admin resets.
 

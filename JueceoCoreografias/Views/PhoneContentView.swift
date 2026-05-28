@@ -6,6 +6,7 @@ struct PhoneContentView: View {
     @State private var selectedTab: PhoneTab = .home
     @State private var addingJudge = false
     @State private var newJudgeName = ""
+    @State private var isSavingJudge = false
     @State private var isAdminJudgingPresented = false
 
     private var availableTabs: [PhoneTab] {
@@ -51,9 +52,11 @@ struct PhoneContentView: View {
         .alert("Nuevo juez", isPresented: $addingJudge) {
             TextField("Nombre", text: $newJudgeName)
             Button("Agregar") {
-                store.addJudge(newJudgeName)
+                let name = newJudgeName
                 newJudgeName = ""
+                Task { await addJudge(name) }
             }
+            .disabled(isSavingJudge)
             Button("Cancelar", role: .cancel) {
                 newJudgeName = ""
             }
@@ -102,6 +105,20 @@ struct PhoneContentView: View {
             PhoneAdminView(
                 isAdminJudgingPresented: $isAdminJudgingPresented
             )
+        }
+    }
+
+    @MainActor
+    private func addJudge(_ name: String) async {
+        isSavingJudge = true
+        defer { isSavingJudge = false }
+
+        do {
+            if let savedName = try await store.addJudge(name) {
+                store.showOperationSuccess("Juez agregado", message: "\(savedName) quedó guardado en el programa actual.")
+            }
+        } catch {
+            store.showOperationFailure("No se pudo agregar juez", message: error.localizedDescription)
         }
     }
 }
@@ -215,16 +232,14 @@ private struct PhoneHomeView: View {
                 PhoneSyncBadge()
             }
 
-            if store.isAdmin {
-                adminSelectors
-            }
+            selectionControls
         }
         .padding(18)
         .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 20))
         .overlay(RoundedRectangle(cornerRadius: 20).stroke(LevitTheme.line))
     }
 
-    private var adminSelectors: some View {
+    private var selectionControls: some View {
         VStack(spacing: 10) {
             selectorRow {
                 EventPill(isCompact: true)
@@ -776,20 +791,19 @@ private struct PhoneScoreSheet: View {
     }
 
     private var feedbackEditor: some View {
-        let key = store.feedbackKey(routineID: routine.id, judge: scoringJudge)
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Retroalimentación")
                     .font(.caption.weight(.black))
                     .foregroundStyle(LevitTheme.muted)
                 Spacer()
-                Text("\((store.feedback[key] ?? "").count) / 300")
+                Text("\(store.feedbackBody(for: routine, judge: scoringJudge).count) / 300")
                     .font(.caption.monospacedDigit().weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
 
             TextEditor(text: Binding(
-                get: { store.feedback[key] ?? "" },
+                get: { store.feedbackBody(for: routine, judge: scoringJudge) },
                 set: { store.setFeedback(String($0.prefix(300)), routine: routine, judge: scoringJudge) }
             ))
             .frame(minHeight: 118)

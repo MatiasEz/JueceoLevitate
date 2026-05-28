@@ -630,21 +630,20 @@ private struct ScoreSheet: View {
     }
 
     private var feedbackEditor: some View {
-        let key = store.feedbackKey(routineID: routine.id, judge: scoringJudge)
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("RETROALIMENTACIÓN")
                     .font(.caption.weight(.black))
                     .foregroundStyle(LevitTheme.muted)
                 Spacer()
-                Text("\((store.feedback[key] ?? "").count) / 300")
+                Text("\(store.feedbackBody(for: routine, judge: scoringJudge).count) / 300")
                     .font(.caption.monospacedDigit().weight(.bold))
                     .foregroundStyle(LevitTheme.muted)
             }
 
             ZStack(alignment: .topLeading) {
                 TextEditor(text: Binding(
-                    get: { store.feedback[key] ?? "" },
+                    get: { store.feedbackBody(for: routine, judge: scoringJudge) },
                     set: { store.setFeedback(String($0.prefix(300)), routine: routine, judge: scoringJudge) }
                 ))
                 .frame(minHeight: 96)
@@ -654,7 +653,7 @@ private struct ScoreSheet: View {
                 .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 13))
                 .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
 
-                if (store.feedback[key] ?? "").isEmpty {
+                if store.feedbackBody(for: routine, judge: scoringJudge).isEmpty {
                     Text("Excelente ejecución técnica y limpieza en las transiciones.")
                         .font(.callout.weight(.medium))
                         .foregroundStyle(LevitTheme.muted.opacity(0.75))
