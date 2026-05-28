@@ -2,18 +2,9 @@ import SwiftUI
 
 struct DictamenView: View {
     let results: [RoutineResult]
-    @State private var filters = DictamenFilters()
-
-    private var filteredResults: [RoutineResult] {
-        DictamenBuilder.filteredResults(results, filters: filters)
-    }
 
     private var sections: [DictamenGenreSection] {
-        DictamenBuilder.sections(from: filteredResults)
-    }
-
-    private var filterOptions: DictamenFilterOptions {
-        DictamenFilterOptions(results: results)
+        DictamenBuilder.sections(from: results)
     }
 
     private var totalRoutines: Int {
@@ -23,7 +14,7 @@ struct DictamenView: View {
     }
 
     private var completedCount: Int {
-        filteredResults.filter { $0.aggregateTotal > 0 }.count
+        results.filter { $0.aggregateTotal > 0 }.count
     }
 
     var body: some View {
@@ -56,26 +47,9 @@ struct DictamenView: View {
     }
 
     private var toolbar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 14) {
-                summaryBar
-                Spacer()
-                if filters.hasActiveFilters {
-                    Button {
-                        filters.reset()
-                    } label: {
-                        Label("Limpiar filtros", systemImage: "xmark.circle.fill")
-                            .font(.callout.weight(.black))
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 10)
-                            .foregroundStyle(LevitTheme.pink)
-                            .background(LevitTheme.palePink, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            DictamenFilterBar(filters: $filters, options: filterOptions)
+        HStack(alignment: .center, spacing: 14) {
+            summaryBar
+            Spacer()
         }
     }
 
@@ -91,10 +65,8 @@ struct DictamenView: View {
     private var dictamenList: some View {
         if sections.isEmpty {
             DictamenEmptyState(
-                title: filters.hasActiveFilters ? "Sin resultados" : "Sin dictamen",
-                detail: filters.hasActiveFilters
-                    ? "No hay coreografías que coincidan con los filtros."
-                    : "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
+                title: "Sin dictamen",
+                detail: "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
             )
         } else {
             ScrollView {
@@ -110,92 +82,7 @@ struct DictamenView: View {
     }
 }
 
-struct DictamenFilters: Equatable {
-    var genre = ""
-    var level = ""
-    var academy = ""
-    var choreography = ""
-    var category = ""
-    var division = ""
-    var state = ""
-
-    var hasActiveFilters: Bool {
-        [genre, level, academy, choreography, category, division, state].contains { !$0.isEmpty }
-    }
-
-    mutating func reset() {
-        genre = ""
-        level = ""
-        academy = ""
-        choreography = ""
-        category = ""
-        division = ""
-        state = ""
-    }
-
-    func matches(_ routine: Routine) -> Bool {
-        matches(genre, routine.genre)
-            && matches(level, routine.level)
-            && matches(academy, routine.academy)
-            && matches(choreography, routine.name)
-            && matches(category, routine.category)
-            && matches(division, routine.division)
-            && matches(state, routine.state)
-    }
-
-    private func matches(_ selectedValue: String, _ routineValue: String) -> Bool {
-        selectedValue.isEmpty || selectedValue.normalizedKey == Self.displayValue(routineValue).normalizedKey
-    }
-
-    static func displayValue(_ value: String) -> String {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "SIN DATO" : trimmed
-    }
-}
-
-struct DictamenFilterOptions {
-    let genres: [String]
-    let levels: [String]
-    let academies: [String]
-    let choreographies: [String]
-    let categories: [String]
-    let divisions: [String]
-    let states: [String]
-
-    init(results: [RoutineResult]) {
-        let routines = results.map(\.routine)
-        genres = Self.options(routines.map(\.genre))
-        levels = Self.options(routines.map(\.level))
-        academies = Self.options(routines.map(\.academy))
-        choreographies = Self.options(routines.map(\.name))
-        categories = Self.options(routines.map(\.category))
-        divisions = Self.options(routines.map(\.division))
-        states = Self.options(routines.map(\.state))
-    }
-
-    private static func options(_ values: [String]) -> [String] {
-        var seen: Set<String> = []
-        return values
-            .map(DictamenFilters.displayValue)
-            .filter { value in
-                let key = value.normalizedKey
-                guard !seen.contains(key) else { return false }
-                seen.insert(key)
-                return true
-            }
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-}
-
 enum DictamenBuilder {
-    static func filteredResults(_ results: [RoutineResult], filters: DictamenFilters) -> [RoutineResult] {
-        guard filters.hasActiveFilters else { return results }
-
-        return results.filter { result in
-            filters.matches(result.routine)
-        }
-    }
-
     static func sections(from results: [RoutineResult]) -> [DictamenGenreSection] {
         let usesCustomGenreOrder = !isBlockFour(results)
 
@@ -772,95 +659,6 @@ private struct DictamenMetricPill: View {
         .foregroundStyle(LevitTheme.ink)
         .background(LevitTheme.solidSurface, in: Capsule())
         .overlay(Capsule().stroke(LevitTheme.line))
-    }
-}
-
-struct DictamenFilterBar: View {
-    @Binding var filters: DictamenFilters
-    let options: DictamenFilterOptions
-    var isCompact = false
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) {
-                filterMenus
-            }
-
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: isCompact ? 142 : 166), spacing: 10)], spacing: 10) {
-                filterMenus
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var filterMenus: some View {
-        DictamenFilterMenu(title: "Género", icon: "rectangle.stack.fill", selection: $filters.genre, options: options.genres, isCompact: isCompact)
-        DictamenFilterMenu(title: "Nivel", icon: "slider.horizontal.3", selection: $filters.level, options: options.levels, isCompact: isCompact)
-        DictamenFilterMenu(title: "Academia", icon: "building.2.fill", selection: $filters.academy, options: options.academies, isCompact: isCompact)
-        DictamenFilterMenu(title: "Coreografía", icon: "figure.dance", selection: $filters.choreography, options: options.choreographies, isCompact: isCompact)
-        DictamenFilterMenu(title: "Categoría", icon: "square.grid.2x2.fill", selection: $filters.category, options: options.categories, isCompact: isCompact)
-        DictamenFilterMenu(title: "División", icon: "person.2.fill", selection: $filters.division, options: options.divisions, isCompact: isCompact)
-        DictamenFilterMenu(title: "Estado", icon: "mappin.circle.fill", selection: $filters.state, options: options.states, isCompact: isCompact)
-    }
-}
-
-private struct DictamenFilterMenu: View {
-    let title: String
-    let icon: String
-    @Binding var selection: String
-    let options: [String]
-    var isCompact = false
-
-    var body: some View {
-        Menu {
-            Button {
-                selection = ""
-            } label: {
-                Label("Todos", systemImage: selection.isEmpty ? "checkmark.circle.fill" : "circle")
-            }
-
-            if !options.isEmpty {
-                Divider()
-            }
-
-            ForEach(options, id: \.self) { option in
-                Button {
-                    selection = option
-                } label: {
-                    Label(option, systemImage: option.normalizedKey == selection.normalizedKey ? "checkmark.circle.fill" : "circle")
-                }
-            }
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.callout.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 18)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.caption.weight(.black))
-                        .foregroundStyle(LevitTheme.muted)
-                    Text(selection.isEmpty ? "Todos" : selection)
-                        .font((isCompact ? Font.caption : .callout).weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.68)
-                }
-
-                Spacer(minLength: 8)
-
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(LevitTheme.muted)
-            }
-        }
-        .buttonStyle(.plain)
-        .padding(.horizontal, isCompact ? 12 : 14)
-        .padding(.vertical, isCompact ? 9 : 11)
-        .frame(minWidth: isCompact ? 142 : 166, maxWidth: isCompact ? .infinity : 196)
-        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: isCompact ? 14 : 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: isCompact ? 14 : 16, style: .continuous).stroke(LevitTheme.line))
     }
 }
 

@@ -32,7 +32,22 @@ struct PhoneContentView: View {
                     .transition(.opacity)
                     .zIndex(10)
             }
+
+            if let notice = store.operationNotice {
+                VStack {
+                    OperationNoticeBanner(notice: notice, isCompact: true) {
+                        store.dismissOperationNotice()
+                    }
+                    .padding(.top, 10)
+                    .padding(.horizontal, 14)
+
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(20)
+            }
         }
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: store.operationNotice?.id)
         .alert("Nuevo juez", isPresented: $addingJudge) {
             TextField("Nombre", text: $newJudgeName)
             Button("Agregar") {
@@ -1154,47 +1169,20 @@ private struct PhoneFavoriteRankingRow: View {
 
 private struct PhoneDictamenView: View {
     @EnvironmentObject private var store: JudgingStore
-    @State private var filters = DictamenFilters()
-
-    private var filteredRankings: [RoutineResult] {
-        DictamenBuilder.filteredResults(store.rankings, filters: filters)
-    }
 
     private var sections: [DictamenGenreSection] {
-        DictamenBuilder.sections(from: filteredRankings)
-    }
-
-    private var filterOptions: DictamenFilterOptions {
-        DictamenFilterOptions(results: store.rankings)
+        DictamenBuilder.sections(from: store.rankings)
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    DictamenFilterBar(filters: $filters, options: filterOptions, isCompact: true)
-
-                    if filters.hasActiveFilters {
-                        Button {
-                            filters.reset()
-                        } label: {
-                            Label("Limpiar filtros", systemImage: "xmark.circle.fill")
-                                .font(.callout.weight(.black))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                                .foregroundStyle(LevitTheme.pink)
-                                .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 14))
-                        }
-                        .buttonStyle(.plain)
-                    }
-
                     if sections.isEmpty {
                         PhoneEmptyState(
                             icon: "trophy",
-                            title: filters.hasActiveFilters ? "Sin resultados" : "Sin dictamen",
-                            detail: filters.hasActiveFilters
-                                ? "No hay coreografías que coincidan con los filtros."
-                                : "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
+                            title: "Sin dictamen",
+                            detail: "Cuando haya rutinas cargadas, las posiciones aparecerán acá."
                         )
                     } else {
                         ForEach(sections) { section in
@@ -1530,12 +1518,13 @@ private struct PhoneAdminView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var isAdminJudgingPresented: Bool
     @State private var routinePendingDeletion: Routine?
+    @State private var isRoutineDeletionAlertPresented = false
     @State private var deleteRoutineImportSecret = ""
     @State private var isDeletingRoutine = false
-    @State private var routineDeleteErrorMessage: String?
     @State private var driveFolderName = ""
     @State private var isDriveFolderPromptPresented = false
     @State private var driveFolderPendingOverwrite: String?
+    @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
 
@@ -1572,16 +1561,13 @@ private struct PhoneAdminView: View {
         } message: {
             Text("Elegí el nombre de la carpeta principal donde se van a guardar los PDFs.")
         }
-        .alert("Carpeta existente", isPresented: Binding(
-            get: { driveFolderPendingOverwrite != nil },
-            set: { if !$0 { driveFolderPendingOverwrite = nil } }
-        )) {
+        .alert("Carpeta existente", isPresented: $isDriveOverwriteAlertPresented) {
             Button("Exportar igual") {
                 guard let folderName = driveFolderPendingOverwrite else { return }
                 Task { await exportDrive(named: folderName) }
             }
             Button("Cancelar", role: .cancel) {
-                driveFolderPendingOverwrite = nil
+                resetPendingDriveOverwrite()
             }
         } message: {
             Text("La carpeta \(driveFolderPendingOverwrite ?? "") ya existe en Drive. Los PDFs con el mismo nombre se van a actualizar.")
@@ -1596,16 +1582,15 @@ private struct PhoneAdminView: View {
         } message: {
             Text(driveFolderErrorMessage ?? "")
         }
-        .alert("Borrar coreografía", isPresented: Binding(
-            get: { routinePendingDeletion != nil },
-            set: { if !$0 { resetPendingRoutineDeletion() } }
-        )) {
+        .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
             SecureField("Clave de importación", text: $deleteRoutineImportSecret)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
 
             Button("Borrar", role: .destructive) {
-                Task { await deletePendingRoutine() }
+                guard let routine = routinePendingDeletion else { return }
+                let secret = deleteRoutineImportSecret
+                Task { await deletePendingRoutine(routine, importSecret: secret) }
             }
             .disabled(deleteRoutineImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingRoutine)
 
@@ -1615,21 +1600,11 @@ private struct PhoneAdminView: View {
         } message: {
             Text("Se va a borrar \(routineDeletionTitle) del programa actual.")
         }
-        .alert("No se pudo borrar", isPresented: Binding(
-            get: { routineDeleteErrorMessage != nil },
-            set: { if !$0 { routineDeleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                routineDeleteErrorMessage = nil
-            }
-        } message: {
-            Text(routineDeleteErrorMessage ?? "")
-        }
     }
 
     private var editAsJudge: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Editar como juez")
+            Text(editAsJudgeTitle)
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
 
@@ -1718,6 +1693,7 @@ private struct PhoneAdminView: View {
                         Button(role: .destructive) {
                             routinePendingDeletion = routine
                             deleteRoutineImportSecret = ""
+                            isRoutineDeletionAlertPresented = true
                         } label: {
                             Label("#\(routine.id) \(routine.name)", systemImage: "trash")
                         }
@@ -1753,28 +1729,33 @@ private struct PhoneAdminView: View {
         }
     }
 
+    private var editAsJudgeTitle: String {
+        store.isAdminEditingAsJudge ? "Editar como \(store.scoringJudge)" : "Editar como juez"
+    }
+
     private var routineDeletionTitle: String {
         guard let routinePendingDeletion else { return "esta coreografía" }
         return "#\(routinePendingDeletion.id) \(routinePendingDeletion.name)"
     }
 
     @MainActor
-    private func deletePendingRoutine() async {
-        guard let routine = routinePendingDeletion else { return }
-        let secret = deleteRoutineImportSecret
+    private func deletePendingRoutine(_ routine: Routine, importSecret: String) async {
+        let routineTitle = "#\(routine.id) \(routine.name)"
         isDeletingRoutine = true
         defer { isDeletingRoutine = false }
 
         do {
-            try await store.deleteRoutine(routine, importSecret: secret)
+            try await store.deleteRoutine(routine, importSecret: importSecret)
             resetPendingRoutineDeletion()
+            store.showOperationSuccess("Coreografía borrada", message: "\(routineTitle) se borró del programa actual.")
         } catch {
             resetPendingRoutineDeletion()
-            routineDeleteErrorMessage = error.localizedDescription
+            store.showOperationFailure("No se pudo borrar coreografía", message: error.localizedDescription)
         }
     }
 
     private func resetPendingRoutineDeletion() {
+        isRoutineDeletionAlertPresented = false
         routinePendingDeletion = nil
         deleteRoutineImportSecret = ""
     }
@@ -1805,6 +1786,7 @@ private struct PhoneAdminView: View {
             isCheckingDriveFolder = false
             if exists {
                 driveFolderPendingOverwrite = folderName
+                isDriveOverwriteAlertPresented = true
             } else {
                 await exportDrive(named: folderName)
             }
@@ -1816,8 +1798,13 @@ private struct PhoneAdminView: View {
 
     @MainActor
     private func exportDrive(named folderName: String) async {
-        driveFolderPendingOverwrite = nil
+        resetPendingDriveOverwrite()
         await store.exportSelectedBlockToDrive(rootFolderName: folderName)
+    }
+
+    private func resetPendingDriveOverwrite() {
+        isDriveOverwriteAlertPresented = false
+        driveFolderPendingOverwrite = nil
     }
 
     private func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
@@ -1835,9 +1822,8 @@ private struct PhoneJudgeMenu: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var addingJudge: Bool
     @State private var judgePendingDeletion: String?
-    @State private var deleteJudgeImportSecret = ""
+    @State private var isJudgeDeletionAlertPresented = false
     @State private var isDeletingJudge = false
-    @State private var judgeDeleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -1854,7 +1840,7 @@ private struct PhoneJudgeMenu: View {
                     ForEach(store.deletableJudges, id: \.self) { judge in
                         Button(role: .destructive) {
                             judgePendingDeletion = judge
-                            deleteJudgeImportSecret = ""
+                            isJudgeDeletionAlertPresented = true
                         } label: {
                             Label(judge, systemImage: "trash")
                         }
@@ -1881,20 +1867,12 @@ private struct PhoneJudgeMenu: View {
                     .foregroundStyle(LevitTheme.muted)
             }
         }
-        .alert("Borrar juez", isPresented: Binding(
-            get: { judgePendingDeletion != nil },
-            set: { if !$0 { resetPendingJudgeDeletion() } }
-        )) {
-            if store.hasRemoteConfiguration {
-                SecureField("Clave de importación", text: $deleteJudgeImportSecret)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-            }
-
+        .alert("Borrar juez", isPresented: $isJudgeDeletionAlertPresented) {
             Button("Borrar", role: .destructive) {
-                Task { await deletePendingJudge() }
+                guard let judge = judgePendingDeletion else { return }
+                Task { await deletePendingJudge(judge) }
             }
-            .disabled((store.hasRemoteConfiguration && deleteJudgeImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || isDeletingJudge)
+            .disabled(isDeletingJudge)
 
             Button("Cancelar", role: .cancel) {
                 resetPendingJudgeDeletion()
@@ -1904,37 +1882,27 @@ private struct PhoneJudgeMenu: View {
                 ? "Se va a borrar \(judgePendingDeletion ?? "este juez") del programa actual. También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos."
                 : "Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
         }
-        .alert("No se pudo borrar", isPresented: Binding(
-            get: { judgeDeleteErrorMessage != nil },
-            set: { if !$0 { judgeDeleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                judgeDeleteErrorMessage = nil
-            }
-        } message: {
-            Text(judgeDeleteErrorMessage ?? "")
-        }
     }
 
     @MainActor
-    private func deletePendingJudge() async {
-        guard let judge = judgePendingDeletion else { return }
-        let secret = deleteJudgeImportSecret
+    private func deletePendingJudge(_ judge: String) async {
+        let judgeName = judge
         isDeletingJudge = true
         defer { isDeletingJudge = false }
 
         do {
-            try await store.deleteJudge(judge, importSecret: secret)
+            try await store.deleteJudge(judge)
             resetPendingJudgeDeletion()
+            store.showOperationSuccess("Juez borrado", message: "\(judgeName) se borró del programa actual.")
         } catch {
             resetPendingJudgeDeletion()
-            judgeDeleteErrorMessage = error.localizedDescription
+            store.showOperationFailure("No se pudo borrar juez", message: error.localizedDescription)
         }
     }
 
     private func resetPendingJudgeDeletion() {
+        isJudgeDeletionAlertPresented = false
         judgePendingDeletion = nil
-        deleteJudgeImportSecret = ""
     }
 }
 

@@ -7,8 +7,8 @@ Procesa un `.xlsx` de programa desde la app y crea/actualiza `events`, `blocks`,
 ```bash
 supabase login
 supabase link --project-ref bozkbpirrwjtpmjqcexx
-supabase secrets set IMPORT_SECRET="una-clave-larga-para-admins"
+supabase secrets set IMPORT_SECRET="levitate2026"
 supabase functions deploy import-excel
 ```
 
-La app envia la clave en `x-import-secret`. La Function valida esa clave contra `IMPORT_SECRET` antes de usar permisos admin en Supabase.
+La app envia la clave en `x-import-secret`. La Function valida esa clave contra `IMPORT_SECRET` antes de usar permisos admin en Supabase; para esta instalacion la clave es `levitate2026`.

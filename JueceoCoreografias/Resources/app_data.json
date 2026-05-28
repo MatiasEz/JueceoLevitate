@@ -1925,31 +1925,63 @@
     }
   ],
   "judges": [
+    "ALEX",
+    "ANGELA",
+    "DANIEL",
     "DAVE",
     "EVA",
-    "DANIEL",
+    "VLADIMIR",
+    "YOLI",
     "ATI"
   ],
   "judgeProfiles": [
     {
-      "judgeID": "dave",
-      "name": "DAVE",
-      "role": "judge"
+      "judgeID": "alex",
+      "name": "ALEX",
+      "role": "judge",
+      "heroImageName": "JudgeHeroAlex"
     },
     {
-      "judgeID": "eva",
-      "name": "EVA",
-      "role": "judge"
+      "judgeID": "angela",
+      "name": "ANGELA",
+      "role": "judge",
+      "heroImageName": "JudgeHeroAngela"
     },
     {
       "judgeID": "daniel",
       "name": "DANIEL",
-      "role": "judge"
+      "role": "judge",
+      "heroImageName": "JudgeHeroDaniel"
+    },
+    {
+      "judgeID": "dave",
+      "name": "DAVE",
+      "role": "judge",
+      "heroImageName": ""
+    },
+    {
+      "judgeID": "eva",
+      "name": "EVA",
+      "role": "judge",
+      "heroImageName": ""
+    },
+    {
+      "judgeID": "vladimir",
+      "name": "VLADIMIR",
+      "role": "judge",
+      "heroImageName": "JudgeHeroVladimir"
+    },
+    {
+      "judgeID": "yoli",
+      "name": "YOLI",
+      "role": "judge",
+      "heroImageName": "JudgeHeroYoli"
     },
     {
       "judgeID": "ati",
       "name": "ATI",
-      "role": "admin"
+      "role": "admin",
+      "heroImageName": ""
     }
   ]
 }

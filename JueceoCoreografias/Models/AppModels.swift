@@ -9,6 +9,18 @@ struct AppData: Codable, Sendable {
     var judgeProfiles: [JudgeProfile]?
 }
 
+enum OperationNoticeKind: Equatable {
+    case success
+    case failure
+}
+
+struct OperationNotice: Identifiable, Equatable {
+    let id = UUID()
+    let kind: OperationNoticeKind
+    let title: String
+    let message: String
+}
+
 enum UserRole: String, Codable, Sendable {
     case judge
     case admin
@@ -245,15 +257,12 @@ enum ExcelImportError: LocalizedError {
 
 enum EventDeletionError: LocalizedError {
     case missingRemoteConfiguration
-    case missingImportSecret
     case notAllowed
 
     var errorDescription: String? {
         switch self {
         case .missingRemoteConfiguration:
             "Supabase no está configurado."
-        case .missingImportSecret:
-            "Ingresá la clave de importación para borrar el programa."
         case .notAllowed:
             "Solo un admin puede borrar programas."
         }
@@ -282,15 +291,12 @@ enum RoutineDeletionError: LocalizedError {
 
 enum JudgeDeletionError: LocalizedError {
     case missingSelectedEvent
-    case missingImportSecret
     case notAllowed
 
     var errorDescription: String? {
         switch self {
         case .missingSelectedEvent:
             "Elegí un programa online antes de borrar un juez."
-        case .missingImportSecret:
-            "Ingresá la clave de importación para borrar el juez."
         case .notAllowed:
             "Solo un admin puede borrar jueces."
         }

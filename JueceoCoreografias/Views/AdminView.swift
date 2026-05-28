@@ -9,12 +9,13 @@ struct AdminView: View {
     @State private var selectedRoutineIDForEdit = ""
     @State private var searchText = ""
     @State private var routinePendingDeletion: Routine?
+    @State private var isRoutineDeletionAlertPresented = false
     @State private var deleteRoutineImportSecret = ""
     @State private var isDeletingRoutine = false
-    @State private var routineDeleteErrorMessage: String?
     @State private var driveFolderName = ""
     @State private var isDriveFolderPromptPresented = false
     @State private var driveFolderPendingOverwrite: String?
+    @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
 
@@ -98,16 +99,13 @@ struct AdminView: View {
         } message: {
             Text("Elegí el nombre de la carpeta principal donde se van a guardar los PDFs.")
         }
-        .alert("Carpeta existente", isPresented: Binding(
-            get: { driveFolderPendingOverwrite != nil },
-            set: { if !$0 { driveFolderPendingOverwrite = nil } }
-        )) {
+        .alert("Carpeta existente", isPresented: $isDriveOverwriteAlertPresented) {
             Button("Exportar igual") {
                 guard let folderName = driveFolderPendingOverwrite else { return }
                 Task { await exportDrive(named: folderName) }
             }
             Button("Cancelar", role: .cancel) {
-                driveFolderPendingOverwrite = nil
+                resetPendingDriveOverwrite()
             }
         } message: {
             Text("La carpeta \(driveFolderPendingOverwrite ?? "") ya existe en Drive. Los PDFs con el mismo nombre se van a actualizar.")
@@ -122,16 +120,15 @@ struct AdminView: View {
         } message: {
             Text(driveFolderErrorMessage ?? "")
         }
-        .alert("Borrar coreografía", isPresented: Binding(
-            get: { routinePendingDeletion != nil },
-            set: { if !$0 { resetPendingRoutineDeletion() } }
-        )) {
+        .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
             SecureField("Clave de importación", text: $deleteRoutineImportSecret)
                 .textInputAutocapitalization(.never)
                 .disableAutocorrection(true)
 
             Button("Borrar", role: .destructive) {
-                Task { await deletePendingRoutine() }
+                guard let routine = routinePendingDeletion else { return }
+                let secret = deleteRoutineImportSecret
+                Task { await deletePendingRoutine(routine, importSecret: secret) }
             }
             .disabled(deleteRoutineImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingRoutine)
 
@@ -140,16 +137,6 @@ struct AdminView: View {
             }
         } message: {
             Text("Se va a borrar \(routineDeletionTitle) de \(currentEventTitle). También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos.")
-        }
-        .alert("No se pudo borrar", isPresented: Binding(
-            get: { routineDeleteErrorMessage != nil },
-            set: { if !$0 { routineDeleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                routineDeleteErrorMessage = nil
-            }
-        } message: {
-            Text(routineDeleteErrorMessage ?? "")
         }
     }
 
@@ -248,7 +235,7 @@ struct AdminView: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Editar como juez")
+                    Text(editAsJudgeTitle)
                         .font(.title2.weight(.black))
                 }
 
@@ -335,6 +322,7 @@ struct AdminView: View {
                                 onDelete: {
                                     routinePendingDeletion = routine
                                     deleteRoutineImportSecret = ""
+                                    isRoutineDeletionAlertPresented = true
                                 }
                             ) {
                                 selectedRoutineIDForEdit = routine.id
@@ -359,24 +347,29 @@ struct AdminView: View {
         }
     }
 
+    private var editAsJudgeTitle: String {
+        selectedJudgeForEdit.isEmpty ? "Editar como juez" : "Editar como \(selectedJudgeForEdit)"
+    }
+
     @MainActor
-    private func deletePendingRoutine() async {
-        guard let routine = routinePendingDeletion else { return }
-        let secret = deleteRoutineImportSecret
+    private func deletePendingRoutine(_ routine: Routine, importSecret: String) async {
+        let routineTitle = "#\(routine.id) \(routine.name)"
         isDeletingRoutine = true
         defer { isDeletingRoutine = false }
 
         do {
-            try await store.deleteRoutine(routine, importSecret: secret)
+            try await store.deleteRoutine(routine, importSecret: importSecret)
             resetPendingRoutineDeletion()
             normalizeSelection()
+            store.showOperationSuccess("Coreografía borrada", message: "\(routineTitle) se borró del programa actual.")
         } catch {
             resetPendingRoutineDeletion()
-            routineDeleteErrorMessage = error.localizedDescription
+            store.showOperationFailure("No se pudo borrar coreografía", message: error.localizedDescription)
         }
     }
 
     private func resetPendingRoutineDeletion() {
+        isRoutineDeletionAlertPresented = false
         routinePendingDeletion = nil
         deleteRoutineImportSecret = ""
     }
@@ -425,6 +418,7 @@ struct AdminView: View {
             isCheckingDriveFolder = false
             if exists {
                 driveFolderPendingOverwrite = folderName
+                isDriveOverwriteAlertPresented = true
             } else {
                 await exportDrive(named: folderName)
             }
@@ -436,8 +430,13 @@ struct AdminView: View {
 
     @MainActor
     private func exportDrive(named folderName: String) async {
-        driveFolderPendingOverwrite = nil
+        resetPendingDriveOverwrite()
         await store.exportSelectedBlockToDrive(rootFolderName: folderName)
+    }
+
+    private func resetPendingDriveOverwrite() {
+        isDriveOverwriteAlertPresented = false
+        driveFolderPendingOverwrite = nil
     }
 
     private var driveStatusColor: Color {

@@ -33,6 +33,37 @@ xcodebuild archive \
 
 La distribucion publica fuera del Mac App Store requiere certificado `Developer ID Application` y notarizacion de Apple antes de subir el `.dmg` a la web.
 
+### Versionado iOS/macOS
+
+Apple usa dos valores equivalentes al `version: nombre+codigo` de Android/Flutter:
+
+- `MARKETING_VERSION`: version visible, por ejemplo `1.0.4`.
+- `CURRENT_PROJECT_VERSION`: build interno, siempre incremental, por ejemplo `5`.
+
+El archivo `apple_version.txt` mantiene el valor actual en formato `version+build`. Para verlo:
+
+```bash
+python3 scripts/set_apple_version.py
+```
+
+Para preparar un nuevo build sin cambiar la version visible:
+
+```bash
+python3 scripts/set_apple_version.py --bump-build
+```
+
+Para una nueva version patch y build nuevo:
+
+```bash
+python3 scripts/set_apple_version.py --bump-patch
+```
+
+Para fijar una version especifica:
+
+```bash
+python3 scripts/set_apple_version.py 1.0.4+5
+```
+
 ## Cargar otro Excel local
 
 Para reemplazar el contenido base por otro Excel con la misma estructura:
@@ -68,11 +99,11 @@ Para habilitarlo en Supabase:
 ```bash
 supabase login
 supabase link --project-ref bozkbpirrwjtpmjqcexx
-supabase secrets set IMPORT_SECRET="una-clave-larga-para-admins"
+supabase secrets set IMPORT_SECRET="levitate2026"
 supabase functions deploy import-excel
 ```
 
-La app pide esa `IMPORT_SECRET` como `Clave de importación`. Solo aparece la seccion a usuarios admin de la app, y la Function vuelve a validar la clave antes de escribir en `events`, `blocks`, `routines`, `judges` y `criteria`. No pongas la service role key dentro de la app.
+La app pide esa `IMPORT_SECRET` como `Clave de importación`; para esta instalacion la clave es `levitate2026`. Solo aparece la seccion a usuarios admin de la app, y la Function vuelve a validar la clave antes de escribir en `events`, `blocks`, `routines`, `judges` y `criteria`. No pongas la service role key dentro de la app.
 
 El flujo legacy sigue disponible para cargas manuales: `scripts/process_excel_imports.py` procesa filas pendientes de `excel_imports`, pero ya no es el camino principal desde la app.
 

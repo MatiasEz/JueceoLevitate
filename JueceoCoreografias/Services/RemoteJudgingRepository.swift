@@ -427,9 +427,9 @@ actor RemoteJudgingRepository {
         return try decoder.decode(ExcelImportResponse.self, from: response)
     }
 
-    func archiveEvent(eventID: String, importSecret: String) async throws -> EventArchiveResponse {
+    func archiveEvent(eventID: String) async throws -> EventArchiveResponse {
         let data = try encoder.encode(EventArchiveRequest(eventID: eventID))
-        let response = try await functionRequest(name: "archive-event", body: data, importSecret: importSecret)
+        let response = try await functionRequest(name: "archive-event", body: data)
         return try decoder.decode(EventArchiveResponse.self, from: response)
     }
 
@@ -439,9 +439,9 @@ actor RemoteJudgingRepository {
         return try decoder.decode(RoutineDeleteResponse.self, from: response)
     }
 
-    func deleteJudge(eventID: String, judgeID: String, importSecret: String) async throws -> JudgeDeleteResponse {
+    func deleteJudge(eventID: String, judgeID: String) async throws -> JudgeDeleteResponse {
         let data = try encoder.encode(JudgeDeleteRequest(eventID: eventID, judgeID: judgeID))
-        let response = try await functionRequest(name: "delete-judge", body: data, importSecret: importSecret)
+        let response = try await functionRequest(name: "delete-judge", body: data)
         return try decoder.decode(JudgeDeleteResponse.self, from: response)
     }
 
@@ -512,7 +512,7 @@ actor RemoteJudgingRepository {
         return data.isEmpty ? Data("null".utf8) : data
     }
 
-    private func functionRequest(name: String, body: Data, importSecret: String) async throws -> Data {
+    private func functionRequest(name: String, body: Data, importSecret: String? = nil) async throws -> Data {
         guard let endpoint = URL(string: "\(config.url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/functions/v1/\(name)") else {
             throw RemoteJudgingError.invalidURL
         }
@@ -521,7 +521,10 @@ actor RemoteJudgingRepository {
         request.httpBody = body
         request.setValue(config.apiKey, forHTTPHeaderField: "apikey")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue(importSecret, forHTTPHeaderField: "x-import-secret")
+        let cleanImportSecret = importSecret?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !cleanImportSecret.isEmpty {
+            request.setValue(cleanImportSecret, forHTTPHeaderField: "x-import-secret")
+        }
 
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else {
@@ -550,8 +553,21 @@ enum RemoteJudgingError: LocalizedError {
         case .missingEvent:
             "No se encontro el evento solicitado."
         case let .http(status, detail):
-            "Supabase respondio \(status): \(detail)"
+            "Supabase respondio \(status): \(Self.cleanHTTPDetail(detail))"
         }
+    }
+
+    private static func cleanHTTPDetail(_ detail: String) -> String {
+        guard let data = detail.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return detail
+        }
+        for key in ["error", "message", "details", "hint"] {
+            if let value = object[key] as? String, !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return value
+            }
+        }
+        return detail
     }
 }
 

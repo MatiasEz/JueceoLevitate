@@ -160,8 +160,23 @@ struct ContentView: View {
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
                     .zIndex(10)
             }
+
+            if let notice = store.operationNotice {
+                VStack {
+                    OperationNoticeBanner(notice: notice) {
+                        store.dismissOperationNotice()
+                    }
+                    .padding(.top, 18)
+                    .padding(.horizontal, 24)
+
+                    Spacer()
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+                .zIndex(20)
+            }
         }
         .animation(.easeInOut(duration: 0.18), value: store.isLoadingBackendData)
+        .animation(.spring(response: 0.28, dampingFraction: 0.86), value: store.operationNotice?.id)
         .alert("Nuevo juez", isPresented: $addingJudge) {
             TextField("Nombre", text: $newJudgeName)
             Button("Agregar") {
@@ -257,6 +272,62 @@ private struct BackendLoadingOverlay: View {
             .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.line))
             .shadow(color: .black.opacity(0.10), radius: 28, x: 0, y: 14)
         }
+    }
+}
+
+struct OperationNoticeBanner: View {
+    let notice: OperationNotice
+    var isCompact = false
+    let onDismiss: () -> Void
+
+    private var color: Color {
+        switch notice.kind {
+        case .success: .green
+        case .failure: .red
+        }
+    }
+
+    private var symbol: String {
+        switch notice.kind {
+        case .success: "checkmark.circle.fill"
+        case .failure: "exclamationmark.triangle.fill"
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(color)
+                .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(notice.title)
+                    .font((isCompact ? Font.callout : .headline).weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                Text(notice.message)
+                    .font((isCompact ? Font.caption : .subheadline).weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.black))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(LevitTheme.muted)
+        }
+        .padding(.vertical, isCompact ? 12 : 14)
+        .padding(.leading, isCompact ? 14 : 16)
+        .padding(.trailing, 10)
+        .frame(maxWidth: isCompact ? .infinity : 620)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(color.opacity(0.28), lineWidth: 1))
+        .shadow(color: .black.opacity(0.18), radius: 24, x: 0, y: 14)
     }
 }
 
@@ -615,9 +686,8 @@ struct EventPill: View {
     @EnvironmentObject private var store: JudgingStore
     var isCompact = false
     @State private var eventPendingDeletion: EventSummary?
-    @State private var deleteImportSecret = ""
+    @State private var isEventDeletionAlertPresented = false
     @State private var isDeletingEvent = false
-    @State private var deleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -648,7 +718,7 @@ struct EventPill: View {
                     ForEach(store.availableEvents) { event in
                         Button(role: .destructive) {
                             eventPendingDeletion = event
-                            deleteImportSecret = ""
+                            isEventDeletionAlertPresented = true
                         } label: {
                             Label(event.name, systemImage: "trash")
                         }
@@ -675,34 +745,18 @@ struct EventPill: View {
             }
             .foregroundStyle(LevitTheme.ink)
         }
-        .alert("Borrar programa", isPresented: Binding(
-            get: { eventPendingDeletion != nil },
-            set: { if !$0 { resetPendingDeletion() } }
-        )) {
-            SecureField("Clave de importación", text: $deleteImportSecret)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
-
+        .alert("Borrar programa", isPresented: $isEventDeletionAlertPresented) {
             Button("Borrar", role: .destructive) {
-                Task { await deletePendingEvent() }
+                guard let event = eventPendingDeletion else { return }
+                Task { await deletePendingEvent(event) }
             }
-            .disabled(deleteImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingEvent)
+            .disabled(isDeletingEvent)
 
             Button("Cancelar", role: .cancel) {
                 resetPendingDeletion()
             }
         } message: {
             Text("Se va a quitar \(eventPendingDeletion?.name ?? "este programa") de la lista online.")
-        }
-        .alert("No se pudo borrar", isPresented: Binding(
-            get: { deleteErrorMessage != nil },
-            set: { if !$0 { deleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                deleteErrorMessage = nil
-            }
-        } message: {
-            Text(deleteErrorMessage ?? "")
         }
     }
 
@@ -712,24 +766,24 @@ struct EventPill: View {
     }
 
     @MainActor
-    private func deletePendingEvent() async {
-        guard let event = eventPendingDeletion else { return }
-        let secret = deleteImportSecret
+    private func deletePendingEvent(_ event: EventSummary) async {
+        let eventName = event.name
         isDeletingEvent = true
         defer { isDeletingEvent = false }
 
         do {
-            try await store.deleteEvent(event, importSecret: secret)
+            try await store.deleteEvent(event)
             resetPendingDeletion()
+            store.showOperationSuccess("Programa borrado", message: "\(eventName) se borró correctamente.")
         } catch {
             resetPendingDeletion()
-            deleteErrorMessage = error.localizedDescription
+            store.showOperationFailure("No se pudo borrar programa", message: error.localizedDescription)
         }
     }
 
     private func resetPendingDeletion() {
+        isEventDeletionAlertPresented = false
         eventPendingDeletion = nil
-        deleteImportSecret = ""
     }
 }
 
@@ -776,9 +830,8 @@ struct JudgePill: View {
     @Binding var addingJudge: Bool
     var isCompact = false
     @State private var judgePendingDeletion: String?
-    @State private var deleteJudgeImportSecret = ""
+    @State private var isJudgeDeletionAlertPresented = false
     @State private var isDeletingJudge = false
-    @State private var judgeDeleteErrorMessage: String?
 
     var body: some View {
         Menu {
@@ -801,7 +854,7 @@ struct JudgePill: View {
                     ForEach(store.deletableJudges, id: \.self) { judge in
                         Button(role: .destructive) {
                             judgePendingDeletion = judge
-                            deleteJudgeImportSecret = ""
+                            isJudgeDeletionAlertPresented = true
                         } label: {
                             Label(judge, systemImage: "trash")
                         }
@@ -843,20 +896,12 @@ struct JudgePill: View {
             }
             .foregroundStyle(LevitTheme.ink)
         }
-        .alert("Borrar juez", isPresented: Binding(
-            get: { judgePendingDeletion != nil },
-            set: { if !$0 { resetPendingJudgeDeletion() } }
-        )) {
-            if store.hasRemoteConfiguration {
-                SecureField("Clave de importación", text: $deleteJudgeImportSecret)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-            }
-
+        .alert("Borrar juez", isPresented: $isJudgeDeletionAlertPresented) {
             Button("Borrar", role: .destructive) {
-                Task { await deletePendingJudge() }
+                guard let judge = judgePendingDeletion else { return }
+                Task { await deletePendingJudge(judge) }
             }
-            .disabled((store.hasRemoteConfiguration && deleteJudgeImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) || isDeletingJudge)
+            .disabled(isDeletingJudge)
 
             Button("Cancelar", role: .cancel) {
                 resetPendingJudgeDeletion()
@@ -866,37 +911,27 @@ struct JudgePill: View {
                 ? "Se va a borrar \(judgePendingDeletion ?? "este juez") del programa actual. También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos."
                 : "Se van a borrar sus puntajes, devoluciones, penalizaciones y favoritos locales.")
         }
-        .alert("No se pudo borrar", isPresented: Binding(
-            get: { judgeDeleteErrorMessage != nil },
-            set: { if !$0 { judgeDeleteErrorMessage = nil } }
-        )) {
-            Button("OK", role: .cancel) {
-                judgeDeleteErrorMessage = nil
-            }
-        } message: {
-            Text(judgeDeleteErrorMessage ?? "")
-        }
     }
 
     @MainActor
-    private func deletePendingJudge() async {
-        guard let judge = judgePendingDeletion else { return }
-        let secret = deleteJudgeImportSecret
+    private func deletePendingJudge(_ judge: String) async {
+        let judgeName = judge
         isDeletingJudge = true
         defer { isDeletingJudge = false }
 
         do {
-            try await store.deleteJudge(judge, importSecret: secret)
+            try await store.deleteJudge(judge)
             resetPendingJudgeDeletion()
+            store.showOperationSuccess("Juez borrado", message: "\(judgeName) se borró del programa actual.")
         } catch {
             resetPendingJudgeDeletion()
-            judgeDeleteErrorMessage = error.localizedDescription
+            store.showOperationFailure("No se pudo borrar juez", message: error.localizedDescription)
         }
     }
 
     private func resetPendingJudgeDeletion() {
+        isJudgeDeletionAlertPresented = false
         judgePendingDeletion = nil
-        deleteJudgeImportSecret = ""
     }
 }
 

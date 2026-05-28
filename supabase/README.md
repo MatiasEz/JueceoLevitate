@@ -11,13 +11,15 @@
 7. Run `supabase/migrations/0005_routine_favorites.sql` to persist favorite routine picks.
 8. Run `supabase/migrations/0006_routine_penalties.sql` to persist penalties.
 9. Run `supabase/migrations/0007_routine_participants.sql` to persist program participants.
-10. Copy `.env.example` to `.env` at the repo root and fill:
+10. Run `supabase/migrations/0008_judge_hero_images.sql` to persist judge hero image names.
+11. Run `supabase/migrations/0009_default_judges.sql` to seed the active program with Levitate's default judges.
+12. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
 SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-for-imports-only
-IMPORT_SECRET=choose-a-long-admin-import-secret
+IMPORT_SECRET=levitate2026
 ```
 
 The first migration enables permissive pilot RLS policies: anonymous clients can read event data and upsert scores/feedback. Later migrations extend the same pilot policy to favorites and penalties. Tighten this with per-event codes or judge auth before production.
@@ -29,14 +31,14 @@ La app llama a `supabase/functions/import-excel` y la Function escribe el evento
 ```bash
 supabase login
 supabase link --project-ref bozkbpirrwjtpmjqcexx
-supabase secrets set IMPORT_SECRET="una-clave-larga-para-admins"
+supabase secrets set IMPORT_SECRET="levitate2026"
 supabase functions deploy import-excel
 supabase functions deploy archive-event
 supabase functions deploy delete-routine
 supabase functions deploy delete-judge
 ```
 
-`supabase/config.toml` deja `verify_jwt = false` para `import-excel`, `archive-event`, `delete-routine` y `delete-judge` porque esta app todavia no usa Supabase Auth. Las Functions hacen su propia validacion con el header `x-import-secret`, y despues usan una secret key disponible en el runtime de Supabase para escribir tablas admin. No pongas esa secret key en iOS.
+`supabase/config.toml` deja `verify_jwt = false` para `import-excel`, `archive-event`, `delete-routine` y `delete-judge` porque esta app todavia no usa Supabase Auth. `import-excel` y `delete-routine` validan el header `x-import-secret`; para esta instalacion esa clave es `levitate2026`. `archive-event` y `delete-judge` no piden clave desde la app. Despues usan una secret key disponible en el runtime de Supabase para escribir tablas admin. No pongas esa secret key en iOS.
 
 By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback or penalties. Use `force_replace` only for deliberate admin resets.
 

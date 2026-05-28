@@ -44,6 +44,7 @@ final class JudgingStore: ObservableObject {
     @Published private(set) var driveExportStatus: DriveExportStatus = .idle
     @Published private(set) var driveExportMessage: String?
     @Published private(set) var lastDriveExportSummary: GoogleDriveExportSummary?
+    @Published private(set) var operationNotice: OperationNotice?
 
     private let scoresKey = "jueceo.scores.v1"
     private let feedbackKey = "jueceo.feedback.v1"
@@ -63,6 +64,7 @@ final class JudgingStore: ObservableObject {
     private var pendingFavoriteKeys: Set<String> = []
     private let remoteRepository: RemoteJudgingRepository?
     private var didStartRemote = false
+    private var operationNoticeTask: Task<Void, Never>?
 
     init() {
         let data = Self.loadBundledData()
@@ -274,7 +276,7 @@ final class JudgingStore: ObservableObject {
         appData.judges.contains(judge) && role(for: judge) != .admin
     }
 
-    func deleteJudge(_ judge: String, importSecret: String = "") async throws {
+    func deleteJudge(_ judge: String) async throws {
         guard canDeleteJudge(judge) else { return }
 
         if let remoteRepository {
@@ -284,17 +286,12 @@ final class JudgingStore: ObservableObject {
             guard let eventID = selectedEventID else {
                 throw JudgeDeletionError.missingSelectedEvent
             }
-            let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !cleanImportSecret.isEmpty else {
-                throw JudgeDeletionError.missingImportSecret
-            }
 
             syncStatus = .syncing
             syncMessage = "Borrando juez \(judge)..."
             let response = try await remoteRepository.deleteJudge(
                 eventID: eventID,
-                judgeID: judge.stableRemoteID,
-                importSecret: cleanImportSecret
+                judgeID: judge.stableRemoteID
             )
 
             purgeLocalState(forJudge: judge)
@@ -404,6 +401,20 @@ final class JudgingStore: ObservableObject {
 
     func canAccess(_ section: AppSection) -> Bool {
         isAdmin || !section.requiresAdmin
+    }
+
+    func showOperationSuccess(_ title: String, message: String) {
+        showOperationNotice(kind: .success, title: title, message: message)
+    }
+
+    func showOperationFailure(_ title: String, message: String) {
+        showOperationNotice(kind: .failure, title: title, message: message)
+    }
+
+    func dismissOperationNotice() {
+        operationNoticeTask?.cancel()
+        operationNoticeTask = nil
+        operationNotice = nil
     }
 
     func selectBlock(_ block: DanceBlock) {
@@ -535,21 +546,17 @@ final class JudgingStore: ObservableObject {
         }
     }
 
-    func deleteEvent(_ event: EventSummary, importSecret: String) async throws {
+    func deleteEvent(_ event: EventSummary) async throws {
         guard let remoteRepository else {
             throw EventDeletionError.missingRemoteConfiguration
         }
         guard isAdmin else {
             throw EventDeletionError.notAllowed
         }
-        let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanImportSecret.isEmpty else {
-            throw EventDeletionError.missingImportSecret
-        }
 
         syncStatus = .syncing
         syncMessage = "Borrando \(event.name)..."
-        _ = try await remoteRepository.archiveEvent(eventID: event.id, importSecret: cleanImportSecret)
+        _ = try await remoteRepository.archiveEvent(eventID: event.id)
 
         let events = try await remoteRepository.fetchEvents()
         availableEvents = events
@@ -1432,6 +1439,20 @@ final class JudgingStore: ObservableObject {
             profiles.append(profile)
         }
         appData.judgeProfiles = profiles
+    }
+
+    private func showOperationNotice(kind: OperationNoticeKind, title: String, message: String) {
+        operationNoticeTask?.cancel()
+        let notice = OperationNotice(kind: kind, title: title, message: message)
+        operationNotice = notice
+        operationNoticeTask = Task { [weak self, noticeID = notice.id] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)
+            await MainActor.run {
+                guard self?.operationNotice?.id == noticeID else { return }
+                self?.operationNotice = nil
+                self?.operationNoticeTask = nil
+            }
+        }
     }
 
     private static func loadBundledData() -> AppData {

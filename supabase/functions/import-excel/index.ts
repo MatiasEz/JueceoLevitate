@@ -69,6 +69,17 @@ const CORS_HEADERS = {
 };
 
 const IMPORT_SECRET_HEADER = "x-import-secret";
+const DEFAULT_JUDGE_PROFILES = [
+  { name: "ALEX", heroImageName: "JudgeHeroAlex" },
+  { name: "ANGELA", heroImageName: "JudgeHeroAngela" },
+  { name: "DANIEL", heroImageName: "JudgeHeroDaniel" },
+  { name: "DAVE", heroImageName: "" },
+  { name: "EVA", heroImageName: "" },
+  { name: "VLADIMIR", heroImageName: "JudgeHeroVladimir" },
+  { name: "YOLI", heroImageName: "JudgeHeroYoli" },
+  { name: "ATI", heroImageName: "" },
+];
+const DEFAULT_JUDGES = DEFAULT_JUDGE_PROFILES.map((profile) => profile.name);
 
 const REQUIRED_BLOCK_COLUMNS: Record<string, string> = {
   name: "COREOGRAFIA",
@@ -543,8 +554,8 @@ function parseJudges(workbook: XLSX.WorkBook, warnings: string[]): string[] {
     }
   }
   if (!judges.length) {
-    warnings.push("No se encontraron jueces en CALIFICACIONES; se usan jueces demo.");
-    return ["DAVE", "EVA", "DANIEL"];
+    warnings.push("No se encontraron jueces en CALIFICACIONES; se usan jueces default de Levitate.");
+    return [...DEFAULT_JUDGES];
   }
   if (duplicateCount) {
     warnings.push(`CALIFICACIONES: ${duplicateCount} jueces duplicados omitidos.`);
@@ -553,15 +564,25 @@ function parseJudges(workbook: XLSX.WorkBook, warnings: string[]): string[] {
 }
 
 function withRequiredPeople(judges: string[]): string[] {
-  const result = [...judges];
-  if (!result.some((judge) => stableID(judge) === "ati")) {
-    result.push("ATI");
+  const result = [...DEFAULT_JUDGES];
+  const known = new Set(result.map(stableID));
+  for (const judge of judges) {
+    const judgeID = stableID(judge);
+    if (!known.has(judgeID)) {
+      result.push(judge);
+      known.add(judgeID);
+    }
   }
   return result;
 }
 
 function roleForPerson(name: string): string {
   return stableID(name) === "ati" ? "admin" : "judge";
+}
+
+function heroImageForPerson(name: string): string {
+  const judgeID = stableID(name);
+  return DEFAULT_JUDGE_PROFILES.find((profile) => stableID(profile.name) === judgeID)?.heroImageName ?? "";
 }
 
 function aliasBaseForGenre(genre: string): string | undefined {
@@ -666,6 +687,7 @@ async function uploadToSupabase(
     name: judge,
     role: roleForPerson(judge),
     sort_order: index + 1,
+    hero_image_name: heroImageForPerson(judge),
   }));
   const templateRows: AnyRow[] = [];
   const criterionRows: AnyRow[] = [];
@@ -759,7 +781,7 @@ async function upsertRows(table: string, rows: AnyRow[], conflict: string): Prom
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       const fallbackColumns = table === "judges"
-        ? ["role"]
+        ? ["role", "hero_image_name"]
         : table === "routines"
         ? ["participant"]
         : [];

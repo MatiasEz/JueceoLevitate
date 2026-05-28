@@ -43,7 +43,7 @@ enum JudgingSheetPDFExporter {
                     margin: margin,
                     page: page
                 )
-                let footerTop = page.height - 126
+                let footerTop = page.height - 156
                 drawCriteria(
                     criteria: criteria,
                     y: criteriaTop,
@@ -116,10 +116,6 @@ enum JudgingSheetPDFExporter {
         )
         drawEnergySweep(page: page)
 
-        drawBrandLogo(
-            in: CGRect(x: 24, y: 8, width: 340, height: 101),
-            alpha: 0.13
-        )
     }
 
     private static func drawHeader(
@@ -136,11 +132,11 @@ enum JudgingSheetPDFExporter {
         let heroTop: CGFloat = 24
 
         drawBrandLogo(
-            in: CGRect(x: margin, y: heroTop - 5, width: 210, height: 64)
+            in: CGRect(x: margin, y: heroTop - 4, width: 178, height: 52)
         )
         drawText(
             "CDMX 2026",
-            in: CGRect(x: margin + 224, y: heroTop + 18, width: 146, height: 26),
+            in: CGRect(x: margin + 214, y: heroTop + 18, width: 156, height: 26),
             size: 21,
             weight: .heavy,
             color: Theme.pink,
@@ -421,7 +417,7 @@ enum JudgingSheetPDFExporter {
         drawFooterMetric(label: "MÁXIMO", value: maxTotal.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + metricWidth + gap, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
         drawFooterMetric(label: "PENALIZACIÓN", value: penalty.formatted(.number.precision(.fractionLength(0...1))), rect: CGRect(x: margin + 14 + (metricWidth + gap) * 2, y: y + 8, width: metricWidth, height: 28), accent: Theme.white)
 
-        let feedbackCard = CGRect(x: margin, y: y + 54, width: fullWidth, height: 64)
+        let feedbackCard = CGRect(x: margin, y: y + 54, width: fullWidth, height: 94)
         drawRoundedRect(feedbackCard, fill: Theme.surface, stroke: Theme.silver.withAlphaComponent(0.55), cornerRadius: 12, lineWidth: 0.8)
         drawText(
             "RETROALIMENTACIÓN",
@@ -431,9 +427,9 @@ enum JudgingSheetPDFExporter {
             color: Theme.pink,
             alignment: .left
         )
-        drawText(
+        drawWrappedText(
             feedback.trimmingCharacters(in: .whitespacesAndNewlines),
-            in: CGRect(x: feedbackCard.minX + 14, y: feedbackCard.minY + 27, width: feedbackCard.width - 28, height: 28),
+            in: CGRect(x: feedbackCard.minX + 14, y: feedbackCard.minY + 29, width: feedbackCard.width - 28, height: feedbackCard.height - 40),
             size: 8.4,
             weight: .medium,
             color: Theme.black,
@@ -728,7 +724,7 @@ enum JudgingSheetPDFExporter {
         context.saveGState()
         context.setAlpha(alpha)
         if let image = UIImage(named: "LevitateLogo") {
-            image.withTintColor(color, renderingMode: .alwaysOriginal)
+            image.withRenderingMode(.alwaysOriginal)
                 .draw(in: aspectFit(image.size, in: rect))
         } else {
             drawText(
@@ -775,6 +771,75 @@ enum JudgingSheetPDFExporter {
             .paragraphStyle: paragraph
         ]
         text.draw(with: rect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], attributes: attributes, context: nil)
+    }
+
+    private static func drawWrappedText(
+        _ text: String,
+        in rect: CGRect,
+        size: CGFloat,
+        weight: UIFont.Weight = .regular,
+        color: UIColor = .black,
+        alignment: NSTextAlignment = .center,
+        minimumSize: CGFloat = 6.8
+    ) {
+        let fittedSize = fittingFontSize(
+            for: text,
+            in: rect,
+            size: size,
+            minimumSize: minimumSize,
+            weight: weight,
+            alignment: alignment
+        )
+        let attributes = wrappedTextAttributes(size: fittedSize, weight: weight, color: color, alignment: alignment)
+        text.draw(
+            with: rect,
+            options: [.usesLineFragmentOrigin, .usesFontLeading],
+            attributes: attributes,
+            context: nil
+        )
+    }
+
+    private static func fittingFontSize(
+        for text: String,
+        in rect: CGRect,
+        size: CGFloat,
+        minimumSize: CGFloat,
+        weight: UIFont.Weight,
+        alignment: NSTextAlignment
+    ) -> CGFloat {
+        var currentSize = size
+        while currentSize > minimumSize {
+            let attributes = wrappedTextAttributes(size: currentSize, weight: weight, color: .black, alignment: alignment)
+            let measured = (text as NSString).boundingRect(
+                with: CGSize(width: rect.width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: attributes,
+                context: nil
+            )
+            if measured.height <= rect.height {
+                return currentSize
+            }
+            currentSize -= 0.2
+        }
+        return minimumSize
+    }
+
+    private static func wrappedTextAttributes(
+        size: CGFloat,
+        weight: UIFont.Weight,
+        color: UIColor,
+        alignment: NSTextAlignment
+    ) -> [NSAttributedString.Key: Any] {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = alignment
+        paragraph.lineBreakMode = .byWordWrapping
+        paragraph.minimumLineHeight = size * 1.12
+        paragraph.maximumLineHeight = size * 1.24
+        return [
+            .font: UIFont.systemFont(ofSize: size, weight: weight),
+            .foregroundColor: color,
+            .paragraphStyle: paragraph
+        ]
     }
 
     private static func titleCase(_ value: String) -> String {

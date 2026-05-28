@@ -32,6 +32,17 @@ DEFAULT_OUTPUT = ROOT / "JueceoCoreografias" / "Resources" / "app_data.json"
 DEFAULT_XLSX = ROOT / "JueceoCoreografias" / "Resources" / "Bloque2.xlsx"
 DEFAULT_TEMPLATE_XLSX = DEFAULT_XLSX
 DEFAULT_ENV = ROOT / ".env"
+DEFAULT_JUDGE_PROFILES = [
+    {"name": "ALEX", "hero_image_name": "JudgeHeroAlex"},
+    {"name": "ANGELA", "hero_image_name": "JudgeHeroAngela"},
+    {"name": "DANIEL", "hero_image_name": "JudgeHeroDaniel"},
+    {"name": "DAVE", "hero_image_name": ""},
+    {"name": "EVA", "hero_image_name": ""},
+    {"name": "VLADIMIR", "hero_image_name": "JudgeHeroVladimir"},
+    {"name": "YOLI", "hero_image_name": "JudgeHeroYoli"},
+    {"name": "ATI", "hero_image_name": ""},
+]
+DEFAULT_JUDGES = [profile["name"] for profile in DEFAULT_JUDGE_PROFILES]
 
 REQUIRED_BLOCK_COLUMNS = {
     "name": "COREOGRAFIA",
@@ -338,22 +349,34 @@ def parse_judges(workbook) -> tuple[list[str], list[str], list[str]]:
             seen.add(key)
             judges.append(judge)
     if not judges:
-        judges = ["DAVE", "EVA", "DANIEL"]
-        warnings.append("No se encontraron jueces en CALIFICACIONES; se usan jueces demo.")
+        judges = DEFAULT_JUDGES.copy()
+        warnings.append("No se encontraron jueces en CALIFICACIONES; se usan jueces default de Levitate.")
     elif duplicate_count:
         warnings.append(f"CALIFICACIONES: {duplicate_count} jueces duplicados omitidos.")
     return judges, warnings, errors
 
 
 def with_required_people(judges: list[str]) -> list[str]:
-    result = list(judges)
-    if not any(stable_id(judge) == "ati" for judge in result):
-        result.append("ATI")
+    result = DEFAULT_JUDGES.copy()
+    known = {stable_id(judge) for judge in result}
+    for judge in judges:
+        judge_id = stable_id(judge)
+        if judge_id not in known:
+            result.append(judge)
+            known.add(judge_id)
     return result
 
 
 def role_for_person(name: str) -> str:
     return "admin" if stable_id(name) == "ati" else "judge"
+
+
+def hero_image_for_person(name: str) -> str:
+    judge_id = stable_id(name)
+    for profile in DEFAULT_JUDGE_PROFILES:
+        if stable_id(profile["name"]) == judge_id:
+            return profile["hero_image_name"]
+    return ""
 
 
 def load_templates(source: Path) -> tuple[list[dict[str, Any]], list[str], list[str]]:
@@ -464,7 +487,12 @@ def parse_workbook(source: Path, template_source: Path | None = DEFAULT_TEMPLATE
         "templates": templates,
         "judges": judges,
         "judgeProfiles": [
-            {"judgeID": stable_id(judge), "name": judge, "role": role_for_person(judge)}
+            {
+                "judgeID": stable_id(judge),
+                "name": judge,
+                "role": role_for_person(judge),
+                "heroImageName": hero_image_for_person(judge),
+            }
             for judge in judges
         ],
     }
@@ -527,7 +555,7 @@ def upsert_rows(table: str, rows: list[dict[str, Any]], conflict: str) -> None:
             )
         except RuntimeError as error:
             fallback_columns = {
-                "judges": ["role"],
+                "judges": ["role", "hero_image_name"],
                 "routines": ["participant"],
             }.get(table, [])
             missing_columns = [column for column in fallback_columns if column in str(error)]
@@ -682,6 +710,7 @@ def upload_to_supabase(
             "name": judge,
             "role": role_for_person(judge),
             "sort_order": index,
+            "hero_image_name": hero_image_for_person(judge),
         }
         for index, judge in enumerate(app_data["judges"], start=1)
     ]
