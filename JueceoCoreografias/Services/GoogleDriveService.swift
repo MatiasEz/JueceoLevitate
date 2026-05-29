@@ -130,14 +130,22 @@ final class GoogleDriveService {
     }
 
     private func validAccessToken() async throws -> String {
-        if let token = tokenStore.load(), token.expirationDate > Date().addingTimeInterval(90) {
-            return token.accessToken
+        if let token = tokenStore.load() {
+            if token.expirationDate > Date().addingTimeInterval(90) {
+                return token.accessToken
+            }
+
+            if let refreshToken = token.refreshToken {
+                do {
+                    let refreshed = try await refreshAccessToken(refreshToken: refreshToken)
+                    tokenStore.save(refreshed)
+                    return refreshed.accessToken
+                } catch {
+                    tokenStore.clear()
+                }
+            }
         }
-        if let refreshToken = tokenStore.load()?.refreshToken {
-            let refreshed = try await refreshAccessToken(refreshToken: refreshToken)
-            tokenStore.save(refreshed)
-            return refreshed.accessToken
-        }
+
         let authorized = try await authorize()
         tokenStore.save(authorized)
         return authorized.accessToken
@@ -371,7 +379,9 @@ final class GoogleDriveService {
             throw GoogleDriveServiceError.invalidResponse
         }
         guard (200..<300).contains(httpResponse.statusCode) else {
-            let message = (try? JSONDecoder().decode(GoogleDriveErrorResponse.self, from: data).error.message)
+            let decoder = JSONDecoder()
+            let message = (try? decoder.decode(GoogleDriveErrorResponse.self, from: data).error.message)
+                ?? (try? decoder.decode(GoogleOAuthErrorResponse.self, from: data).message)
                 ?? HTTPURLResponse.localizedString(forStatusCode: httpResponse.statusCode)
             throw GoogleDriveServiceError.requestFailed(message)
         }
@@ -616,6 +626,10 @@ private final class GoogleOAuthTokenStore {
         guard let data = try? JSONEncoder().encode(token) else { return }
         UserDefaults.standard.set(data, forKey: key)
     }
+
+    func clear() {
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
 
 private enum GoogleDriveMIME {
@@ -640,6 +654,20 @@ private struct GoogleDriveErrorResponse: Decodable {
 
 private struct GoogleDriveError: Decodable {
     let message: String
+}
+
+private struct GoogleOAuthErrorResponse: Decodable {
+    let error: String
+    let errorDescription: String?
+
+    var message: String {
+        errorDescription ?? error
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case error
+        case errorDescription = "error_description"
+    }
 }
 
 private enum GoogleDriveHelpers {
