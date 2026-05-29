@@ -344,12 +344,12 @@ actor RemoteJudgingRepository {
         }
 
         async let blocks: [BlockRow] = fetchBlocks(eventID: encodedEventID)
-        async let routines: [RoutineRow] = get("routines?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
+        async let routines: [RoutineRow] = getAll("routines?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let judges: [JudgeRow] = get("judges?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
         async let templates: [TemplateRow] = get("criteria_templates?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
-        async let criteria: [CriterionRowDTO] = get("criteria?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
-        async let scores: [RemoteScoreRow] = get("scores?select=*&event_id=eq.\(encodedEventID)")
-        async let feedback: [RemoteFeedbackRow] = get("feedback?select=*&event_id=eq.\(encodedEventID)")
+        async let criteria: [CriterionRowDTO] = getAll("criteria?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
+        async let scores: [RemoteScoreRow] = getAll("scores?select=*&event_id=eq.\(encodedEventID)&order=routine_id.asc,judge_id.asc,criterion_id.asc")
+        async let feedback: [RemoteFeedbackRow] = getAll("feedback?select=*&event_id=eq.\(encodedEventID)&order=routine_id.asc,judge_id.asc")
         async let penalties: [RemotePenaltyRow] = fetchPenalties(eventID: encodedEventID)
         async let favorites: [RemoteFavoriteRow] = fetchFavorites(eventID: encodedEventID)
 
@@ -496,9 +496,26 @@ actor RemoteJudgingRepository {
         return try decoder.decode(T.self, from: data)
     }
 
+    private func getAll<T: Decodable>(_ path: String, pageSize: Int = 1000) async throws -> [T] {
+        var rows: [T] = []
+        var start = 0
+
+        while true {
+            let end = start + pageSize - 1
+            let data = try await request(path: path, method: "GET", range: "\(start)-\(end)")
+            let page = try decoder.decode([T].self, from: data)
+            rows.append(contentsOf: page)
+
+            guard page.count == pageSize else {
+                return rows
+            }
+            start += pageSize
+        }
+    }
+
     private func fetchBlocks(eventID: String) async throws -> [BlockRow] {
         do {
-            return try await get("blocks?select=*&event_id=eq.\(eventID)&order=sort_order.asc")
+            return try await getAll("blocks?select=*&event_id=eq.\(eventID)&order=sort_order.asc")
         } catch {
             return []
         }
@@ -506,7 +523,7 @@ actor RemoteJudgingRepository {
 
     private func fetchFavorites(eventID: String) async throws -> [RemoteFavoriteRow] {
         do {
-            return try await get("routine_favorites?select=*&event_id=eq.\(eventID)")
+            return try await getAll("routine_favorites?select=*&event_id=eq.\(eventID)&order=block_id.asc,judge_id.asc,category.asc")
         } catch {
             return []
         }
@@ -514,7 +531,7 @@ actor RemoteJudgingRepository {
 
     private func fetchPenalties(eventID: String) async throws -> [RemotePenaltyRow] {
         do {
-            return try await get("penalties?select=*&event_id=eq.\(eventID)")
+            return try await getAll("penalties?select=*&event_id=eq.\(eventID)&order=routine_id.asc,judge_id.asc")
         } catch {
             return []
         }
@@ -533,7 +550,7 @@ actor RemoteJudgingRepository {
         value.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? value
     }
 
-    private func request(path: String, method: String, body: Data? = nil, prefer: String? = nil) async throws -> Data {
+    private func request(path: String, method: String, body: Data? = nil, prefer: String? = nil, range: String? = nil) async throws -> Data {
         guard let endpoint = URL(string: "\(config.url.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")))/rest/v1/\(path)") else {
             throw RemoteJudgingError.invalidURL
         }
@@ -545,6 +562,9 @@ actor RemoteJudgingRepository {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let prefer {
             request.setValue(prefer, forHTTPHeaderField: "Prefer")
+        }
+        if let range {
+            request.setValue(range, forHTTPHeaderField: "Range")
         }
 
         let (data, response) = try await URLSession.shared.data(for: request)

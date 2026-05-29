@@ -29,14 +29,9 @@ class SupabaseApi {
       };
 
   Future<List<EventSummary>> fetchEvents() async {
-    final response = await http.get(
-      _endpoint(
-        'events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc',
-      ),
-      headers: _headers,
+    final rows = await _getAll(
+      'events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc',
     );
-    _throwIfFailed(response);
-    final rows = jsonDecode(response.body) as List<dynamic>;
     return rows
         .map((row) => EventSummary.fromJson(row as Map<String, dynamic>))
         .toList();
@@ -45,52 +40,36 @@ class SupabaseApi {
   Future<RemoteBundle> fetchBundle(EventSummary event) async {
     final eventID = Uri.encodeQueryComponent(event.id);
     final responses = await Future.wait([
-      http.get(
-        _endpoint(
-          'routines?select=*&event_id=eq.$eventID&order=sort_order.asc',
-        ),
-        headers: _headers,
+      _getAll(
+        'routines?select=*&event_id=eq.$eventID&order=sort_order.asc',
       ),
-      http.get(
-        _endpoint('judges?select=*&event_id=eq.$eventID&order=sort_order.asc'),
-        headers: _headers,
+      _getAll(
+        'judges?select=*&event_id=eq.$eventID&order=sort_order.asc',
       ),
-      http.get(
-        _endpoint(
-          'criteria_templates?select=*&event_id=eq.$eventID&order=sort_order.asc',
-        ),
-        headers: _headers,
+      _getAll(
+        'criteria_templates?select=*&event_id=eq.$eventID&order=sort_order.asc',
       ),
-      http.get(
-        _endpoint(
-          'criteria?select=*&event_id=eq.$eventID&order=sort_order.asc',
-        ),
-        headers: _headers,
+      _getAll(
+        'criteria?select=*&event_id=eq.$eventID&order=sort_order.asc',
       ),
-      http.get(
-        _endpoint('scores?select=*&event_id=eq.$eventID'),
-        headers: _headers,
+      _getAll(
+        'scores?select=*&event_id=eq.$eventID&order=routine_id.asc,judge_id.asc,criterion_id.asc',
       ),
-      http.get(
-        _endpoint('feedback?select=*&event_id=eq.$eventID'),
-        headers: _headers,
+      _getAll(
+        'feedback?select=*&event_id=eq.$eventID&order=routine_id.asc,judge_id.asc',
       ),
-      http.get(
-        _endpoint('penalties?select=*&event_id=eq.$eventID'),
-        headers: _headers,
+      _getAll(
+        'penalties?select=*&event_id=eq.$eventID&order=routine_id.asc,judge_id.asc',
       ),
     ]);
-    for (final response in responses) {
-      _throwIfFailed(response);
-    }
 
-    final routineRows = jsonDecode(responses[0].body) as List<dynamic>;
-    final judgeRows = jsonDecode(responses[1].body) as List<dynamic>;
-    final templateRows = jsonDecode(responses[2].body) as List<dynamic>;
-    final criterionRows = jsonDecode(responses[3].body) as List<dynamic>;
-    final scoreRows = jsonDecode(responses[4].body) as List<dynamic>;
-    final feedbackRows = jsonDecode(responses[5].body) as List<dynamic>;
-    final penaltyRows = jsonDecode(responses[6].body) as List<dynamic>;
+    final routineRows = responses[0];
+    final judgeRows = responses[1];
+    final templateRows = responses[2];
+    final criterionRows = responses[3];
+    final scoreRows = responses[4];
+    final feedbackRows = responses[5];
+    final penaltyRows = responses[6];
 
     final routines = routineRows
         .map((row) => Routine.fromJson(row as Map<String, dynamic>))
@@ -156,6 +135,30 @@ class SupabaseApi {
           .map((row) => RemotePenalty.fromJson(row as Map<String, dynamic>))
           .toList(),
     );
+  }
+
+  Future<List<dynamic>> _getAll(String path, {int pageSize = 1000}) async {
+    final rows = <dynamic>[];
+    var start = 0;
+
+    while (true) {
+      final end = start + pageSize - 1;
+      final response = await http.get(
+        _endpoint(path),
+        headers: {
+          ..._headers,
+          'Range': '$start-$end',
+        },
+      );
+      _throwIfFailed(response);
+
+      final page = jsonDecode(response.body) as List<dynamic>;
+      rows.addAll(page);
+      if (page.length < pageSize) {
+        return rows;
+      }
+      start += pageSize;
+    }
   }
 
   Future<void> upsertScores(
