@@ -539,7 +539,7 @@ private struct PhoneScoreSheet: View {
     }
 
     private var penaltyValue: Double {
-        if penalty == "Otro" {
+        if store.isAdmin, penalty == "Otro" {
             return min(max(Double(customPenalty.replacingOccurrences(of: ",", with: ".")) ?? 0, -100), 0)
         }
         return Double(penalty) ?? 0
@@ -547,6 +547,10 @@ private struct PhoneScoreSheet: View {
 
     private var maxTotal: Double {
         template.maxScore > 0 ? template.maxScore : template.criteria.reduce(0) { $0 + $1.maxScore }
+    }
+
+    private var penaltyOptions: [String] {
+        store.isAdmin ? ["0", "-1", "-2", "Otro"] : ["0", "-1", "-2"]
     }
 
     private var routineIndex: Int {
@@ -723,7 +727,7 @@ private struct PhoneScoreSheet: View {
                 .foregroundStyle(LevitTheme.muted)
 
             HStack(spacing: 8) {
-                ForEach(["0", "-1", "-2", "Otro"], id: \.self) { item in
+                ForEach(penaltyOptions, id: \.self) { item in
                     Button {
                         penalty = item
                         if item != "Otro" {
@@ -743,7 +747,7 @@ private struct PhoneScoreSheet: View {
                 }
             }
 
-            if penalty == "Otro" {
+            if store.isAdmin, penalty == "Otro" {
                 TextField("-3", text: Binding(
                     get: { customPenalty },
                     set: {
@@ -1003,8 +1007,8 @@ private struct PhoneScoreSheet: View {
             penalty = "-2"
             customPenalty = ""
         } else {
-            penalty = "Otro"
-            customPenalty = value.formatted(.number.precision(.fractionLength(0...1)))
+            penalty = store.isAdmin ? "Otro" : "0"
+            customPenalty = store.isAdmin ? value.formatted(.number.precision(.fractionLength(0...1))) : ""
         }
     }
 
@@ -1049,6 +1053,7 @@ private struct PhoneScoreSheet: View {
 
 private struct PhoneFavoritesView: View {
     @EnvironmentObject private var store: JudgingStore
+    @State private var isRefreshingData = false
 
     private var favorites: [FavoriteSelectionSummary] {
         store.favoriteSummaries
@@ -1085,10 +1090,30 @@ private struct PhoneFavoritesView: View {
             .background(LevitTheme.paper)
             .navigationTitle("Favoritos")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    RefreshDataButton(isRefreshing: isRefreshingData, isCompact: true) {
+                        Task { await refreshAdminData() }
+                    }
+                    .disabled(store.isLoadingBackendData)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     BlockPill(isCompact: true)
                 }
             }
+        }
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "Los favoritos se actualizaron con la información del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
         }
     }
 }
@@ -1183,6 +1208,7 @@ private struct PhoneFavoriteRankingRow: View {
 
 private struct PhoneDictamenView: View {
     @EnvironmentObject private var store: JudgingStore
+    @State private var isRefreshingData = false
 
     private var sections: [DictamenGenreSection] {
         DictamenBuilder.sections(from: store.rankings)
@@ -1211,10 +1237,30 @@ private struct PhoneDictamenView: View {
             .background(LevitTheme.paper)
             .navigationTitle("Dictamen final")
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    RefreshDataButton(isRefreshing: isRefreshingData, isCompact: true) {
+                        Task { await refreshAdminData() }
+                    }
+                    .disabled(store.isLoadingBackendData)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     BlockPill(isCompact: true)
                 }
             }
+        }
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "El dictamen final se actualizó con los puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
         }
     }
 }
@@ -1541,6 +1587,7 @@ private struct PhoneAdminView: View {
     @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
+    @State private var isRefreshingData = false
 
     private var orderedRoutines: [Routine] {
         store.visibleRoutines.sorted(by: routineOrder)
@@ -1559,6 +1606,14 @@ private struct PhoneAdminView: View {
             }
             .background(LevitTheme.paper)
             .navigationTitle("Panel admin")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    RefreshDataButton(isRefreshing: isRefreshingData, isCompact: true) {
+                        Task { await refreshAdminData() }
+                    }
+                    .disabled(store.isLoadingBackendData)
+                }
+            }
         }
         .onAppear(perform: prepareDefaultDriveFolderName)
         .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
@@ -1745,6 +1800,20 @@ private struct PhoneAdminView: View {
 
     private var editAsJudgeTitle: String {
         store.isAdminEditingAsJudge ? "Editar como \(store.scoringJudge)" : "Editar como juez"
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "Se volvieron a traer las coreografías y puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
     }
 
     private var routineDeletionTitle: String {

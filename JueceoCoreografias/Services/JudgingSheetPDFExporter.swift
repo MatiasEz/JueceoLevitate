@@ -299,9 +299,23 @@ enum JudgingSheetPDFExporter {
 
         let tableX = panel.minX + 10
         let tableWidth = panel.width - 20
-        var currentY = panel.minY + 10
-        let rowHeight = criteriaRowHeight(criteriaCount: criteria.count, sectionCount: groups.count, availableHeight: panel.height - 20)
-        let criterionFont = rowHeight <= 17.2 ? CGFloat(7.05) : CGFloat(8.15)
+        let contentInset: CGFloat = 8
+        var currentY = panel.minY + contentInset
+        let contentBottom = panel.maxY - contentInset
+        let rowHeight = criteriaRowHeight(
+            criteriaCount: criteria.count,
+            sectionCount: groups.count,
+            availableHeight: panel.height - contentInset * 2
+        )
+        let criterionFont: CGFloat
+        if rowHeight <= 15.6 {
+            criterionFont = 6.45
+        } else if rowHeight <= 17.2 {
+            criterionFont = 7.05
+        } else {
+            criterionFont = 8.15
+        }
+        let compactRow = rowHeight <= 15.6
         let idWidth: CGFloat = 34
         let scoreWidth: CGFloat = 64
         let maxWidth: CGFloat = 52
@@ -345,7 +359,7 @@ enum JudgingSheetPDFExporter {
         currentY += Layout.columnHeaderHeight
 
         for section in groups {
-            if currentY + Layout.sectionHeight + rowHeight > panel.maxY - 10 {
+            if currentY + Layout.sectionHeight + rowHeight > contentBottom + 0.5 {
                 break
             }
 
@@ -357,7 +371,7 @@ enum JudgingSheetPDFExporter {
             currentY += Layout.sectionHeight
 
             for (index, criterion) in section.criteria.enumerated() {
-                if currentY + rowHeight > panel.maxY - 10 {
+                if currentY + rowHeight > contentBottom + 0.5 {
                     return
                 }
                 let rowFill = index.isMultiple(of: 2) ? Theme.white : Theme.rowGray
@@ -366,7 +380,7 @@ enum JudgingSheetPDFExporter {
                     rect: CGRect(x: tableX, y: currentY, width: idWidth, height: rowHeight),
                     text: "\(criterion.id)",
                     fill: rowFill,
-                    fontSize: 8.5,
+                    fontSize: compactRow ? 7.3 : 8.5,
                     weight: .black,
                     color: Theme.black
                 )
@@ -383,7 +397,7 @@ enum JudgingSheetPDFExporter {
                     rect: CGRect(x: tableX + idWidth + criterionWidth, y: currentY, width: maxWidth, height: rowHeight),
                     text: criterion.maxScore.formatted(.number.precision(.fractionLength(0...1))),
                     fill: rowFill,
-                    fontSize: 8.4,
+                    fontSize: compactRow ? 7.3 : 8.4,
                     weight: .black,
                     color: Theme.gray
                 )
@@ -529,7 +543,8 @@ enum JudgingSheetPDFExporter {
         context.setLineWidth(0.34)
         context.stroke(rect)
         context.restoreGState()
-        let textHeight = min(rect.height - 4, fontSize * 2.25)
+        let verticalPadding: CGFloat = rect.height <= 16 ? 1.4 : 4
+        let textHeight = min(rect.height - verticalPadding, fontSize * 2.25)
         let textY = rect.midY - textHeight / 2
         drawText(
             text,
@@ -579,12 +594,13 @@ enum JudgingSheetPDFExporter {
         drawTableCell(rect: rect, text: "", fill: fill, fontSize: 8)
         guard score > 0 else { return }
 
-        let pill = rect.insetBy(dx: 8, dy: max(2.2, rect.height * 0.17))
+        let compact = rect.height <= 15.6
+        let pill = rect.insetBy(dx: compact ? 10 : 8, dy: max(2.0, rect.height * 0.17))
         drawRoundedRect(pill, fill: Theme.pink, stroke: Theme.pink, cornerRadius: pill.height / 2, lineWidth: 0)
         drawText(
             score.formatted(.number.precision(.fractionLength(0...1))),
             in: pill.insetBy(dx: 4, dy: 1),
-            size: 8.9,
+            size: compact ? 7.5 : 8.9,
             weight: .black,
             color: Theme.white,
             alignment: .center
@@ -882,10 +898,10 @@ enum JudgingSheetPDFExporter {
     }
 
     private enum Layout {
-        static let columnHeaderHeight: CGFloat = 22
-        static let sectionHeight: CGFloat = 18
-        static let sectionGap: CGFloat = 3
-        static let minRowHeight: CGFloat = 16.3
+        static let columnHeaderHeight: CGFloat = 20
+        static let sectionHeight: CGFloat = 16.5
+        static let sectionGap: CGFloat = 2
+        static let minRowHeight: CGFloat = 13.8
         static let maxRowHeight: CGFloat = 22.5
     }
 }

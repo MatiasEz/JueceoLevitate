@@ -254,7 +254,7 @@ private struct ScoreSheet: View {
     }
 
     private var penaltyValue: Double {
-        if penalty == "Otro" {
+        if store.isAdmin, penalty == "Otro" {
             return min(max(Double(customPenalty.replacingOccurrences(of: ",", with: ".")) ?? 0, -100), 0)
         }
         return Double(penalty) ?? 0
@@ -272,6 +272,10 @@ private struct ScoreSheet: View {
 
     private var scoringJudge: String {
         store.scoringJudge
+    }
+
+    private var penaltyOptions: [String] {
+        store.isAdmin ? ["0", "-1", "-2", "Otro"] : ["0", "-1", "-2"]
     }
 
     var body: some View {
@@ -591,7 +595,7 @@ private struct ScoreSheet: View {
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
             HStack(spacing: 10) {
-                ForEach(["0", "-1", "-2", "Otro"], id: \.self) { item in
+                ForEach(penaltyOptions, id: \.self) { item in
                     Button {
                         penalty = item
                         if item != "Otro" {
@@ -609,7 +613,7 @@ private struct ScoreSheet: View {
                     .buttonStyle(.plain)
                 }
             }
-            if penalty == "Otro" {
+            if store.isAdmin, penalty == "Otro" {
                 TextField("-3", text: Binding(
                     get: { customPenalty },
                     set: {
@@ -743,8 +747,8 @@ private struct ScoreSheet: View {
             penalty = "-2"
             customPenalty = ""
         } else {
-            penalty = "Otro"
-            customPenalty = value.formatted(.number.precision(.fractionLength(0...1)))
+            penalty = store.isAdmin ? "Otro" : "0"
+            customPenalty = store.isAdmin ? value.formatted(.number.precision(.fractionLength(0...1))) : ""
         }
     }
 

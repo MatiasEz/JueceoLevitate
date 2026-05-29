@@ -7,6 +7,7 @@ struct ScoresView: View {
 
     @State private var selectedAcademy = allFilter
     @State private var selectedGenre = allFilter
+    @State private var isRefreshingData = false
 
     private static let allFilter = "Todas"
     private var allFilter: String { Self.allFilter }
@@ -59,6 +60,12 @@ struct ScoresView: View {
             }
 
             Spacer()
+
+            RefreshDataButton(isRefreshing: isRefreshingData) {
+                Task { await refreshAdminData() }
+            }
+            .disabled(store.isLoadingBackendData)
+            .opacity(store.isLoadingBackendData ? 0.58 : 1)
 
             Button(action: onExportPDF) {
                 Label("Exportar PDF", systemImage: "doc.richtext")
@@ -195,6 +202,20 @@ struct ScoresView: View {
     private func uniqueValues(_ values: [String]) -> [String] {
         Array(Set(values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }))
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "El ranking se actualizó con los puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
     }
 }
 

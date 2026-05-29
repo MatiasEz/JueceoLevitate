@@ -15,6 +15,20 @@ private enum DriveExportError: LocalizedError {
     }
 }
 
+private enum DataRefreshError: LocalizedError {
+    case missingRemoteConfiguration
+    case noEvents
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .noEvents:
+            "No hay programas cargados en Supabase."
+        }
+    }
+}
+
 @MainActor
 final class JudgingStore: ObservableObject {
     @Published private(set) var appData: AppData
@@ -595,6 +609,43 @@ final class JudgingStore: ObservableObject {
         } catch {
             syncStatus = pendingSyncCount > 0 ? .pending : .offline(error.localizedDescription)
             syncMessage = error.localizedDescription
+        }
+    }
+
+    func refreshCurrentEvent() async throws {
+        guard let remoteRepository else {
+            syncStatus = .localOnly
+            syncMessage = DataRefreshError.missingRemoteConfiguration.localizedDescription
+            throw DataRefreshError.missingRemoteConfiguration
+        }
+
+        syncStatus = .connecting
+        syncMessage = "Actualizando datos del programa..."
+
+        do {
+            let eventID: String
+            if let selectedEventID {
+                eventID = selectedEventID
+            } else {
+                let events = try await remoteRepository.fetchEvents()
+                availableEvents = events
+                guard let event = events.first(where: \.isActive) ?? events.first else {
+                    throw DataRefreshError.noEvents
+                }
+                eventID = event.id
+            }
+
+            let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+            selectedEventID = bundle.event.id
+            UserDefaults.standard.set(bundle.event.id, forKey: selectedEventKey)
+            applyRemoteBundle(bundle)
+            await syncPending()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            syncMessage = pendingSyncCount > 0 ? "\(pendingSyncCount) cambios pendientes." : "\(bundle.event.name) actualizado."
+        } catch {
+            syncStatus = pendingSyncCount > 0 ? .pending : .offline(error.localizedDescription)
+            syncMessage = error.localizedDescription
+            throw error
         }
     }
 

@@ -985,6 +985,44 @@ struct SyncPill: View {
     }
 }
 
+struct RefreshDataButton: View {
+    let isRefreshing: Bool
+    var isCompact = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: isCompact ? 0 : 8) {
+                if isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(LevitTheme.pink)
+                } else {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.callout.weight(.black))
+                }
+
+                if !isCompact {
+                    Text(isRefreshing ? "Actualizando" : "Actualizar")
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
+            .font(.callout.weight(.black))
+            .frame(width: isCompact ? 42 : nil, height: isCompact ? 42 : nil)
+            .padding(.horizontal, isCompact ? 0 : 14)
+            .padding(.vertical, isCompact ? 0 : 10)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: isCompact ? 13 : 12))
+            .overlay(RoundedRectangle(cornerRadius: isCompact ? 13 : 12).stroke(LevitTheme.line))
+        }
+        .buttonStyle(.plain)
+        .disabled(isRefreshing)
+        .opacity(isRefreshing ? 0.72 : 1)
+        .accessibilityLabel(isRefreshing ? "Actualizando datos" : "Actualizar datos")
+    }
+}
+
 struct MetricCard: View {
     let icon: String
     let value: String

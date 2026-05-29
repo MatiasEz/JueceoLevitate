@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FavoritesView: View {
     @EnvironmentObject private var store: JudgingStore
+    @State private var isRefreshingData = false
 
     private var favorites: [FavoriteSelectionSummary] {
         store.favoriteSummaries
@@ -41,6 +42,11 @@ struct FavoritesView: View {
             Spacer()
 
             HStack(spacing: 18) {
+                RefreshDataButton(isRefreshing: isRefreshingData) {
+                    Task { await refreshAdminData() }
+                }
+                .disabled(store.isLoadingBackendData)
+                .opacity(store.isLoadingBackendData ? 0.58 : 1)
                 EventPill()
                 BlockPill()
                 SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount)
@@ -102,6 +108,20 @@ struct FavoritesView: View {
         .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.cardStroke))
         .shadow(color: .black.opacity(0.045), radius: 22, x: 0, y: 12)
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "Los favoritos se actualizaron con la información del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
     }
 }
 

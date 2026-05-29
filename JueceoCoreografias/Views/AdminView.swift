@@ -18,6 +18,7 @@ struct AdminView: View {
     @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
+    @State private var isRefreshingData = false
 
     private var currentEventTitle: String {
         store.availableEvents.first { $0.id == store.selectedEventID }?.name
@@ -177,7 +178,7 @@ struct AdminView: View {
                 onExportPDF(store.rankings, "Calificaciones y dictamen final")
             }
             AdminActionButton(title: "Actualizar datos", icon: "arrow.clockwise") {
-                Task { await store.refreshEvents() }
+                Task { await refreshAdminData() }
             }
         }
     }
@@ -299,6 +300,11 @@ struct AdminView: View {
                         Label("Coreografías del bloque", systemImage: "list.bullet.rectangle")
                             .font(.headline.weight(.black))
                         Spacer()
+                        RefreshDataButton(isRefreshing: isRefreshingData) {
+                            Task { await refreshAdminData() }
+                        }
+                        .disabled(store.isLoadingBackendData)
+                        .opacity(store.isLoadingBackendData ? 0.58 : 1)
                         HStack(spacing: 8) {
                             Image(systemName: "magnifyingglass")
                                 .foregroundStyle(LevitTheme.muted)
@@ -336,6 +342,23 @@ struct AdminView: View {
         .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.cardStroke))
         .shadow(color: .black.opacity(0.045), radius: 22, x: 0, y: 12)
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer {
+            isRefreshingData = false
+            normalizeSelection()
+        }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "Se volvieron a traer las coreografías y puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
     }
 
     private func normalizeSelection() {

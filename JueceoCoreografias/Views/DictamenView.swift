@@ -1,7 +1,9 @@
 import SwiftUI
 
 struct DictamenView: View {
+    @EnvironmentObject private var store: JudgingStore
     let results: [RoutineResult]
+    @State private var isRefreshingData = false
 
     private var sections: [DictamenGenreSection] {
         DictamenBuilder.sections(from: results)
@@ -42,6 +44,11 @@ struct DictamenView: View {
 
             Spacer()
 
+            RefreshDataButton(isRefreshing: isRefreshingData) {
+                Task { await refreshAdminData() }
+            }
+            .disabled(store.isLoadingBackendData)
+            .opacity(store.isLoadingBackendData ? 0.58 : 1)
             BlockPill()
         }
     }
@@ -78,6 +85,20 @@ struct DictamenView: View {
                 .padding(.bottom, 24)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            store.showOperationSuccess("Datos actualizados", message: "El dictamen final se actualizó con los puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
         }
     }
 }
