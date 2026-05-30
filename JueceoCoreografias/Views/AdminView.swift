@@ -264,29 +264,19 @@ struct AdminView: View {
 
             HStack(alignment: .top, spacing: 16) {
                 VStack(alignment: .leading, spacing: 14) {
-                    AdminMenuField(title: "Juez", value: selectedJudgeForEdit.isEmpty ? "Sin jueces" : selectedJudgeForEdit, icon: "person.fill") {
-                        ForEach(store.orderedEditableJudges, id: \.self) { judge in
-                            Button {
-                                selectedJudgeForEdit = judge
-                            } label: {
-                                Label(judge, systemImage: judge == selectedJudgeForEdit ? "checkmark.circle.fill" : "circle")
-                            }
-                        }
-                    }
+                    AdminMenuField(
+                        title: "Juez",
+                        value: selectedJudgeForEdit.isEmpty ? "Sin jueces" : selectedJudgeForEdit,
+                        icon: "person.fill",
+                        optionSections: judgeMenuOptions
+                    )
 
-                    AdminMenuField(title: "Bloque", value: store.selectedBlock?.name ?? "Sin bloques", icon: "square.stack.3d.up.fill") {
-                        if store.blocks.isEmpty {
-                            Text("Sin bloques")
-                        } else {
-                            ForEach(store.blocks) { block in
-                                Button {
-                                    selectAdminBlock(block)
-                                } label: {
-                                    Label(block.name, systemImage: block.id == store.selectedBlock?.id ? "checkmark.circle.fill" : "circle")
-                                }
-                            }
-                        }
-                    }
+                    AdminMenuField(
+                        title: "Bloque",
+                        value: store.selectedBlock?.name ?? "Sin bloques",
+                        icon: "square.stack.3d.up.fill",
+                        optionSections: blockMenuOptions
+                    )
 
                     if let routine = selectedRoutineForEdit {
                         AdminSelectedRoutineCard(
@@ -378,32 +368,59 @@ struct AdminView: View {
         AdminMenuField(
             title: "Nivel",
             value: displayLevel(routine.level),
-            icon: "slider.horizontal.3"
-        ) {
-            Button {
-                Task { await updateRoutineLevel(routine, to: "") }
-            } label: {
-                Label(
-                    "Sin nivel",
-                    systemImage: normalizedLevelKey(routine.level).isEmpty ? "checkmark.circle.fill" : "circle"
-                )
-            }
-
-            Divider()
-
-            ForEach(routineLevelOptions, id: \.self) { level in
-                Button {
-                    Task { await updateRoutineLevel(routine, to: level) }
-                } label: {
-                    Label(
-                        level,
-                        systemImage: normalizedLevelKey(routine.level) == normalizedLevelKey(level) ? "checkmark.circle.fill" : "circle"
-                    )
-                }
-            }
-        }
+            icon: "slider.horizontal.3",
+            optionSections: routineLevelMenuOptions(for: routine)
+        )
         .disabled(isUpdatingRoutineLevel || !store.hasRemoteConfiguration)
         .opacity(isUpdatingRoutineLevel || !store.hasRemoteConfiguration ? 0.58 : 1)
+    }
+
+    private var judgeMenuOptions: [[AdminDropdownOption]] {
+        let options = store.orderedEditableJudges.map { judge in
+            AdminDropdownOption(
+                id: judge.normalizedKey,
+                title: judge,
+                icon: "person.fill",
+                isSelected: judge == selectedJudgeForEdit
+            ) {
+                selectedJudgeForEdit = judge
+            }
+        }
+        return [options.isEmpty ? [
+            AdminDropdownOption(id: "empty", title: "Sin jueces", icon: "exclamationmark.circle", isEnabled: false) {}
+        ] : options]
+    }
+
+    private var blockMenuOptions: [[AdminDropdownOption]] {
+        let options = store.blocks.map { block in
+            AdminDropdownOption(
+                id: block.id,
+                title: block.name,
+                icon: "square.stack.3d.up.fill",
+                isSelected: block.id == store.selectedBlock?.id
+            ) {
+                selectAdminBlock(block)
+            }
+        }
+        return [options.isEmpty ? [
+            AdminDropdownOption(id: "empty", title: "Sin bloques", icon: "exclamationmark.circle", isEnabled: false) {}
+        ] : options]
+    }
+
+    private func routineLevelMenuOptions(for routine: Routine) -> [[AdminDropdownOption]] {
+        let currentLevel = normalizedLevelKey(routine.level)
+        let levelOptions = routineLevelOptions.map { level in
+            AdminDropdownOption(
+                id: level.normalizedKey,
+                title: level,
+                icon: "slider.horizontal.3",
+                isSelected: currentLevel == normalizedLevelKey(level)
+            ) {
+                Task { await updateRoutineLevel(routine, to: level) }
+            }
+        }
+
+        return [levelOptions]
     }
 
     @MainActor
@@ -650,49 +667,143 @@ private struct AdminActionButton: View {
     }
 }
 
-private struct AdminMenuField<Content: View>: View {
+private struct AdminDropdownOption: Identifiable {
+    let id: String
+    let title: String
+    let icon: String
+    let isSelected: Bool
+    let isEnabled: Bool
+    let action: () -> Void
+
+    init(
+        id: String,
+        title: String,
+        icon: String,
+        isSelected: Bool = false,
+        isEnabled: Bool = true,
+        action: @escaping () -> Void
+    ) {
+        self.id = id
+        self.title = title
+        self.icon = icon
+        self.isSelected = isSelected
+        self.isEnabled = isEnabled
+        self.action = action
+    }
+}
+
+private struct AdminMenuField: View {
     let title: String
     let value: String
     let icon: String
-    private let content: Content
+    let optionSections: [[AdminDropdownOption]]
 
-    init(title: String, value: String, icon: String, @ViewBuilder content: () -> Content) {
-        self.title = title
-        self.value = value
-        self.icon = icon
-        self.content = content()
-    }
+    @State private var isPresented = false
 
     var body: some View {
-        Menu {
-            content
+        Button {
+            guard hasEnabledOptions else { return }
+            isPresented.toggle()
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.headline.weight(.bold))
-                    .foregroundStyle(LevitTheme.pink)
-                    .frame(width: 38, height: 38)
-                    .background(LevitTheme.palePink, in: Circle())
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(LevitTheme.muted)
-                    Text(value)
-                        .font(.headline.weight(.black))
-                        .foregroundStyle(LevitTheme.ink)
-                        .lineLimit(1)
-                }
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(LevitTheme.muted)
-            }
-            .padding(16)
-            .frame(maxWidth: .infinity)
-            .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
-            .overlay(RoundedRectangle(cornerRadius: 17).stroke(LevitTheme.line))
-            .contentShape(RoundedRectangle(cornerRadius: 17))
+            label
         }
+        .buttonStyle(.plain)
+        .disabled(!hasEnabledOptions)
+        .opacity(hasEnabledOptions ? 1 : 0.58)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            dropdownContent
+        }
+    }
+
+    private var label: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.headline.weight(.black))
+                .foregroundStyle(LevitTheme.pink)
+                .frame(width: 42, height: 42)
+                .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+                Text(value)
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+            }
+
+            Spacer(minLength: 8)
+
+            Image(systemName: isPresented ? "chevron.up" : "chevron.down")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.ink)
+                .frame(width: 34, height: 34)
+                .background(LevitTheme.softFill, in: Circle())
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 66)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(LevitTheme.line))
+        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private var dropdownContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(optionSections.enumerated()), id: \.offset) { sectionIndex, options in
+                if sectionIndex > 0 {
+                    Divider()
+                        .overlay(LevitTheme.line)
+                        .padding(.vertical, 3)
+                }
+
+                ForEach(options) { option in
+                    optionRow(option)
+                }
+            }
+        }
+        .padding(8)
+        .frame(width: 306, alignment: .topLeading)
+        .background(LevitTheme.surface)
+        #if os(iOS)
+        .presentationCompactAdaptation(.popover)
+        #endif
+    }
+
+    private func optionRow(_ option: AdminDropdownOption) -> some View {
+        Button {
+            guard option.isEnabled else { return }
+            isPresented = false
+            option.action()
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: option.isSelected ? "checkmark.circle.fill" : option.icon)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(option.isSelected ? LevitTheme.pink : LevitTheme.muted)
+                    .frame(width: 24)
+
+                Text(option.title)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(option.isEnabled ? LevitTheme.ink : LevitTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Spacer()
+            }
+            .padding(.horizontal, 11)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(option.isSelected ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!option.isEnabled)
+    }
+
+    private var hasEnabledOptions: Bool {
+        optionSections.flatMap { $0 }.contains { $0.isEnabled }
     }
 }
 
