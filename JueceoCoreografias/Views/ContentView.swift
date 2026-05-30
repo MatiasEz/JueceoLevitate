@@ -530,6 +530,7 @@ private struct DashboardView: View {
                             .padding(.vertical, 11)
                             .foregroundStyle(LevitTheme.ink)
                             .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                            .contentShape(RoundedRectangle(cornerRadius: 13))
                     }
                     .buttonStyle(.plain)
                 }
@@ -572,6 +573,7 @@ private struct DashboardView: View {
                     .foregroundStyle(.white)
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
                     .shadow(color: LevitTheme.pink.opacity(0.24), radius: 18, x: 0, y: 10)
+                    .contentShape(RoundedRectangle(cornerRadius: isCompact ? 18 : 22))
             }
             .buttonStyle(.plain)
             .disabled(!store.isAdmin && nextRoutine == nil)
@@ -1015,6 +1017,7 @@ struct RefreshDataButton: View {
             .foregroundStyle(LevitTheme.ink)
             .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: isCompact ? 13 : 12))
             .overlay(RoundedRectangle(cornerRadius: isCompact ? 13 : 12).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: isCompact ? 13 : 12))
         }
         .buttonStyle(.plain)
         .disabled(isRefreshing)
@@ -1140,6 +1143,8 @@ private struct DashboardRoutineCard: View {
                 .stroke(isSelected ? LevitTheme.pink.opacity(0.24) : LevitTheme.cardStroke, lineWidth: isSelected ? 1.4 : 1)
         }
         .shadow(color: .black.opacity(isSelected ? 0.07 : 0.045), radius: 18, x: 0, y: 10)
+        .contentShape(RoundedRectangle(cornerRadius: 18))
+        .onTapGesture(perform: action)
     }
 }
 

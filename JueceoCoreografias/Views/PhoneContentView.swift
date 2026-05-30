@@ -829,6 +829,7 @@ private struct PhoneScoreSheet: View {
                     .padding(.vertical, 16)
                     .foregroundStyle(.white)
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
 
@@ -855,6 +856,7 @@ private struct PhoneScoreSheet: View {
                     .foregroundStyle(store.driveExportStatus.isExporting ? LevitTheme.muted : LevitTheme.pink)
                     .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.42)))
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain)
                 .disabled(store.driveExportStatus.isExporting)
@@ -879,11 +881,13 @@ private struct PhoneScoreSheet: View {
                         .font(.headline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(previousRoutine == nil ? LevitTheme.muted.opacity(0.5) : LevitTheme.ink)
                 .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
                 .disabled(previousRoutine == nil)
 
                 Button {
@@ -893,11 +897,13 @@ private struct PhoneScoreSheet: View {
                         .font(.headline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(LevitTheme.ink)
                 .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
 
                 Button {
                     if let nextRoutine {
@@ -909,11 +915,13 @@ private struct PhoneScoreSheet: View {
                         .font(.headline.weight(.black))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14)
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(nextRoutine == nil ? LevitTheme.muted.opacity(0.5) : LevitTheme.ink)
                 .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14))
                 .overlay(RoundedRectangle(cornerRadius: 14).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 14))
                 .disabled(nextRoutine == nil)
             }
         }
@@ -2128,6 +2136,7 @@ private struct PhoneRoutineRow: View {
             .padding(14)
             .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
             .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 16))
         }
         .buttonStyle(.plain)
     }

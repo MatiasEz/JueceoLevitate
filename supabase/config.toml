@@ -12,3 +12,6 @@ verify_jwt = false
 
 [functions.upsert-judge]
 verify_jwt = false
+
+[functions.update-routine]
+verify_jwt = false

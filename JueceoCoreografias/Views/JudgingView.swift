@@ -437,11 +437,13 @@ private struct ScoreSheet: View {
                     Image(systemName: "arrow.right")
                 }
                 .font(.headline.weight(.black))
+                .frame(maxWidth: .infinity)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 16)
                 .foregroundStyle(LevitTheme.ink)
                 .background(.clear, in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.75), lineWidth: 1.4))
+                .contentShape(RoundedRectangle(cornerRadius: 16))
             }
             .buttonStyle(.plain)
 
@@ -467,6 +469,7 @@ private struct ScoreSheet: View {
                     .foregroundStyle(store.driveExportStatus.isExporting ? LevitTheme.muted : LevitTheme.pink)
                     .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
                     .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.pink.opacity(0.45), lineWidth: 1.2))
+                    .contentShape(RoundedRectangle(cornerRadius: 16))
                 }
                 .buttonStyle(.plain)
                 .disabled(store.driveExportStatus.isExporting)
@@ -531,6 +534,7 @@ private struct ScoreSheet: View {
             .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.ink)
             .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).stroke(isSelected ? LevitTheme.pink.opacity(0.45) : LevitTheme.line, lineWidth: isSelected ? 1.4 : 1))
+            .contentShape(RoundedRectangle(cornerRadius: 14))
         }
         .buttonStyle(.plain)
     }
@@ -609,6 +613,7 @@ private struct ScoreSheet: View {
                             .foregroundStyle(penalty == item ? LevitTheme.pink : LevitTheme.ink)
                             .background(penalty == item ? LevitTheme.palePink : LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 10))
                             .overlay(RoundedRectangle(cornerRadius: 10).stroke(penalty == item ? LevitTheme.pink : LevitTheme.line))
+                            .contentShape(RoundedRectangle(cornerRadius: 10))
                     }
                     .buttonStyle(.plain)
                 }

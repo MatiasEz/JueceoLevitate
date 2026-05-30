@@ -289,6 +289,23 @@ enum RoutineDeletionError: LocalizedError {
     }
 }
 
+enum RoutineUpdateError: LocalizedError {
+    case missingRemoteConfiguration
+    case missingSelectedEvent
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de editar una coreografía."
+        case .notAllowed:
+            "Solo un admin puede editar coreografías."
+        }
+    }
+}
+
 enum JudgeDeletionError: LocalizedError {
     case missingSelectedEvent
     case notAllowed

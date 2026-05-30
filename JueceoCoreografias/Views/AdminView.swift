@@ -19,6 +19,9 @@ struct AdminView: View {
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
     @State private var isRefreshingData = false
+    @State private var isUpdatingRoutineLevel = false
+
+    private let commonLevelOptions = ["PRINCIPIANTE", "INTERMEDIO", "AVANZADO", "ELITE", "NUDO"]
 
     private var currentEventTitle: String {
         store.availableEvents.first { $0.id == store.selectedEventID }?.name
@@ -44,6 +47,7 @@ struct AdminView: View {
                 || routine.name.localizedCaseInsensitiveContains(query)
                 || routine.academy.localizedCaseInsensitiveContains(query)
                 || routine.genre.localizedCaseInsensitiveContains(query)
+                || routine.level.localizedCaseInsensitiveContains(query)
                 || routine.division.localizedCaseInsensitiveContains(query)
                 || routine.category.localizedCaseInsensitiveContains(query)
         }
@@ -222,6 +226,7 @@ struct AdminView: View {
                     .padding(.vertical, 12)
                     .foregroundStyle(.white)
                     .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14))
+                    .contentShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
             .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
@@ -269,6 +274,20 @@ struct AdminView: View {
                         }
                     }
 
+                    AdminMenuField(title: "Bloque", value: store.selectedBlock?.name ?? "Sin bloques", icon: "square.stack.3d.up.fill") {
+                        if store.blocks.isEmpty {
+                            Text("Sin bloques")
+                        } else {
+                            ForEach(store.blocks) { block in
+                                Button {
+                                    selectAdminBlock(block)
+                                } label: {
+                                    Label(block.name, systemImage: block.id == store.selectedBlock?.id ? "checkmark.circle.fill" : "circle")
+                                }
+                            }
+                        }
+                    }
+
                     if let routine = selectedRoutineForEdit {
                         AdminSelectedRoutineCard(
                             routine: routine,
@@ -276,6 +295,8 @@ struct AdminView: View {
                             total: judgeTotal(for: routine, judge: selectedJudgeForEdit),
                             maxScore: store.template(for: routine).maxScore
                         )
+
+                        routineLevelEditor(for: routine)
 
                         Button {
                             store.beginAdminScoring(judge: selectedJudgeForEdit, routine: routine)
@@ -287,6 +308,7 @@ struct AdminView: View {
                                 .padding(.vertical, 17)
                                 .foregroundStyle(.white)
                                 .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16))
+                                .contentShape(RoundedRectangle(cornerRadius: 16))
                         }
                         .buttonStyle(.plain)
                         .disabled(selectedJudgeForEdit.isEmpty)
@@ -297,8 +319,10 @@ struct AdminView: View {
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(spacing: 12) {
-                        Label("Coreografías del bloque", systemImage: "list.bullet.rectangle")
+                        Label("Coreografías de \(store.selectedBlock?.name ?? "bloque")", systemImage: "list.bullet.rectangle")
                             .font(.headline.weight(.black))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                         Spacer()
                         RefreshDataButton(isRefreshing: isRefreshingData) {
                             Task { await refreshAdminData() }
@@ -342,6 +366,44 @@ struct AdminView: View {
         .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 22))
         .overlay(RoundedRectangle(cornerRadius: 22).stroke(LevitTheme.cardStroke))
         .shadow(color: .black.opacity(0.045), radius: 22, x: 0, y: 12)
+    }
+
+    private func selectAdminBlock(_ block: DanceBlock) {
+        store.selectBlock(block)
+        searchText = ""
+        normalizeSelection()
+    }
+
+    private func routineLevelEditor(for routine: Routine) -> some View {
+        AdminMenuField(
+            title: "Nivel",
+            value: displayLevel(routine.level),
+            icon: "slider.horizontal.3"
+        ) {
+            Button {
+                Task { await updateRoutineLevel(routine, to: "") }
+            } label: {
+                Label(
+                    "Sin nivel",
+                    systemImage: normalizedLevelKey(routine.level).isEmpty ? "checkmark.circle.fill" : "circle"
+                )
+            }
+
+            Divider()
+
+            ForEach(routineLevelOptions, id: \.self) { level in
+                Button {
+                    Task { await updateRoutineLevel(routine, to: level) }
+                } label: {
+                    Label(
+                        level,
+                        systemImage: normalizedLevelKey(routine.level) == normalizedLevelKey(level) ? "checkmark.circle.fill" : "circle"
+                    )
+                }
+            }
+        }
+        .disabled(isUpdatingRoutineLevel || !store.hasRemoteConfiguration)
+        .opacity(isUpdatingRoutineLevel || !store.hasRemoteConfiguration ? 0.58 : 1)
     }
 
     @MainActor
@@ -395,6 +457,27 @@ struct AdminView: View {
         isRoutineDeletionAlertPresented = false
         routinePendingDeletion = nil
         deleteRoutineImportSecret = ""
+    }
+
+    @MainActor
+    private func updateRoutineLevel(_ routine: Routine, to level: String) async {
+        let cleanLevel = cleanLevelValue(level)
+        guard normalizedLevelKey(routine.level) != normalizedLevelKey(cleanLevel) else { return }
+        guard !isUpdatingRoutineLevel else { return }
+
+        isUpdatingRoutineLevel = true
+        defer { isUpdatingRoutineLevel = false }
+
+        do {
+            try await store.updateRoutineLevel(routine, level: cleanLevel)
+            normalizeSelection()
+            store.showOperationSuccess(
+                "Nivel actualizado",
+                message: "#\(routine.id) \(routine.name) ahora está en \(displayLevel(cleanLevel))."
+            )
+        } catch {
+            store.showOperationFailure("No se pudo cambiar el nivel", message: error.localizedDescription)
+        }
     }
 
     private func judgeTotal(for routine: Routine, judge: String) -> Double {
@@ -460,6 +543,37 @@ struct AdminView: View {
     private func resetPendingDriveOverwrite() {
         isDriveOverwriteAlertPresented = false
         driveFolderPendingOverwrite = nil
+    }
+
+    private var routineLevelOptions: [String] {
+        let commonKeys = Set(commonLevelOptions.map(\.normalizedKey))
+        var seen = Set<String>()
+        var options = commonLevelOptions.filter { level in
+            seen.insert(level.normalizedKey).inserted
+        }
+        let extraLevels = store.routines
+            .map { cleanLevelValue($0.level) }
+            .filter { !$0.isEmpty && !commonKeys.contains($0.normalizedKey) }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        for level in extraLevels where seen.insert(level.normalizedKey).inserted {
+            options.append(level)
+        }
+        return options
+    }
+
+    private func cleanLevelValue(_ level: String) -> String {
+        let trimmed = level.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "-" ? "" : trimmed
+    }
+
+    private func displayLevel(_ level: String) -> String {
+        let cleanLevel = cleanLevelValue(level)
+        return cleanLevel.isEmpty ? "Sin nivel" : cleanLevel
+    }
+
+    private func normalizedLevelKey(_ level: String) -> String {
+        cleanLevelValue(level).normalizedKey
     }
 
     private var driveStatusColor: Color {
@@ -530,6 +644,7 @@ private struct AdminActionButton: View {
                 .foregroundStyle(LevitTheme.ink)
                 .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 15))
                 .overlay(RoundedRectangle(cornerRadius: 15).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 15))
         }
         .buttonStyle(.plain)
     }
@@ -576,6 +691,7 @@ private struct AdminMenuField<Content: View>: View {
             .frame(maxWidth: .infinity)
             .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
             .overlay(RoundedRectangle(cornerRadius: 17).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 17))
         }
     }
 }
@@ -608,6 +724,9 @@ private struct AdminSelectedRoutineCard: View {
 
             HStack(spacing: 6) {
                 LevitTag(routine.division)
+                if !cleanLevel.isEmpty {
+                    LevitTag(cleanLevel)
+                }
                 LevitTag(routine.category)
                 LevitTag(routine.genre)
             }
@@ -644,6 +763,11 @@ private struct AdminSelectedRoutineCard: View {
     private var statusText: String {
         total > 0 ? "Con puntaje cargado" : "Pendiente"
     }
+
+    private var cleanLevel: String {
+        let trimmed = routine.level.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "-" ? "" : trimmed
+    }
 }
 
 private struct AdminRoutineEditRow: View {
@@ -655,7 +779,7 @@ private struct AdminRoutineEditRow: View {
     let action: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 0) {
             Button(action: action) {
                 HStack(spacing: 14) {
                     Text("#\(routine.id)")
@@ -675,6 +799,9 @@ private struct AdminRoutineEditRow: View {
                                 .foregroundStyle(LevitTheme.muted)
                                 .lineLimit(1)
                             LevitTag(routine.division)
+                            if !cleanLevel.isEmpty {
+                                LevitTag(cleanLevel)
+                            }
                             LevitTag(routine.category)
                             LevitTag(routine.genre)
                         }
@@ -695,8 +822,14 @@ private struct AdminRoutineEditRow: View {
                         .font(.headline.weight(.bold))
                         .foregroundStyle(isSelected ? LevitTheme.pink : LevitTheme.muted)
                 }
+                .padding(.leading, 14)
+                .padding(.trailing, onDelete == nil ? 14 : 10)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 70, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Seleccionar coreografía \(routine.name)")
 
             if let onDelete {
                 Button(role: .destructive, action: onDelete) {
@@ -708,15 +841,19 @@ private struct AdminRoutineEditRow: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Borrar coreografía \(routine.name)")
+                .padding(.trailing, 14)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
         .background(isSelected ? LevitTheme.palePink : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 17))
         .overlay(RoundedRectangle(cornerRadius: 17).stroke(isSelected ? LevitTheme.pink.opacity(0.32) : LevitTheme.line))
     }
 
     private var resolvedMax: Double {
         maxScore > 0 ? maxScore : 25
+    }
+
+    private var cleanLevel: String {
+        let trimmed = routine.level.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "-" ? "" : trimmed
     }
 }

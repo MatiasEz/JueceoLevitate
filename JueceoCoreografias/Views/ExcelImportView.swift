@@ -129,6 +129,7 @@ struct ExcelImportView: View {
                 .padding(16)
                 .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
                 .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 18))
             }
             .buttonStyle(.plain)
 
@@ -149,6 +150,7 @@ struct ExcelImportView: View {
                 .padding(.vertical, 16)
                 .foregroundStyle(.white)
                 .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 17))
+                .contentShape(RoundedRectangle(cornerRadius: 17))
             }
             .buttonStyle(.plain)
             .disabled(!canUpload)

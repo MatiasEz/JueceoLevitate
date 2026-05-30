@@ -138,6 +138,7 @@ struct BlocksView: View {
                             .frame(width: 34, height: 3)
                     }
                     .frame(minWidth: 86)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -238,6 +239,7 @@ private struct RoutineListRow: View {
                     .stroke(isActive ? LevitTheme.pink.opacity(0.18) : LevitTheme.line)
             )
             .shadow(color: .black.opacity(isActive ? 0.06 : 0.025), radius: 16, x: 0, y: 8)
+            .contentShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
     }

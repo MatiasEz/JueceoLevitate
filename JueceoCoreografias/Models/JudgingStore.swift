@@ -42,28 +42,24 @@ final class JudgingStore: ObservableObject {
         didSet { persistSelectedJudge() }
     }
     @Published private(set) var adminScoringJudge: String?
-    @Published var scores: [String: Double] = [:] {
-        didSet { persistScores() }
-    }
-    @Published var feedback: [String: String] = [:] {
-        didSet { persistFeedback() }
-    }
-    @Published var penalties: [String: Double] = [:] {
-        didSet { persistPenalties() }
-    }
-    @Published var favoriteSelections: [String: String] = [:] {
-        didSet { persistFavoriteSelections() }
-    }
+    @Published var scores: [String: Double] = [:]
+    @Published var feedback: [String: String] = [:]
+    @Published var penalties: [String: Double] = [:]
+    @Published var favoriteSelections: [String: String] = [:]
     @Published var lastPDFURL: URL?
     @Published private(set) var driveExportStatus: DriveExportStatus = .idle
     @Published private(set) var driveExportMessage: String?
     @Published private(set) var lastDriveExportSummary: GoogleDriveExportSummary?
     @Published private(set) var operationNotice: OperationNotice?
 
-    private let scoresKey = "jueceo.scores.v1"
-    private let feedbackKey = "jueceo.feedback.v1"
-    private let penaltiesKey = "jueceo.penalties.v1"
-    private let favoriteSelectionsKey = "jueceo.favoriteSelections.v1"
+    private let scoresKey = "jueceo.scores.pending.v2"
+    private let feedbackKey = "jueceo.feedback.pending.v2"
+    private let penaltiesKey = "jueceo.penalties.pending.v2"
+    private let favoriteSelectionsKey = "jueceo.favoriteSelections.pending.v2"
+    private let legacyScoresStorageKey = "jueceo.scores.v1"
+    private let legacyFeedbackStorageKey = "jueceo.feedback.v1"
+    private let legacyPenaltiesStorageKey = "jueceo.penalties.v1"
+    private let legacyFavoriteSelectionsStorageKey = "jueceo.favoriteSelections.v1"
     private let pendingScoreKeysKey = "jueceo.pendingScoreKeys.v1"
     private let pendingFeedbackKeysKey = "jueceo.pendingFeedbackKeys.v1"
     private let pendingPenaltyKeysKey = "jueceo.pendingPenaltyKeys.v1"
@@ -81,30 +77,50 @@ final class JudgingStore: ObservableObject {
     private var operationNoticeTask: Task<Void, Never>?
 
     init() {
+        let initStart = LoadDiagnostics.start()
         let data = Self.loadBundledData()
+        let repository = SupabaseConfig.load().map { RemoteJudgingRepository(config: $0) }
+        remoteRepository = repository
         appData = data
         selectedRoutineID = data.routines.first?.id ?? ""
         let savedJudge = UserDefaults.standard.string(forKey: selectedJudgeKey)
         selectedJudge = savedJudge.flatMap { data.judges.contains($0) ? $0 : nil }
             ?? data.judges.first
             ?? "JUEZ"
-        scores = Self.loadDictionary(scoresKey) ?? [:]
-        feedback = Self.loadDictionary(feedbackKey) ?? [:]
-        penalties = Self.loadDictionary(penaltiesKey) ?? [:]
-        favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? [:]
         pendingScoreKeys = Self.loadSet(pendingScoreKeysKey)
         pendingFeedbackKeys = Self.loadSet(pendingFeedbackKeysKey)
         pendingPenaltyKeys = Self.loadSet(pendingPenaltyKeysKey)
         pendingFavoriteKeys = Self.loadSet(pendingFavoriteKeysKey)
+        if repository == nil {
+            scores = Self.loadDictionary(scoresKey) ?? Self.loadDictionary(legacyScoresStorageKey) ?? [:]
+            feedback = Self.loadDictionary(feedbackKey) ?? Self.loadDictionary(legacyFeedbackStorageKey) ?? [:]
+            penalties = Self.loadDictionary(penaltiesKey) ?? Self.loadDictionary(legacyPenaltiesStorageKey) ?? [:]
+            favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? Self.loadDictionary(legacyFavoriteSelectionsStorageKey) ?? [:]
+        } else {
+            Self.removeStoredValue(legacyScoresStorageKey)
+            Self.removeStoredValue(legacyFeedbackStorageKey)
+            Self.removeStoredValue(legacyPenaltiesStorageKey)
+            Self.removeStoredValue(legacyFavoriteSelectionsStorageKey)
+            scores = Self.loadDictionary(scoresKey) ?? [:]
+            feedback = Self.loadDictionary(feedbackKey) ?? [:]
+            penalties = Self.loadDictionary(penaltiesKey) ?? [:]
+            favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? [:]
+            scores = scores.filter { pendingScoreKeys.contains($0.key) }
+            feedback = feedback.filter { pendingFeedbackKeys.contains($0.key) }
+            penalties = penalties.filter { pendingPenaltyKeys.contains($0.key) }
+            favoriteSelections = favoriteSelections.filter { pendingFavoriteKeys.contains($0.key) }
+            persistLocalCaches()
+        }
         selectedEventID = UserDefaults.standard.string(forKey: selectedEventKey)
         selectedBlockID = UserDefaults.standard.string(forKey: selectedBlockKey)
-        if let config = SupabaseConfig.load() {
-            remoteRepository = RemoteJudgingRepository(config: config)
+        if repository != nil {
             syncStatus = pendingSyncCount > 0 ? .pending : .connecting
         } else {
-            remoteRepository = nil
             syncStatus = .localOnly
         }
+        LoadDiagnostics.log(
+            "JudgingStore init routines=\(appData.routines.count) blocks=\(appData.blocks.count) judges=\(appData.judges.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) localFavorites=\(favoriteSelections.count) pending=\(pendingSyncCount) remoteConfigured=\(remoteRepository != nil) elapsed=\(LoadDiagnostics.elapsed(since: initStart))"
+        )
     }
 
     var routines: [Routine] { appData.routines }
@@ -409,6 +425,7 @@ final class JudgingStore: ObservableObject {
         persistPendingFeedbackKeys()
         persistPendingPenaltyKeys()
         persistPendingFavoriteKeys()
+        persistLocalCaches()
 
         if let adminScoringJudge, matchesJudgeKey(adminScoringJudge, judge: judge) {
             self.adminScoringJudge = nil
@@ -517,6 +534,7 @@ final class JudgingStore: ObservableObject {
         let key = scoreKey(routineID: routine.id, judge: judge, criterionID: criterion.id)
         scores[key] = clamped
         markScorePending(key)
+        persistScores()
     }
 
     func submitScores(_ values: [(criterion: Criterion, value: Double)], routine: Routine, judge: String, penalty: Double? = nil) {
@@ -528,6 +546,7 @@ final class JudgingStore: ObservableObject {
             changedKeys.append(key)
         }
         markScoresPending(changedKeys)
+        persistScores()
         if let penalty {
             setPenalty(penalty, routine: routine, judge: judge)
         }
@@ -537,6 +556,7 @@ final class JudgingStore: ObservableObject {
         let key = feedbackKey(routineID: routine.id, judge: judge)
         feedback[key] = value
         markFeedbackPending(key)
+        persistFeedback()
     }
 
     func setPenalty(_ value: Double, routine: Routine, judge: String) {
@@ -544,6 +564,7 @@ final class JudgingStore: ObservableObject {
         let key = penaltyKey(routineID: routine.id, judge: judge)
         penalties[key] = clamped
         markPenaltyPending(key)
+        persistPenalties()
     }
 
     func isFavorite(_ routine: Routine, category: FavoriteCategory, judge: String? = nil) -> Bool {
@@ -562,65 +583,89 @@ final class JudgingStore: ObservableObject {
             favoriteSelections[key] = routine.id
         }
         markFavoritePending(key)
+        persistFavoriteSelections()
     }
 
     func startRemoteSyncIfAvailable() async {
-        guard !didStartRemote else { return }
+        guard !didStartRemote else {
+            LoadDiagnostics.log("startRemoteSyncIfAvailable skipped because it already started")
+            return
+        }
         didStartRemote = true
+        LoadDiagnostics.log("startRemoteSyncIfAvailable started")
         await refreshEvents()
     }
 
     func refreshEvents() async {
+        let start = LoadDiagnostics.start()
         guard let remoteRepository else {
             syncStatus = .localOnly
             syncMessage = "Configura SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY para usar online."
+            LoadDiagnostics.log("refreshEvents skipped: Supabase not configured")
             return
         }
         syncStatus = .connecting
         syncMessage = "Buscando eventos en Supabase..."
+        LoadDiagnostics.log("refreshEvents started selectedEventID=\(selectedEventID ?? "nil")")
         do {
             let events = try await remoteRepository.fetchEvents()
             availableEvents = events
+            LoadDiagnostics.log("refreshEvents received events=\(events.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
             guard let event = events.first(where: { $0.id == selectedEventID })
                 ?? events.first(where: \.isActive)
                 ?? events.first
             else {
                 syncStatus = .offline("No hay eventos en Supabase.")
                 syncMessage = "No hay eventos cargados en Supabase."
+                LoadDiagnostics.log("refreshEvents finished without events elapsed=\(LoadDiagnostics.elapsed(since: start))")
                 return
             }
+            LoadDiagnostics.log("refreshEvents selecting event id=\(event.id) name=\"\(event.name)\" active=\(event.isActive)")
             await selectEvent(event)
+            LoadDiagnostics.log("refreshEvents finished elapsed=\(LoadDiagnostics.elapsed(since: start))")
         } catch {
             syncStatus = pendingSyncCount > 0 ? .pending : .offline(error.localizedDescription)
             syncMessage = error.localizedDescription
+            LoadDiagnostics.log("refreshEvents failed elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
         }
     }
 
     func selectEvent(_ event: EventSummary) async {
+        let start = LoadDiagnostics.start()
         guard let remoteRepository else { return }
         syncStatus = .connecting
         syncMessage = "Cargando \(event.name) desde Supabase..."
+        LoadDiagnostics.log("selectEvent started id=\(event.id) name=\"\(event.name)\"")
         do {
             let bundle = try await remoteRepository.fetchEventBundle(eventID: event.id)
+            LoadDiagnostics.log("selectEvent fetched bundle id=\(event.id) elapsed=\(LoadDiagnostics.elapsed(since: start))")
             selectedEventID = bundle.event.id
             UserDefaults.standard.set(bundle.event.id, forKey: selectedEventKey)
+            let applyStart = LoadDiagnostics.start()
             applyRemoteBundle(bundle)
+            LoadDiagnostics.log("selectEvent applied bundle elapsed=\(LoadDiagnostics.elapsed(since: applyStart)) total=\(LoadDiagnostics.elapsed(since: start))")
+            let syncStart = LoadDiagnostics.start()
             await syncPending()
+            LoadDiagnostics.log("selectEvent syncPending finished elapsed=\(LoadDiagnostics.elapsed(since: syncStart)) total=\(LoadDiagnostics.elapsed(since: start))")
         } catch {
             syncStatus = pendingSyncCount > 0 ? .pending : .offline(error.localizedDescription)
             syncMessage = error.localizedDescription
+            LoadDiagnostics.log("selectEvent failed id=\(event.id) elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
         }
     }
 
     func refreshCurrentEvent() async throws {
+        let start = LoadDiagnostics.start()
         guard let remoteRepository else {
             syncStatus = .localOnly
             syncMessage = DataRefreshError.missingRemoteConfiguration.localizedDescription
+            LoadDiagnostics.log("refreshCurrentEvent skipped: Supabase not configured")
             throw DataRefreshError.missingRemoteConfiguration
         }
 
         syncStatus = .connecting
         syncMessage = "Actualizando datos del programa..."
+        LoadDiagnostics.log("refreshCurrentEvent started selectedEventID=\(selectedEventID ?? "nil")")
 
         do {
             let eventID: String
@@ -630,21 +675,28 @@ final class JudgingStore: ObservableObject {
                 let events = try await remoteRepository.fetchEvents()
                 availableEvents = events
                 guard let event = events.first(where: \.isActive) ?? events.first else {
+                    LoadDiagnostics.log("refreshCurrentEvent failed without events elapsed=\(LoadDiagnostics.elapsed(since: start))")
                     throw DataRefreshError.noEvents
                 }
                 eventID = event.id
             }
 
             let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+            LoadDiagnostics.log("refreshCurrentEvent fetched bundle id=\(eventID) elapsed=\(LoadDiagnostics.elapsed(since: start))")
             selectedEventID = bundle.event.id
             UserDefaults.standard.set(bundle.event.id, forKey: selectedEventKey)
+            let applyStart = LoadDiagnostics.start()
             applyRemoteBundle(bundle)
+            LoadDiagnostics.log("refreshCurrentEvent applied bundle elapsed=\(LoadDiagnostics.elapsed(since: applyStart)) total=\(LoadDiagnostics.elapsed(since: start))")
+            let syncStart = LoadDiagnostics.start()
             await syncPending()
+            LoadDiagnostics.log("refreshCurrentEvent syncPending finished elapsed=\(LoadDiagnostics.elapsed(since: syncStart)) total=\(LoadDiagnostics.elapsed(since: start))")
             syncStatus = pendingSyncCount > 0 ? .pending : .online
             syncMessage = pendingSyncCount > 0 ? "\(pendingSyncCount) cambios pendientes." : "\(bundle.event.name) actualizado."
         } catch {
             syncStatus = pendingSyncCount > 0 ? .pending : .offline(error.localizedDescription)
             syncMessage = error.localizedDescription
+            LoadDiagnostics.log("refreshCurrentEvent failed elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
             throw error
         }
     }
@@ -711,18 +763,50 @@ final class JudgingStore: ObservableObject {
         syncMessage = "\(label) borrada."
     }
 
+    func updateRoutineLevel(_ routine: Routine, level rawLevel: String) async throws {
+        guard let remoteRepository else {
+            throw RoutineUpdateError.missingRemoteConfiguration
+        }
+        guard isAdmin else {
+            throw RoutineUpdateError.notAllowed
+        }
+        guard let eventID = selectedEventID else {
+            throw RoutineUpdateError.missingSelectedEvent
+        }
+
+        let level = rawLevel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let label = "#\(routine.id) \(routine.name)"
+        syncStatus = .syncing
+        syncMessage = "Actualizando nivel de \(label)..."
+        _ = try await remoteRepository.updateRoutineLevel(
+            eventID: eventID,
+            routineID: routine.id,
+            level: level
+        )
+
+        let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+        applyRemoteBundle(bundle)
+        await syncPending()
+        syncStatus = pendingSyncCount > 0 ? .pending : .online
+        syncMessage = "\(label) actualizado."
+    }
+
     func syncPending() async {
+        let start = LoadDiagnostics.start()
         guard let remoteRepository, let eventID = selectedEventID else {
             syncStatus = remoteRepository == nil ? .localOnly : .pending
+            LoadDiagnostics.log("syncPending skipped remoteConfigured=\(remoteRepository != nil) eventID=\(selectedEventID ?? "nil")")
             return
         }
         guard pendingSyncCount > 0 else {
             syncStatus = .online
             syncMessage = "Datos sincronizados."
+            LoadDiagnostics.log("syncPending skipped no pending changes elapsed=\(LoadDiagnostics.elapsed(since: start))")
             return
         }
 
         syncStatus = .syncing
+        LoadDiagnostics.log("syncPending started eventID=\(eventID) pendingScores=\(pendingScoreKeys.count) pendingFeedback=\(pendingFeedbackKeys.count) pendingPenalties=\(pendingPenaltyKeys.count) pendingFavorites=\(pendingFavoriteKeys.count)")
         do {
             let scoreUploads = pendingScoreKeys.compactMap { key -> (key: String, row: ScoreUpsertRow)? in
                 guard
@@ -744,9 +828,12 @@ final class JudgingStore: ObservableObject {
             }
             let scoreRows = scoreUploads.map { $0.row }
             if !scoreRows.isEmpty {
+                let uploadStart = LoadDiagnostics.start()
                 try await remoteRepository.upsertScores(scoreRows)
                 pendingScoreKeys.subtract(scoreUploads.map { $0.key })
                 persistPendingScoreKeys()
+                persistScores()
+                LoadDiagnostics.log("syncPending uploaded scores=\(scoreRows.count) elapsed=\(LoadDiagnostics.elapsed(since: uploadStart))")
             }
 
             let feedbackUploads = pendingFeedbackKeys.compactMap { key -> (key: String, row: FeedbackUpsertRow)? in
@@ -767,9 +854,12 @@ final class JudgingStore: ObservableObject {
             }
             let feedbackRows = feedbackUploads.map { $0.row }
             if !feedbackRows.isEmpty {
+                let uploadStart = LoadDiagnostics.start()
                 try await remoteRepository.upsertFeedback(feedbackRows)
                 pendingFeedbackKeys.subtract(feedbackUploads.map { $0.key })
                 persistPendingFeedbackKeys()
+                persistFeedback()
+                LoadDiagnostics.log("syncPending uploaded feedback=\(feedbackRows.count) elapsed=\(LoadDiagnostics.elapsed(since: uploadStart))")
             }
 
             let penaltyUploads = pendingPenaltyKeys.compactMap { key -> (key: String, row: PenaltyUpsertRow)? in
@@ -791,9 +881,12 @@ final class JudgingStore: ObservableObject {
             }
             let penaltyRows = penaltyUploads.map { $0.row }
             if !penaltyRows.isEmpty {
+                let uploadStart = LoadDiagnostics.start()
                 try await remoteRepository.upsertPenalties(penaltyRows)
                 pendingPenaltyKeys.subtract(penaltyUploads.map { $0.key })
                 persistPendingPenaltyKeys()
+                persistPenalties()
+                LoadDiagnostics.log("syncPending uploaded penalties=\(penaltyRows.count) elapsed=\(LoadDiagnostics.elapsed(since: uploadStart))")
             }
 
             let favoriteKeys = pendingFavoriteKeys
@@ -830,21 +923,28 @@ final class JudgingStore: ObservableObject {
                 )
             }
             if !favoriteUpsertRows.isEmpty {
+                let uploadStart = LoadDiagnostics.start()
                 try await remoteRepository.upsertFavorites(favoriteUpsertRows)
+                LoadDiagnostics.log("syncPending uploaded favorites=\(favoriteUpsertRows.count) elapsed=\(LoadDiagnostics.elapsed(since: uploadStart))")
             }
             if !favoriteDeleteRows.isEmpty {
+                let uploadStart = LoadDiagnostics.start()
                 try await remoteRepository.deleteFavorites(favoriteDeleteRows)
+                LoadDiagnostics.log("syncPending deleted favorites=\(favoriteDeleteRows.count) elapsed=\(LoadDiagnostics.elapsed(since: uploadStart))")
             }
             if !favoriteKeys.isEmpty {
                 pendingFavoriteKeys.subtract(favoriteKeys)
                 persistPendingFavoriteKeys()
+                persistFavoriteSelections()
             }
 
             syncStatus = pendingSyncCount > 0 ? .pending : .online
             syncMessage = pendingSyncCount > 0 ? "\(pendingSyncCount) cambios pendientes." : "Datos sincronizados."
+            LoadDiagnostics.log("syncPending finished pending=\(pendingSyncCount) elapsed=\(LoadDiagnostics.elapsed(since: start))")
         } catch {
             syncStatus = .pending
             syncMessage = error.localizedDescription
+            LoadDiagnostics.log("syncPending failed elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
         }
     }
 
@@ -1151,6 +1251,11 @@ final class JudgingStore: ObservableObject {
     }
 
     private func applyRemoteBundle(_ bundle: RemoteEventBundle) {
+        let start = LoadDiagnostics.start()
+        LoadDiagnostics.log(
+            "applyRemoteBundle started event=\"\(bundle.event.name)\" routines=\(bundle.appData.routines.count) blocks=\(bundle.appData.blocks.count) judges=\(bundle.appData.judges.count) incomingScores=\(bundle.scores.count) incomingFeedback=\(bundle.feedback.count) incomingPenalties=\(bundle.penalties.count) incomingFavorites=\(bundle.favorites.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) pending=\(pendingSyncCount)"
+        )
+        let metadataStart = LoadDiagnostics.start()
         appData = bundle.appData
         if let selectedBlockID,
            !appData.blocks.contains(where: { $0.id == selectedBlockID || $0.name == selectedBlockID }) {
@@ -1173,37 +1278,84 @@ final class JudgingStore: ObservableObject {
         if !isAdmin, selectedBlockID == nil, let activeBlock = appData.blocks.first(where: { $0.isActive == true }) {
             selectBlock(activeBlock)
         }
+        LoadDiagnostics.log("applyRemoteBundle metadata/selection elapsed=\(LoadDiagnostics.elapsed(since: metadataStart)) selectedBlockID=\(selectedBlockID ?? "nil") selectedRoutineID=\(selectedRoutineID) selectedJudge=\(selectedJudge)")
 
         let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
+        let cleanupStart = LoadDiagnostics.start()
         removeSyncedCacheForCurrentEvent()
+        LoadDiagnostics.log("applyRemoteBundle cache cleanup elapsed=\(LoadDiagnostics.elapsed(since: cleanupStart)) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count)")
+
+        let scoreStart = LoadDiagnostics.start()
+        var updatedScores = scores
+        var appliedScores = 0
+        var skippedPendingScores = 0
+        var skippedUnknownScoreJudges = 0
         for remoteScore in bundle.scores {
-            guard let judge = judgeNamesByID[remoteScore.judgeID] else { continue }
+            guard let judge = judgeNamesByID[remoteScore.judgeID] else {
+                skippedUnknownScoreJudges += 1
+                continue
+            }
             let key = scoreKey(routineID: remoteScore.routineID, judge: judge, criterionID: remoteScore.criterionID)
             if !pendingScoreKeys.contains(key) {
-                scores[key] = remoteScore.value
+                updatedScores[key] = remoteScore.value
+                appliedScores += 1
+            } else {
+                skippedPendingScores += 1
             }
         }
+        scores = updatedScores
+        LoadDiagnostics.log("applyRemoteBundle scores applied=\(appliedScores) skippedPending=\(skippedPendingScores) skippedUnknownJudge=\(skippedUnknownScoreJudges) totalLocal=\(scores.count) elapsed=\(LoadDiagnostics.elapsed(since: scoreStart))")
+
+        let feedbackStart = LoadDiagnostics.start()
+        var updatedFeedback = feedback
+        var appliedFeedback = 0
+        var skippedPendingFeedback = 0
+        var skippedUnknownFeedbackJudges = 0
         for remoteFeedback in bundle.feedback {
-            guard let judge = judgeNamesByID[remoteFeedback.judgeID] else { continue }
+            guard let judge = judgeNamesByID[remoteFeedback.judgeID] else {
+                skippedUnknownFeedbackJudges += 1
+                continue
+            }
             let key = feedbackKey(routineID: remoteFeedback.routineID, judge: judge)
             if !pendingFeedbackKeys.contains(key) {
-                feedback[key] = remoteFeedback.body
+                updatedFeedback[key] = remoteFeedback.body
+                appliedFeedback += 1
+            } else {
+                skippedPendingFeedback += 1
             }
         }
+        feedback = updatedFeedback
+        LoadDiagnostics.log("applyRemoteBundle feedback applied=\(appliedFeedback) skippedPending=\(skippedPendingFeedback) skippedUnknownJudge=\(skippedUnknownFeedbackJudges) totalLocal=\(feedback.count) elapsed=\(LoadDiagnostics.elapsed(since: feedbackStart))")
+
+        let penaltyStart = LoadDiagnostics.start()
+        var updatedPenalties = penalties
+        var appliedPenalties = 0
+        var skippedPendingPenalties = 0
+        var skippedUnknownPenaltyJudges = 0
         for remotePenalty in bundle.penalties {
-            guard let judge = judgeNamesByID[remotePenalty.judgeID] else { continue }
+            guard let judge = judgeNamesByID[remotePenalty.judgeID] else {
+                skippedUnknownPenaltyJudges += 1
+                continue
+            }
             let key = penaltyKey(routineID: remotePenalty.routineID, judge: judge)
             if !pendingPenaltyKeys.contains(key) {
-                penalties[key] = min(max(remotePenalty.value, -100), 0)
+                updatedPenalties[key] = min(max(remotePenalty.value, -100), 0)
+                appliedPenalties += 1
+            } else {
+                skippedPendingPenalties += 1
             }
         }
+        penalties = updatedPenalties
+        LoadDiagnostics.log("applyRemoteBundle penalties applied=\(appliedPenalties) skippedPending=\(skippedPendingPenalties) skippedUnknownJudge=\(skippedUnknownPenaltyJudges) totalLocal=\(penalties.count) elapsed=\(LoadDiagnostics.elapsed(since: penaltyStart))")
 
+        let favoriteStart = LoadDiagnostics.start()
         let eventPrefix = "\(bundle.event.id)::"
+        var updatedFavoriteSelections = favoriteSelections
         let staleFavoriteKeys = favoriteSelections.keys.filter { key in
             key.hasPrefix(eventPrefix) && !pendingFavoriteKeys.contains(key)
         }
         for key in staleFavoriteKeys {
-            favoriteSelections.removeValue(forKey: key)
+            updatedFavoriteSelections.removeValue(forKey: key)
         }
         for remoteFavorite in bundle.favorites {
             guard
@@ -1219,11 +1371,14 @@ final class JudgingStore: ObservableObject {
                 judge: judge
             )
             if !pendingFavoriteKeys.contains(key) {
-                favoriteSelections[key] = remoteFavorite.routineID
+                updatedFavoriteSelections[key] = remoteFavorite.routineID
             }
         }
+        favoriteSelections = updatedFavoriteSelections
+        LoadDiagnostics.log("applyRemoteBundle favorites staleRemoved=\(staleFavoriteKeys.count) incoming=\(bundle.favorites.count) totalLocal=\(favoriteSelections.count) elapsed=\(LoadDiagnostics.elapsed(since: favoriteStart))")
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(bundle.event.name) cargado."
+        LoadDiagnostics.log("applyRemoteBundle finished totalElapsed=\(LoadDiagnostics.elapsed(since: start)) pending=\(pendingSyncCount)")
     }
 
     private func markScorePending(_ key: String) {
@@ -1336,22 +1491,50 @@ final class JudgingStore: ObservableObject {
         persistPendingFeedbackKeys()
         persistPendingPenaltyKeys()
         persistPendingFavoriteKeys()
+        persistLocalCaches()
     }
 
     private func persistScores() {
-        Self.saveDictionary(scores, key: scoresKey)
+        Self.saveDictionary(persistedScores, key: scoresKey)
     }
 
     private func persistFeedback() {
-        Self.saveDictionary(feedback, key: feedbackKey)
+        Self.saveDictionary(persistedFeedback, key: feedbackKey)
     }
 
     private func persistPenalties() {
-        Self.saveDictionary(penalties, key: penaltiesKey)
+        Self.saveDictionary(persistedPenalties, key: penaltiesKey)
     }
 
     private func persistFavoriteSelections() {
-        Self.saveDictionary(favoriteSelections, key: favoriteSelectionsKey)
+        Self.saveDictionary(persistedFavoriteSelections, key: favoriteSelectionsKey)
+    }
+
+    private func persistLocalCaches() {
+        persistScores()
+        persistFeedback()
+        persistPenalties()
+        persistFavoriteSelections()
+    }
+
+    private var persistedScores: [String: Double] {
+        guard remoteRepository != nil else { return scores }
+        return scores.filter { pendingScoreKeys.contains($0.key) }
+    }
+
+    private var persistedFeedback: [String: String] {
+        guard remoteRepository != nil else { return feedback }
+        return feedback.filter { pendingFeedbackKeys.contains($0.key) }
+    }
+
+    private var persistedPenalties: [String: Double] {
+        guard remoteRepository != nil else { return penalties }
+        return penalties.filter { pendingPenaltyKeys.contains($0.key) }
+    }
+
+    private var persistedFavoriteSelections: [String: String] {
+        guard remoteRepository != nil else { return favoriteSelections }
+        return favoriteSelections.filter { pendingFavoriteKeys.contains($0.key) }
     }
 
     private func persistPendingScoreKeys() {
@@ -1559,7 +1742,7 @@ final class JudgingStore: ObservableObject {
                     currentRank = index + 1
                     previousTotal = item.total
                 }
-                positions[item.result.routine.id] = .position(currentRank)
+                positions[item.result.routine.id] = currentRank <= 3 ? .position(currentRank) : .participation
             }
         }
         return positions
@@ -1639,13 +1822,40 @@ final class JudgingStore: ObservableObject {
     }
 
     private static func loadDictionary<T: Decodable>(_ key: String) -> [String: T]? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
-        return try? JSONDecoder().decode([String: T].self, from: data)
+        let start = LoadDiagnostics.start()
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            LoadDiagnostics.log("UserDefaults load key=\(key) missing elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return nil
+        }
+        do {
+            let decoded = try JSONDecoder().decode([String: T].self, from: data)
+            LoadDiagnostics.log("UserDefaults load key=\(key) rows=\(decoded.count) bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return decoded
+        } catch {
+            LoadDiagnostics.log("UserDefaults load key=\(key) failed bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
+            return nil
+        }
     }
 
     private static func saveDictionary<T: Encodable>(_ dictionary: [String: T], key: String) {
-        guard let data = try? JSONEncoder().encode(dictionary) else { return }
+        let start = LoadDiagnostics.start()
+        guard !dictionary.isEmpty else {
+            UserDefaults.standard.removeObject(forKey: key)
+            LoadDiagnostics.log("UserDefaults save key=\(key) removed empty dictionary elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return
+        }
+        guard let data = try? JSONEncoder().encode(dictionary) else {
+            LoadDiagnostics.log("UserDefaults save key=\(key) failed rows=\(dictionary.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return
+        }
         UserDefaults.standard.set(data, forKey: key)
+        LoadDiagnostics.log("UserDefaults save key=\(key) rows=\(dictionary.count) bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+    }
+
+    private static func removeStoredValue(_ key: String) {
+        guard UserDefaults.standard.object(forKey: key) != nil else { return }
+        UserDefaults.standard.removeObject(forKey: key)
+        LoadDiagnostics.log("UserDefaults removed legacy key=\(key)")
     }
 
     private static func loadSet(_ key: String) -> Set<String> {

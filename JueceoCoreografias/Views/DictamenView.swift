@@ -167,10 +167,19 @@ enum DictamenBuilder {
                 currentPosition = index + 1
                 previousScore = result.aggregateTotal
             }
-            rows.append(DictamenStandingRow(result: result, placement: .position(currentPosition)))
+            rows.append(DictamenStandingRow(result: result, placement: placement(for: currentPosition)))
         }
 
-        return rows
+        return rows.sorted { lhs, rhs in
+            if abs(lhs.result.aggregateTotal - rhs.result.aggregateTotal) < 0.0001 {
+                return routineOrder(lhs.result.routine, rhs.result.routine)
+            }
+            return lhs.result.aggregateTotal < rhs.result.aggregateTotal
+        }
+    }
+
+    private static func placement(for rank: Int) -> CompetitionPlacement {
+        rank <= 3 ? .position(rank) : .participation
     }
 
     private static func categoryTitle(division: String, level: String, category: String) -> String {
@@ -467,8 +476,6 @@ private struct DictamenStandingRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: isCompact ? 10 : 14) {
-            DictamenRankBadge(placement: row.placement, size: isCompact ? 42 : 50)
-
             VStack(alignment: .leading, spacing: isCompact ? 7 : 8) {
                 Text(display(routine.name))
                     .font(.system(size: layout.emphasisFontSize, weight: .black, design: .rounded))
@@ -490,7 +497,10 @@ private struct DictamenStandingRowView: View {
 
             Spacer(minLength: 8)
 
-            DictamenScoreBadge(text: scoreText, isCompact: isCompact)
+            HStack(alignment: .center, spacing: isCompact ? 16 : 24) {
+                DictamenScoreBadge(text: scoreText, isCompact: isCompact)
+                DictamenRankBadge(placement: row.placement, size: isCompact ? 40 : 48)
+            }
         }
         .padding(isCompact ? 10 : 12)
         .foregroundStyle(LevitTheme.ink)
@@ -517,11 +527,11 @@ private struct DictamenRankBadge: View {
             .font(.system(size: placement.isParticipation ? size * 0.24 : size * 0.34, weight: .black, design: .rounded).monospacedDigit())
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .foregroundStyle(placement.isFirstPlace ? .white : LevitTheme.pink)
+            .foregroundStyle(.white)
             .frame(width: badgeWidth, height: size)
             .background(badgeFill, in: RoundedRectangle(cornerRadius: size / 2, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: size / 2, style: .continuous).stroke(placement.isFirstPlace ? .white.opacity(0.24) : LevitTheme.pink.opacity(0.24), lineWidth: 1))
-            .shadow(color: placement.isFirstPlace ? LevitTheme.pink.opacity(0.22) : .clear, radius: 10, x: 0, y: 6)
+            .overlay(RoundedRectangle(cornerRadius: size / 2, style: .continuous).stroke(.white.opacity(0.24), lineWidth: 1))
+            .shadow(color: LevitTheme.pink.opacity(0.22), radius: 10, x: 0, y: 6)
     }
 
     private var badgeWidth: CGFloat {
@@ -529,9 +539,7 @@ private struct DictamenRankBadge: View {
     }
 
     private var badgeFill: LinearGradient {
-        placement.isFirstPlace
-            ? LevitTheme.pinkGradient
-            : LinearGradient(colors: [LevitTheme.palePink, LevitTheme.palePink], startPoint: .top, endPoint: .bottom)
+        LevitTheme.pinkGradient
     }
 }
 
@@ -557,16 +565,18 @@ private struct DictamenScoreBadge: View {
     let isCompact: Bool
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 1) {
+        VStack(alignment: .center, spacing: 1) {
             Text(text)
                 .font(.system(size: isCompact ? 18 : 22, weight: .black, design: .rounded).monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
+                .multilineTextAlignment(.center)
             Text("pts")
                 .font(.caption2.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
+                .multilineTextAlignment(.center)
         }
-        .frame(width: isCompact ? 54 : 68, alignment: .trailing)
+        .frame(width: isCompact ? 54 : 68, alignment: .center)
     }
 }
 
@@ -638,22 +648,20 @@ private struct DictamenPositionCell: View {
             fill
             Text(placement.shortLabel)
                 .font(.system(size: placement.isParticipation ? fontSize * 0.78 : fontSize, weight: .black, design: .rounded).monospacedDigit())
-                .foregroundStyle(placement.isFirstPlace ? .white : LevitTheme.pink)
+                .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .padding(.horizontal, 10)
                 .frame(width: min(width - 18, placement.isParticipation ? 74 : 54), height: min(height - 22, 30))
                 .background(badgeFill, in: Capsule())
-                .overlay(Capsule().stroke(placement.isFirstPlace ? .white.opacity(0.28) : LevitTheme.pink.opacity(0.26)))
+                .overlay(Capsule().stroke(.white.opacity(0.28)))
         }
         .frame(width: width, height: height)
         .overlay(Rectangle().stroke(tableStroke, lineWidth: 0.72))
     }
 
     private var badgeFill: LinearGradient {
-        placement.isFirstPlace
-            ? LevitTheme.pinkGradient
-            : LinearGradient(colors: [LevitTheme.palePink, LevitTheme.palePink], startPoint: .top, endPoint: .bottom)
+        LevitTheme.pinkGradient
     }
 }
 

@@ -1,5 +1,32 @@
 import Foundation
 
+enum LoadDiagnostics {
+    static var isEnabled: Bool {
+        #if DEBUG
+        true
+        #else
+        ProcessInfo.processInfo.environment["LEVITATE_LOAD_LOGS"] == "1"
+        #endif
+    }
+
+    static func start() -> Date {
+        Date()
+    }
+
+    static func elapsed(since start: Date) -> String {
+        String(format: "%.3fs", -start.timeIntervalSinceNow)
+    }
+
+    static func log(_ message: String) {
+        guard isEnabled else { return }
+        print("[LevitateLoad] \(message)")
+    }
+
+    static func tableName(from path: String) -> String {
+        path.split(separator: "?").first.map(String.init) ?? path
+    }
+}
+
 struct SupabaseConfig: Sendable {
     let url: URL
     let apiKey: String
@@ -253,6 +280,34 @@ struct RoutineDeleteResponse: Decodable, Sendable {
     }
 }
 
+struct RoutineUpdateRequest: Encodable, Sendable {
+    let eventID: String
+    let routineID: String
+    let level: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+        case level
+    }
+}
+
+struct RoutineUpdateResponse: Decodable, Sendable {
+    let eventID: String
+    let routineID: String
+    let routineName: String
+    let level: String
+    let updated: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+        case routineName = "routine_name"
+        case level
+        case updated
+    }
+}
+
 struct JudgeUpsertRequest: Encodable, Sendable {
     let eventID: String
     let judgeID: String
@@ -319,29 +374,40 @@ actor RemoteJudgingRepository {
     }
 
     func fetchEvents() async throws -> [EventSummary] {
+        let start = LoadDiagnostics.start()
+        LoadDiagnostics.log("fetchEvents started")
         do {
             let rows: [EventRow] = try await get(
                 "events?select=id,slug,name,source_name,is_active,event_type&or=(event_type.is.null,event_type.eq.event)&order=is_active.desc,created_at.desc"
             )
-            return rows.map(\.summary)
+            let events = rows.map(\.summary)
+            LoadDiagnostics.log("fetchEvents finished events=\(events.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return events
         } catch {
+            LoadDiagnostics.log("fetchEvents primary query failed elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
             let rows: [EventRow] = try await get(
                 "events?select=id,slug,name,source_name,is_active&order=is_active.desc,created_at.desc"
             )
-            return rows
+            let events = rows
                 .filter { $0.eventType != "legacy_block" && $0.eventType != "archived" }
                 .map(\.summary)
+            LoadDiagnostics.log("fetchEvents fallback finished events=\(events.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return events
         }
     }
 
     func fetchEventBundle(eventID: String) async throws -> RemoteEventBundle {
+        let start = LoadDiagnostics.start()
+        LoadDiagnostics.log("fetchEventBundle started eventID=\(eventID)")
         let encodedEventID = eventID.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? eventID
         let eventRows: [EventRow] = try await get(
             "events?select=id,slug,name,source_name,is_active&id=eq.\(encodedEventID)&limit=1"
         )
         guard let event = eventRows.first?.summary else {
+            LoadDiagnostics.log("fetchEventBundle missing event eventID=\(eventID) elapsed=\(LoadDiagnostics.elapsed(since: start))")
             throw RemoteJudgingError.missingEvent
         }
+        LoadDiagnostics.log("fetchEventBundle event loaded name=\"\(event.name)\" elapsed=\(LoadDiagnostics.elapsed(since: start))")
 
         async let blocks: [BlockRow] = fetchBlocks(eventID: encodedEventID)
         async let routines: [RoutineRow] = getAll("routines?select=*&event_id=eq.\(encodedEventID)&order=sort_order.asc")
@@ -358,6 +424,13 @@ actor RemoteJudgingRepository {
         let judgeRows = try await judges
         let templateRows = try await templates
         let criterionRows = try await criteria
+        let scoreRows = try await scores
+        let feedbackRows = try await feedback
+        let penaltyRows = try await penalties
+        let favoriteRows = try await favorites
+        LoadDiagnostics.log(
+            "fetchEventBundle rows blocks=\(blockRows.count) routines=\(routineRows.count) judges=\(judgeRows.count) templates=\(templateRows.count) criteria=\(criterionRows.count) scores=\(scoreRows.count) feedback=\(feedbackRows.count) penalties=\(penaltyRows.count) favorites=\(favoriteRows.count) elapsed=\(LoadDiagnostics.elapsed(since: start))"
+        )
 
         let criteriaByTemplate = Dictionary(grouping: criterionRows, by: \.templateID)
         let judgingTemplates = templateRows.map { template in
@@ -409,7 +482,8 @@ actor RemoteJudgingRepository {
             judges: judgeRows.map(\.name),
             judgeProfiles: judgeRows.map(\.profile)
         )
-        return try await RemoteEventBundle(event: event, appData: appData, scores: scores, feedback: feedback, penalties: penalties, favorites: favorites)
+        LoadDiagnostics.log("fetchEventBundle built AppData elapsed=\(LoadDiagnostics.elapsed(since: start))")
+        return RemoteEventBundle(event: event, appData: appData, scores: scoreRows, feedback: feedbackRows, penalties: penaltyRows, favorites: favoriteRows)
     }
 
     func upsertScores(_ rows: [ScoreUpsertRow]) async throws {
@@ -471,6 +545,12 @@ actor RemoteJudgingRepository {
         return try decoder.decode(RoutineDeleteResponse.self, from: response)
     }
 
+    func updateRoutineLevel(eventID: String, routineID: String, level: String) async throws -> RoutineUpdateResponse {
+        let data = try encoder.encode(RoutineUpdateRequest(eventID: eventID, routineID: routineID, level: level))
+        let response = try await functionRequest(name: "update-routine", body: data)
+        return try decoder.decode(RoutineUpdateResponse.self, from: response)
+    }
+
     func upsertJudge(eventID: String, judgeID: String, name: String, role: UserRole, heroImageName: String = "") async throws -> JudgeUpsertResponse {
         let data = try encoder.encode(
             JudgeUpsertRequest(
@@ -492,21 +572,30 @@ actor RemoteJudgingRepository {
     }
 
     private func get<T: Decodable>(_ path: String) async throws -> T {
+        let start = LoadDiagnostics.start()
         let data = try await request(path: path, method: "GET")
-        return try decoder.decode(T.self, from: data)
+        let value = try decoder.decode(T.self, from: data)
+        LoadDiagnostics.log("GET \(LoadDiagnostics.tableName(from: path)) decoded bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+        return value
     }
 
     private func getAll<T: Decodable>(_ path: String, pageSize: Int = 1000) async throws -> [T] {
+        let overallStart = LoadDiagnostics.start()
+        let tableName = LoadDiagnostics.tableName(from: path)
+        LoadDiagnostics.log("GET \(tableName) paginated started pageSize=\(pageSize)")
         var rows: [T] = []
         var start = 0
 
         while true {
             let end = start + pageSize - 1
+            let pageStart = LoadDiagnostics.start()
             let data = try await request(path: path, method: "GET", range: "\(start)-\(end)")
             let page = try decoder.decode([T].self, from: data)
             rows.append(contentsOf: page)
+            LoadDiagnostics.log("GET \(tableName) page range=\(start)-\(end) rows=\(page.count) total=\(rows.count) bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: pageStart))")
 
             guard page.count == pageSize else {
+                LoadDiagnostics.log("GET \(tableName) paginated finished rows=\(rows.count) elapsed=\(LoadDiagnostics.elapsed(since: overallStart))")
                 return rows
             }
             start += pageSize

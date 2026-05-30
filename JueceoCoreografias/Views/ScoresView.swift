@@ -233,6 +233,7 @@ private struct FilterCapsule: View {
                 .foregroundStyle(isSelected ? .white : LevitTheme.muted)
                 .background(isSelected ? LevitTheme.pink : LevitTheme.softFill, in: Capsule())
                 .overlay(Capsule().stroke(isSelected ? LevitTheme.pink.opacity(0.22) : LevitTheme.line))
+                .contentShape(Capsule())
         }
         .buttonStyle(.plain)
     }
