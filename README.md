@@ -35,7 +35,7 @@ La distribucion publica fuera del Mac App Store requiere certificado `Developer 
 
 ### Versionado iOS/macOS
 
-Apple usa dos valores equivalentes al `version: nombre+codigo` de Android/Flutter:
+Apple usa dos valores para identificar cada build:
 
 - `MARKETING_VERSION`: version visible, por ejemplo `1.0.4`.
 - `CURRENT_PROJECT_VERSION`: build interno, siempre incremental, por ejemplo `5`.
@@ -150,19 +150,6 @@ Para habilitarlo:
 3. En Xcode reemplaza los build settings `GOOGLE_CLIENT_ID` y `GOOGLE_REVERSED_CLIENT_ID` con los valores de Google.
 4. Si el OAuth consent screen esta en testing, agrega la cuenta que usara la app como test user.
 
-## Android tablets
-
-La base Flutter esta en `android_tablet_flutter`. En esta maquina no esta instalado Flutter, asi que primero completa los archivos host de Android en una maquina con Flutter:
-
-```bash
-cd android_tablet_flutter
-flutter create . --platforms=android
-flutter pub get
-flutter run \
-  --dart-define=SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co \
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc
-```
-
 ## Funciones
 
 - Bloques de coreografías desde Excel.
@@ -172,4 +159,3 @@ flutter run \
 - Dictamen final por género, división y categoría.
 - Exportación y compartir PDF.
 - Sincronización Supabase opcional con modo offline/pending.
-- App Flutter para Android tablets conectada al mismo contrato de datos.
