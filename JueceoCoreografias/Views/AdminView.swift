@@ -1,5 +1,7 @@
 import SwiftUI
 
+private let judgeActivityPollingIntervalNanoseconds: UInt64 = 10_000_000_000
+
 struct AdminView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var section: AppSection
@@ -1052,7 +1054,7 @@ struct ScoreEditorView: View {
     private func pollJudgeActivity() async {
         await store.refreshJudgeActivity()
         while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            try? await Task.sleep(nanoseconds: judgeActivityPollingIntervalNanoseconds)
             await store.refreshJudgeActivity()
         }
     }
@@ -1642,7 +1644,7 @@ struct JudgeActivityView: View {
     private func pollJudgeActivity() async {
         await refreshJudgeActivity()
         while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            try? await Task.sleep(nanoseconds: judgeActivityPollingIntervalNanoseconds)
             await refreshJudgeActivity()
         }
     }

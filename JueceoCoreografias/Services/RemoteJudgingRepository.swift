@@ -62,6 +62,12 @@ struct RemoteEventBundle: Sendable {
     let specialAwards: [RemoteSpecialAwardRow]
 }
 
+struct RemoteRoutineJudgingData: Sendable {
+    let scores: [RemoteScoreRow]
+    let feedback: [RemoteFeedbackRow]
+    let penalties: [RemotePenaltyRow]
+}
+
 struct RemoteScoreRow: Codable, Hashable, Sendable {
     let eventID: String
     let routineID: String
@@ -626,6 +632,24 @@ actor RemoteJudgingRepository {
             rows,
             prefer: "resolution=merge-duplicates,return=minimal"
         )
+    }
+
+    func fetchRoutineJudgingData(eventID: String, routineID: String, judgeID: String) async throws -> RemoteRoutineJudgingData {
+        let encodedEventID = Self.queryValue(eventID)
+        let encodedRoutineID = Self.queryValue(routineID)
+        let encodedJudgeID = Self.queryValue(judgeID)
+
+        async let scores: [RemoteScoreRow] = getAll(
+            "scores?select=event_id,routine_id,judge_id,criterion_id,value&event_id=eq.\(encodedEventID)&routine_id=eq.\(encodedRoutineID)&judge_id=eq.\(encodedJudgeID)&order=criterion_id.asc"
+        )
+        async let feedback: [RemoteFeedbackRow] = getAll(
+            "feedback?select=event_id,routine_id,judge_id,body&event_id=eq.\(encodedEventID)&routine_id=eq.\(encodedRoutineID)&judge_id=eq.\(encodedJudgeID)"
+        )
+        async let penalties: [RemotePenaltyRow] = getAll(
+            "penalties?select=event_id,block_id,routine_id,judge_id,value&event_id=eq.\(encodedEventID)&routine_id=eq.\(encodedRoutineID)&judge_id=eq.\(encodedJudgeID)"
+        )
+
+        return try await RemoteRoutineJudgingData(scores: scores, feedback: feedback, penalties: penalties)
     }
 
     func upsertFeedback(_ rows: [FeedbackUpsertRow]) async throws {

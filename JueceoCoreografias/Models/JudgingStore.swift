@@ -563,8 +563,13 @@ final class JudgingStore: ObservableObject {
             return
         }
         do {
+            let previousActivities = latestJudgeActivities
             let rows = try await remoteRepository.fetchJudgeActivity(eventID: eventID)
             applyJudgeActivityRows(rows)
+            let completedActivities = completedScoringActivities(previous: previousActivities, current: latestJudgeActivities)
+            for activity in completedActivities {
+                await refreshRemoteJudgingData(for: activity)
+            }
         } catch {
             LoadDiagnostics.log("refreshJudgeActivity failed error=\(error.localizedDescription)")
         }
@@ -1709,6 +1714,108 @@ final class JudgingStore: ObservableObject {
         }
     }
 
+    private func completedScoringActivities(previous: [JudgeActivitySummary], current: [JudgeActivitySummary]) -> [JudgeActivitySummary] {
+        let currentByJudgeID = Dictionary(uniqueKeysWithValues: current.map { ($0.judgeID, $0) })
+        var seen = Set<String>()
+
+        return previous.compactMap { previousActivity in
+            guard previousActivity.state == .viewingSheet, let routineID = previousActivity.routineID else { return nil }
+            let currentActivity = currentByJudgeID[previousActivity.judgeID]
+            let didLeaveRoutine = currentActivity?.state != .viewingSheet || currentActivity?.routineID != routineID
+            guard didLeaveRoutine else { return nil }
+
+            let key = "\(previousActivity.eventID)::\(previousActivity.judgeID)::\(routineID)"
+            guard seen.insert(key).inserted else { return nil }
+            return previousActivity
+        }
+    }
+
+    private func refreshRemoteJudgingData(for activity: JudgeActivitySummary) async {
+        guard
+            let remoteRepository,
+            let eventID = selectedEventID,
+            activity.eventID == eventID,
+            let routineID = activity.routineID
+        else { return }
+
+        do {
+            let data = try await remoteRepository.fetchRoutineJudgingData(
+                eventID: eventID,
+                routineID: routineID,
+                judgeID: activity.judgeID
+            )
+            applyRemoteJudgingData(data, routineID: routineID, judgeID: activity.judgeID, fallbackJudgeName: activity.judgeName)
+        } catch {
+            LoadDiagnostics.log("refreshRemoteJudgingData failed routine=\(routineID) judge=\(activity.judgeID) error=\(error.localizedDescription)")
+        }
+    }
+
+    private func applyRemoteJudgingData(
+        _ data: RemoteRoutineJudgingData,
+        routineID: String,
+        judgeID: String,
+        fallbackJudgeName: String
+    ) {
+        let judge = judgeName(forRemoteID: judgeID, fallback: fallbackJudgeName)
+
+        var updatedScores = scores
+        let staleScoreKeys = updatedScores.keys.filter { key in
+            guard let parsed = parseScoreKey(key) else { return false }
+            return isCurrentDataScope(parsed.eventID)
+                && parsed.routineID == routineID
+                && matchesJudgeKey(parsed.judgeKey, judge: judge)
+                && !pendingScoreKeys.contains(key)
+        }
+        for key in staleScoreKeys {
+            updatedScores.removeValue(forKey: key)
+        }
+        for remoteScore in data.scores {
+            let key = scoreKey(routineID: remoteScore.routineID, judge: judge, criterionID: remoteScore.criterionID)
+            if !pendingScoreKeys.contains(key) {
+                updatedScores[key] = remoteScore.value
+            }
+        }
+        scores = updatedScores
+
+        var updatedFeedback = feedback
+        let staleFeedbackKeys = updatedFeedback.keys.filter { key in
+            guard let parsed = parseFeedbackKey(key) else { return false }
+            return isCurrentDataScope(parsed.eventID)
+                && parsed.routineID == routineID
+                && matchesJudgeKey(parsed.judgeKey, judge: judge)
+                && !pendingFeedbackKeys.contains(key)
+        }
+        for key in staleFeedbackKeys {
+            updatedFeedback.removeValue(forKey: key)
+        }
+        for remoteFeedback in data.feedback {
+            let key = feedbackKey(routineID: remoteFeedback.routineID, judge: judge)
+            if !pendingFeedbackKeys.contains(key) {
+                updatedFeedback[key] = remoteFeedback.body
+            }
+        }
+        feedback = updatedFeedback
+
+        var updatedPenalties = penalties
+        let stalePenaltyKeys = updatedPenalties.keys.filter { key in
+            guard let parsed = parsePenaltyKey(key) else { return false }
+            return isCurrentDataScope(parsed.eventID)
+                && parsed.routineID == routineID
+                && matchesJudgeKey(parsed.judgeKey, judge: judge)
+                && !pendingPenaltyKeys.contains(key)
+        }
+        for key in stalePenaltyKeys {
+            updatedPenalties.removeValue(forKey: key)
+        }
+        for remotePenalty in data.penalties {
+            let key = penaltyKey(routineID: remotePenalty.routineID, judge: judge)
+            if !pendingPenaltyKeys.contains(key) {
+                updatedPenalties[key] = min(max(remotePenalty.value, -100), 0)
+            }
+        }
+        penalties = updatedPenalties
+    }
+
     private func markScorePending(_ key: String) {
         markScoresPending([key])
     }
@@ -1975,6 +2082,14 @@ final class JudgingStore: ObservableObject {
 
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
         appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
+    }
+
+    private func judgeName(forRemoteID judgeID: String, fallback: String) -> String {
+        appData.judges.first {
+            $0.stableRemoteID == judgeID
+                || $0.normalizedKey == fallback.normalizedKey
+                || $0.stableRemoteID == fallback.stableRemoteID
+        } ?? fallback
     }
 
     private func isCurrentDataScope(_ eventID: String?) -> Bool {
