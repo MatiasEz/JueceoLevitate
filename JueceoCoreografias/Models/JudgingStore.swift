@@ -225,17 +225,22 @@ final class JudgingStore: ObservableObject {
     var favoriteSummaries: [FavoriteSelectionSummary] {
         let currentEventKey = selectedEventID ?? appData.sourceName.stableRemoteID
         let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
+        var seenSelections = Set<String>()
         return favoriteSelections.compactMap { key, routineID in
             guard
                 let parsed = parseFavoriteKey(key),
                 parsed.eventID == currentEventKey,
-                let routine = routinesByID[routineID]
+                let routine = routinesByID[parsed.routineID ?? routineID]
             else {
+                return nil
+            }
+            let selectionID = "\(parsed.eventID)::\(parsed.blockID)::\(parsed.judgeKey)::\(parsed.category.rawValue)::\(routine.id)"
+            guard seenSelections.insert(selectionID).inserted else {
                 return nil
             }
 
             return FavoriteSelectionSummary(
-                id: key,
+                id: selectionID,
                 category: parsed.category,
                 judge: judgeName(forNormalizedKey: parsed.judgeKey) ?? parsed.judgeKey.uppercased(),
                 blockName: blockName(for: parsed.blockID),
@@ -656,7 +661,10 @@ final class JudgingStore: ObservableObject {
     }
 
     func isFavorite(_ routine: Routine, category: FavoriteCategory, judge: String? = nil) -> Bool {
-        favoriteSelections[favoriteKey(category: category, judge: judge ?? scoringJudge)] == routine.id
+        let selectedScoringJudge = judge ?? scoringJudge
+        let key = favoriteKey(category: category, judge: selectedScoringJudge, routineID: routine.id)
+        let legacyKey = favoriteKey(category: category, judge: selectedScoringJudge)
+        return favoriteSelections[key] != nil || favoriteSelections[legacyKey] == routine.id
     }
 
     func hasFavorite(_ routine: Routine, judge: String? = nil) -> Bool {
@@ -664,13 +672,20 @@ final class JudgingStore: ObservableObject {
     }
 
     func toggleFavorite(_ category: FavoriteCategory, routine: Routine, judge: String? = nil) {
-        let key = favoriteKey(category: category, judge: judge ?? scoringJudge)
-        if favoriteSelections[key] == routine.id {
+        let selectedScoringJudge = judge ?? scoringJudge
+        let key = favoriteKey(category: category, judge: selectedScoringJudge, routineID: routine.id)
+        let legacyKey = favoriteKey(category: category, judge: selectedScoringJudge)
+        if favoriteSelections[key] != nil {
             favoriteSelections.removeValue(forKey: key)
+            markFavoritePending(key)
+        } else if favoriteSelections[legacyKey] == routine.id {
+            favoriteSelections.removeValue(forKey: legacyKey)
+            pendingFavoriteKeys.remove(legacyKey)
+            markFavoritePending(key)
         } else {
             favoriteSelections[key] = routine.id
+            markFavoritePending(key)
         }
-        markFavoritePending(key)
         persistFavoriteSelections()
     }
 
@@ -1142,8 +1157,13 @@ final class JudgingStore: ObservableObject {
             let favoriteUpsertRows = favoriteKeys.compactMap { key -> FavoriteUpsertRow? in
                 guard
                     let parsed = parseFavoriteKey(key),
-                    let routineID = favoriteSelections[key],
                     let judgeName = judgeName(forNormalizedKey: parsed.judgeKey)
+                else {
+                    return nil
+                }
+                guard
+                    favoriteSelections[key] != nil,
+                    let routineID = parsed.routineID ?? favoriteSelections[key]
                 else {
                     return nil
                 }
@@ -1168,7 +1188,8 @@ final class JudgingStore: ObservableObject {
                     eventID: eventID,
                     blockID: parsed.blockID,
                     judgeID: judgeName.stableRemoteID,
-                    category: parsed.category.rawValue
+                    category: parsed.category.rawValue,
+                    routineID: parsed.routineID
                 )
             }
             if !favoriteUpsertRows.isEmpty {
@@ -1618,9 +1639,16 @@ final class JudgingStore: ObservableObject {
                 eventID: remoteFavorite.eventID,
                 blockID: remoteFavorite.blockID,
                 category: category,
+                judge: judge,
+                routineID: remoteFavorite.routineID
+            )
+            let legacyKey = favoriteKey(
+                eventID: remoteFavorite.eventID,
+                blockID: remoteFavorite.blockID,
+                category: category,
                 judge: judge
             )
-            if !pendingFavoriteKeys.contains(key) {
+            if !pendingFavoriteKeys.contains(key), !pendingFavoriteKeys.contains(legacyKey) {
                 updatedFavoriteSelections[key] = remoteFavorite.routineID
             }
         }
@@ -1898,14 +1926,18 @@ final class JudgingStore: ObservableObject {
         }
 
         let removedFavoriteKeys = Set<String>(favoriteSelections.compactMap { entry -> String? in
-            guard let parsed = parseFavoriteKey(entry.key), parsed.eventID == currentDataScopeKey, entry.value == routineID else {
+            guard
+                let parsed = parseFavoriteKey(entry.key),
+                parsed.eventID == currentDataScopeKey,
+                (parsed.routineID ?? entry.value) == routineID
+            else {
                 return nil
             }
             return entry.key
         })
         favoriteSelections = favoriteSelections.filter { key, value in
             guard let parsed = parseFavoriteKey(key), parsed.eventID == currentDataScopeKey else { return true }
-            return value != routineID
+            return (parsed.routineID ?? value) != routineID
         }
         specialAwards = specialAwards.filter { key, value in
             guard let parsed = parseSpecialAwardKey(key), parsed.eventID == currentDataScopeKey else { return true }
@@ -2068,10 +2100,10 @@ final class JudgingStore: ObservableObject {
         return nil
     }
 
-    private func parseFavoriteKey(_ key: String) -> (eventID: String, blockID: String, judgeKey: String, category: FavoriteCategory)? {
+    private func parseFavoriteKey(_ key: String) -> (eventID: String, blockID: String, judgeKey: String, category: FavoriteCategory, routineID: String?)? {
         let parts = key.components(separatedBy: "::")
-        guard parts.count == 4, let category = FavoriteCategory(rawValue: parts[3]) else { return nil }
-        return (parts[0], parts[1], parts[2], category)
+        guard (parts.count == 4 || parts.count == 5), let category = FavoriteCategory(rawValue: parts[3]) else { return nil }
+        return (parts[0], parts[1], parts[2], category, parts.count == 5 ? parts[4] : nil)
     }
 
     private func parseSpecialAwardKey(_ key: String) -> (eventID: String, blockID: String, category: SpecialAwardCategory)? {
@@ -2108,14 +2140,16 @@ final class JudgingStore: ObservableObject {
             || judgeKey.stableRemoteID == judge.stableRemoteID
     }
 
-    private func favoriteKey(category: FavoriteCategory, judge: String) -> String {
-        favoriteKey(eventID: selectedEventID, blockID: selectedBlock?.id, category: category, judge: judge)
+    private func favoriteKey(category: FavoriteCategory, judge: String, routineID: String? = nil) -> String {
+        favoriteKey(eventID: selectedEventID, blockID: selectedBlock?.id, category: category, judge: judge, routineID: routineID)
     }
 
-    private func favoriteKey(eventID: String?, blockID: String?, category: FavoriteCategory, judge: String) -> String {
+    private func favoriteKey(eventID: String?, blockID: String?, category: FavoriteCategory, judge: String, routineID: String? = nil) -> String {
         let eventKey = eventID ?? appData.sourceName.stableRemoteID
         let blockKey = blockID ?? "sin-bloque"
-        return "\(eventKey)::\(blockKey)::\(judge.normalizedKey)::\(category.rawValue)"
+        let baseKey = "\(eventKey)::\(blockKey)::\(judge.normalizedKey)::\(category.rawValue)"
+        let cleanRoutineID = routineID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return cleanRoutineID.isEmpty ? baseKey : "\(baseKey)::\(cleanRoutineID)"
     }
 
     private func specialAwardKey(blockID: String, category: SpecialAwardCategory) -> String {

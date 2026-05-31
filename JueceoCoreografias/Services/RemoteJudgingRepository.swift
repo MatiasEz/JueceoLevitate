@@ -243,6 +243,7 @@ struct FavoriteDeleteRow: Sendable {
     let blockID: String
     let judgeID: String
     let category: String
+    let routineID: String?
 }
 
 struct SpecialAwardUpsertRow: Encodable, Sendable {
@@ -670,7 +671,7 @@ actor RemoteJudgingRepository {
 
     func upsertFavorites(_ rows: [FavoriteUpsertRow]) async throws {
         try await post(
-            "routine_favorites?on_conflict=event_id,block_id,judge_id,category",
+            "routine_favorite_votes?on_conflict=event_id,block_id,routine_id,judge_id,category",
             rows,
             prefer: "resolution=merge-duplicates,return=minimal"
         )
@@ -678,9 +679,14 @@ actor RemoteJudgingRepository {
 
     func deleteFavorites(_ rows: [FavoriteDeleteRow]) async throws {
         for row in rows {
-            try await delete(
-                "routine_favorites?event_id=eq.\(Self.queryValue(row.eventID))&block_id=eq.\(Self.queryValue(row.blockID))&judge_id=eq.\(Self.queryValue(row.judgeID))&category=eq.\(Self.queryValue(row.category))",
-                prefer: "return=minimal"
+            let routineFilter = row.routineID
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .flatMap { $0.isEmpty ? nil : "&routine_id=eq.\(Self.queryValue($0))" } ?? ""
+            try await deleteFavoriteRow(
+                "routine_favorite_votes?event_id=eq.\(Self.queryValue(row.eventID))&block_id=eq.\(Self.queryValue(row.blockID))&judge_id=eq.\(Self.queryValue(row.judgeID))&category=eq.\(Self.queryValue(row.category))\(routineFilter)"
+            )
+            try await deleteFavoriteRow(
+                "routine_favorites?event_id=eq.\(Self.queryValue(row.eventID))&block_id=eq.\(Self.queryValue(row.blockID))&judge_id=eq.\(Self.queryValue(row.judgeID))&category=eq.\(Self.queryValue(row.category))\(routineFilter)"
             )
         }
     }
@@ -830,11 +836,26 @@ actor RemoteJudgingRepository {
     }
 
     private func fetchFavorites(eventID: String) async throws -> [RemoteFavoriteRow] {
-        do {
-            return try await getAll("routine_favorites?select=*&event_id=eq.\(eventID)&order=block_id.asc,judge_id.asc,category.asc")
-        } catch {
-            return []
+        var rows: [RemoteFavoriteRow] = []
+        var seen = Set<String>()
+
+        for table in ["routine_favorite_votes", "routine_favorites"] {
+            do {
+                let tableRows: [RemoteFavoriteRow] = try await getAll(
+                    "\(table)?select=*&event_id=eq.\(eventID)&order=block_id.asc,judge_id.asc,category.asc,routine_id.asc"
+                )
+                for row in tableRows {
+                    let key = "\(row.eventID)::\(row.blockID)::\(row.routineID)::\(row.judgeID)::\(row.category)"
+                    guard seen.insert(key).inserted else {
+                        continue
+                    }
+                    rows.append(row)
+                }
+            } catch {
+                continue
+            }
         }
+        return rows
     }
 
     private func fetchPenalties(eventID: String) async throws -> [RemotePenaltyRow] {
@@ -860,6 +881,10 @@ actor RemoteJudgingRepository {
 
     private func delete(_ path: String, prefer: String) async throws {
         _ = try await request(path: path, method: "DELETE", prefer: prefer)
+    }
+
+    private func deleteFavoriteRow(_ path: String) async throws {
+        try await delete(path, prefer: "return=minimal")
     }
 
     private static func queryValue(_ value: String) -> String {
