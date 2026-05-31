@@ -3,7 +3,10 @@ type AnyRow = Record<string, unknown>;
 type UpdateRoutinePayload = {
   event_id?: string;
   routine_id?: string;
+  division?: string;
+  genre?: string;
   level?: string;
+  category?: string;
 };
 
 const CORS_HEADERS = {
@@ -34,13 +37,22 @@ Deno.serve(async (request) => {
     const payload = await request.json() as UpdateRoutinePayload;
     const eventID = cleanText(payload.event_id);
     const routineID = cleanText(payload.routine_id);
-    const level = cleanText(payload.level);
 
     if (!eventID) {
       throw new HTTPError(400, "Falta event_id.");
     }
     if (!routineID) {
       throw new HTTPError(400, "Falta routine_id.");
+    }
+
+    const updates: Record<string, string> = {};
+    if (payload.division !== undefined) updates.division = cleanText(payload.division);
+    if (payload.genre !== undefined) updates.genre = cleanText(payload.genre);
+    if (payload.level !== undefined) updates.level = cleanText(payload.level);
+    if (payload.category !== undefined) updates.category = cleanText(payload.category);
+
+    if (Object.keys(updates).length === 0) {
+      throw new HTTPError(400, "No hay campos para actualizar.");
     }
 
     const eventRows = await supabaseRequest(
@@ -58,7 +70,7 @@ Deno.serve(async (request) => {
     const routineRows = await supabaseRequest(
       "PATCH",
       `routines?event_id=eq.${encodeURIComponent(eventID)}&routine_id=eq.${encodeURIComponent(routineID)}`,
-      { level },
+      updates,
       "return=representation",
     ) as AnyRow[];
     const routine = routineRows[0];
@@ -70,7 +82,10 @@ Deno.serve(async (request) => {
       event_id: eventID,
       routine_id: cleanText(routine.routine_id) || routineID,
       routine_name: cleanText(routine.name),
+      division: cleanText(routine.division),
+      genre: cleanText(routine.genre),
       level: cleanText(routine.level),
+      category: cleanText(routine.category),
       updated: true,
     });
   } catch (error) {

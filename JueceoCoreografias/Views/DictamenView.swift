@@ -9,6 +9,10 @@ struct DictamenView: View {
         DictamenBuilder.sections(from: results)
     }
 
+    private var specialAwards: [SpecialAwardSummary] {
+        store.specialAwardSummaries(for: store.selectedBlock)
+    }
+
     private var totalRoutines: Int {
         sections.reduce(0) { total, section in
             total + section.rowCount
@@ -17,6 +21,20 @@ struct DictamenView: View {
 
     private var completedCount: Int {
         results.filter { $0.aggregateTotal > 0 }.count
+    }
+
+    private var topScoringResult: RoutineResult? {
+        results.max { lhs, rhs in
+            if abs(lhs.aggregateTotal - rhs.aggregateTotal) < 0.0001 {
+                let lhsNumber = DictamenBuilder.minimumParticipationNumber(in: lhs.routine.id)
+                let rhsNumber = DictamenBuilder.minimumParticipationNumber(in: rhs.routine.id)
+                if lhsNumber != rhsNumber {
+                    return lhsNumber > rhsNumber
+                }
+                return lhs.routine.name.localizedCaseInsensitiveCompare(rhs.routine.name) == .orderedDescending
+            }
+            return lhs.aggregateTotal < rhs.aggregateTotal
+        }
     }
 
     var body: some View {
@@ -57,6 +75,9 @@ struct DictamenView: View {
         HStack(alignment: .center, spacing: 14) {
             summaryBar
             Spacer()
+            if let topScoringResult {
+                DictamenTopScoreCard(result: topScoringResult)
+            }
         }
     }
 
@@ -81,6 +102,7 @@ struct DictamenView: View {
                     ForEach(sections) { section in
                         DictamenGenreTable(section: section, layout: .regular)
                     }
+                    DictamenSpecialAwardsSection(awards: specialAwards, layout: .regular)
                 }
                 .padding(.bottom, 24)
             }
@@ -133,7 +155,7 @@ enum DictamenBuilder {
                     rows: rankedRows(categoryItems)
                 )
             }
-            .sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            .sorted(by: categoryOrder)
 
             return DictamenGenreSection(genre: genre, categories: categories)
         }
@@ -171,15 +193,21 @@ enum DictamenBuilder {
         }
 
         return rows.sorted { lhs, rhs in
-            if abs(lhs.result.aggregateTotal - rhs.result.aggregateTotal) < 0.0001 {
-                return routineOrder(lhs.result.routine, rhs.result.routine)
-            }
-            return lhs.result.aggregateTotal < rhs.result.aggregateTotal
+            routineOrder(lhs.result.routine, rhs.result.routine)
         }
     }
 
     private static func placement(for rank: Int) -> CompetitionPlacement {
         rank <= 3 ? .position(rank) : .participation
+    }
+
+    private static func categoryOrder(_ lhs: DictamenCategorySection, _ rhs: DictamenCategorySection) -> Bool {
+        let lhsNumber = lhs.minimumParticipationNumber
+        let rhsNumber = rhs.minimumParticipationNumber
+        if lhsNumber != rhsNumber {
+            return lhsNumber < rhsNumber
+        }
+        return lhs.title.localizedCaseInsensitiveCompare(rhs.title) == .orderedAscending
     }
 
     private static func categoryTitle(division: String, level: String, category: String) -> String {
@@ -250,12 +278,32 @@ enum DictamenBuilder {
     }
 
     private static func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
-        let lhsNumber = Int(lhs.id) ?? Int.max
-        let rhsNumber = Int(rhs.id) ?? Int.max
+        let lhsNumber = minimumParticipationNumber(in: lhs.id)
+        let rhsNumber = minimumParticipationNumber(in: rhs.id)
         if lhsNumber == rhsNumber {
             return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
         }
         return lhsNumber < rhsNumber
+    }
+
+    static func minimumParticipationNumber(in value: String) -> Int {
+        var numbers: [Int] = []
+        var currentNumber = ""
+
+        for scalar in value.unicodeScalars {
+            if CharacterSet.decimalDigits.contains(scalar) {
+                currentNumber.append(Character(scalar))
+            } else if !currentNumber.isEmpty {
+                numbers.append(Int(currentNumber) ?? Int.max)
+                currentNumber.removeAll(keepingCapacity: true)
+            }
+        }
+
+        if !currentNumber.isEmpty {
+            numbers.append(Int(currentNumber) ?? Int.max)
+        }
+
+        return numbers.min() ?? Int.max
     }
 
     private static func searchableText(for result: RoutineResult) -> String {
@@ -296,6 +344,10 @@ struct DictamenCategorySection: Identifiable {
 
     var id: String {
         [genre, division, level, category].map(\.normalizedKey).joined(separator: "|")
+    }
+
+    var minimumParticipationNumber: Int {
+        rows.map { DictamenBuilder.minimumParticipationNumber(in: $0.result.routine.id) }.min() ?? Int.max
     }
 }
 
@@ -408,6 +460,102 @@ struct DictamenGenreTable: View {
     }
 }
 
+struct DictamenSpecialAwardsSection: View {
+    let awards: [SpecialAwardSummary]
+    let layout: DictamenTableLayout
+
+    private var isCompact: Bool {
+        layout.totalWidth < 900
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: isCompact ? 10 : 14) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "rosette")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.white)
+                    .frame(width: isCompact ? 34 : 40, height: isCompact ? 34 : 40)
+                    .background(.white.opacity(0.16), in: Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Premios especiales")
+                        .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
+                    Text(awards.first?.blockName ?? "Bloque")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(.white.opacity(0.70))
+                }
+
+                Spacer()
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, isCompact ? 14 : 18)
+            .padding(.vertical, isCompact ? 12 : 16)
+            .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+            VStack(spacing: isCompact ? 8 : 10) {
+                ForEach(awards) { award in
+                    DictamenSpecialAwardRow(award: award, isCompact: isCompact)
+                }
+            }
+            .padding(isCompact ? 10 : 12)
+            .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous).stroke(LevitTheme.line))
+        }
+        .padding(isCompact ? 12 : 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct DictamenSpecialAwardRow: View {
+    let award: SpecialAwardSummary
+    let isCompact: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: isCompact ? 10 : 14) {
+            Image(systemName: award.category.systemImage)
+                .font(.headline.weight(.black))
+                .foregroundStyle(LevitTheme.pink)
+                .frame(width: isCompact ? 38 : 46, height: isCompact ? 38 : 46)
+                .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(award.category.title.uppercased())
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+                Text(award.displayValue)
+                    .font(.system(size: isCompact ? 14 : 18, weight: .black, design: .rounded))
+                    .foregroundStyle(award.isAssigned ? LevitTheme.ink : LevitTheme.muted)
+                    .lineLimit(isCompact ? 2 : 1)
+                    .minimumScaleFactor(0.74)
+
+                if let routine = award.routine {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 7) {
+                            DictamenInfoPill(text: display(routine.academy), systemImage: "building.2.fill")
+                            DictamenInfoPill(text: display(routine.state).uppercased(), systemImage: "mappin.circle.fill")
+                        }
+                        VStack(alignment: .leading, spacing: 6) {
+                            DictamenInfoPill(text: display(routine.academy), systemImage: "building.2.fill")
+                            DictamenInfoPill(text: display(routine.state).uppercased(), systemImage: "mappin.circle.fill")
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .padding(isCompact ? 10 : 12)
+        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(LevitTheme.line))
+    }
+
+    private func display(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "SIN DATO" : trimmed
+    }
+}
+
 private struct DictamenHeaderRow: View {
     let layout: DictamenTableLayout
 
@@ -476,6 +624,8 @@ private struct DictamenStandingRowView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: isCompact ? 10 : 14) {
+            DictamenParticipationBadge(text: "#\(display(routine.id))", isCompact: isCompact)
+
             VStack(alignment: .leading, spacing: isCompact ? 7 : 8) {
                 Text(display(routine.name))
                     .font(.system(size: layout.emphasisFontSize, weight: .black, design: .rounded))
@@ -515,6 +665,22 @@ private struct DictamenStandingRowView: View {
     private func display(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? "SIN DATO" : trimmed
+    }
+}
+
+private struct DictamenParticipationBadge: View {
+    let text: String
+    let isCompact: Bool
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: isCompact ? 14 : 16, weight: .black, design: .rounded).monospacedDigit())
+            .lineLimit(1)
+            .minimumScaleFactor(0.68)
+            .foregroundStyle(LevitTheme.pink)
+            .frame(width: isCompact ? 54 : 66, height: isCompact ? 38 : 44)
+            .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: isCompact ? 12 : 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: isCompact ? 12 : 14, style: .continuous).stroke(LevitTheme.pink.opacity(0.18)))
     }
 }
 
@@ -688,6 +854,53 @@ private struct DictamenMetricPill: View {
         .foregroundStyle(LevitTheme.ink)
         .background(LevitTheme.solidSurface, in: Capsule())
         .overlay(Capsule().stroke(LevitTheme.line))
+    }
+}
+
+private struct DictamenTopScoreCard: View {
+    let result: RoutineResult
+
+    private var scoreText: String {
+        result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1)))
+    }
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "crown.fill")
+                .font(.system(size: 18, weight: .black))
+                .foregroundStyle(LevitTheme.pink)
+                .frame(width: 44, height: 44)
+                .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Mayor puntaje")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+                Text(result.routine.name)
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(LevitTheme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+
+            Spacer(minLength: 18)
+
+            VStack(alignment: .trailing, spacing: 0) {
+                Text(scoreText)
+                    .font(.system(size: 26, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(LevitTheme.pink)
+                    .lineLimit(1)
+                Text("pts")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(width: 420, alignment: .leading)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(LevitTheme.line))
     }
 }
 

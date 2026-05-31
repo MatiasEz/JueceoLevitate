@@ -46,16 +46,21 @@ final class JudgingStore: ObservableObject {
     @Published var feedback: [String: String] = [:]
     @Published var penalties: [String: Double] = [:]
     @Published var favoriteSelections: [String: String] = [:]
+    @Published private(set) var specialAwards: [String: String] = [:]
+    @Published private(set) var specialAwardManualValues: [String: String] = [:]
     @Published var lastPDFURL: URL?
     @Published private(set) var driveExportStatus: DriveExportStatus = .idle
     @Published private(set) var driveExportMessage: String?
     @Published private(set) var lastDriveExportSummary: GoogleDriveExportSummary?
     @Published private(set) var operationNotice: OperationNotice?
+    @Published private(set) var judgeActivities: [JudgeActivitySummary] = []
 
     private let scoresKey = "jueceo.scores.pending.v2"
     private let feedbackKey = "jueceo.feedback.pending.v2"
     private let penaltiesKey = "jueceo.penalties.pending.v2"
     private let favoriteSelectionsKey = "jueceo.favoriteSelections.pending.v2"
+    private let specialAwardsKey = "jueceo.specialAwards.v1"
+    private let specialAwardManualValuesKey = "jueceo.specialAwardManualValues.v1"
     private let legacyScoresStorageKey = "jueceo.scores.v1"
     private let legacyFeedbackStorageKey = "jueceo.feedback.v1"
     private let legacyPenaltiesStorageKey = "jueceo.penalties.v1"
@@ -96,6 +101,8 @@ final class JudgingStore: ObservableObject {
             feedback = Self.loadDictionary(feedbackKey) ?? Self.loadDictionary(legacyFeedbackStorageKey) ?? [:]
             penalties = Self.loadDictionary(penaltiesKey) ?? Self.loadDictionary(legacyPenaltiesStorageKey) ?? [:]
             favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? Self.loadDictionary(legacyFavoriteSelectionsStorageKey) ?? [:]
+            specialAwards = Self.loadDictionary(specialAwardsKey) ?? [:]
+            specialAwardManualValues = Self.loadDictionary(specialAwardManualValuesKey) ?? [:]
         } else {
             Self.removeStoredValue(legacyScoresStorageKey)
             Self.removeStoredValue(legacyFeedbackStorageKey)
@@ -105,6 +112,8 @@ final class JudgingStore: ObservableObject {
             feedback = Self.loadDictionary(feedbackKey) ?? [:]
             penalties = Self.loadDictionary(penaltiesKey) ?? [:]
             favoriteSelections = Self.loadDictionary(favoriteSelectionsKey) ?? [:]
+            specialAwards = Self.loadDictionary(specialAwardsKey) ?? [:]
+            specialAwardManualValues = Self.loadDictionary(specialAwardManualValuesKey) ?? [:]
             scores = scores.filter { pendingScoreKeys.contains($0.key) }
             feedback = feedback.filter { pendingFeedbackKeys.contains($0.key) }
             penalties = penalties.filter { pendingPenaltyKeys.contains($0.key) }
@@ -119,7 +128,7 @@ final class JudgingStore: ObservableObject {
             syncStatus = .localOnly
         }
         LoadDiagnostics.log(
-            "JudgingStore init routines=\(appData.routines.count) blocks=\(appData.blocks.count) judges=\(appData.judges.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) localFavorites=\(favoriteSelections.count) pending=\(pendingSyncCount) remoteConfigured=\(remoteRepository != nil) elapsed=\(LoadDiagnostics.elapsed(since: initStart))"
+            "JudgingStore init routines=\(appData.routines.count) blocks=\(appData.blocks.count) judges=\(appData.judges.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) localFavorites=\(favoriteSelections.count) localSpecialAwards=\(specialAwards.count) localSpecialAwardManualValues=\(specialAwardManualValues.count) pending=\(pendingSyncCount) remoteConfigured=\(remoteRepository != nil) elapsed=\(LoadDiagnostics.elapsed(since: initStart))"
         )
     }
 
@@ -197,6 +206,15 @@ final class JudgingStore: ObservableObject {
     var backendLoadingMessage: String {
         syncMessage ?? "Cargando informacion del backend..."
     }
+    var latestJudgeActivities: [JudgeActivitySummary] {
+        let latestByJudge = Dictionary(grouping: judgeActivities, by: \.judgeID)
+            .compactMapValues { activities in
+                activities.max { lhs, rhs in lhs.updatedAt < rhs.updatedAt }
+            }
+        return orderedEditableJudges.compactMap { judge in
+            latestByJudge[judge.stableRemoteID]
+        }
+    }
 
     var selectedRoutine: Routine? {
         visibleRoutines.first { $0.id == selectedRoutineID }
@@ -260,7 +278,6 @@ final class JudgingStore: ObservableObject {
                             }
                             return lhs.votes > rhs.votes
                         }
-                        .prefix(3)
                         .enumerated()
                         .map { index, item in
                             FavoriteRankingItem(
@@ -286,6 +303,43 @@ final class JudgingStore: ObservableObject {
                 }
                 return lhsOrder < rhsOrder
             }
+    }
+
+    func specialAwardSummaries(for block: DanceBlock? = nil) -> [SpecialAwardSummary] {
+        guard let block = block ?? selectedBlock else {
+            return SpecialAwardCategory.allCases.map { category in
+                SpecialAwardSummary(category: category, blockName: "Sin bloque", routine: nil, manualValue: nil)
+            }
+        }
+
+        let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
+        return SpecialAwardCategory.allCases.map { category in
+            let key = specialAwardKey(blockID: block.id, category: category)
+            let routine = specialAwards[key].flatMap { routinesByID[$0] }
+            return SpecialAwardSummary(category: category, blockName: block.name, routine: routine, manualValue: specialAwardManualValues[key])
+        }
+    }
+
+    func specialAwardRoutine(for category: SpecialAwardCategory, block: DanceBlock? = nil) -> Routine? {
+        guard let block = block ?? selectedBlock else { return nil }
+        let key = specialAwardKey(blockID: block.id, category: category)
+        guard let routineID = specialAwards[key] else { return nil }
+        return routines.first { $0.id == routineID }
+    }
+
+    func specialAwardManualValue(for category: SpecialAwardCategory, block: DanceBlock? = nil) -> String? {
+        guard let block = block ?? selectedBlock else { return nil }
+        let key = specialAwardKey(blockID: block.id, category: category)
+        if let manualValue = specialAwardManualValues[key] {
+            return manualValue
+        }
+        guard category.isManualEntry,
+              let routineID = specialAwards[key],
+              let routine = routines.first(where: { $0.id == routineID })
+        else {
+            return nil
+        }
+        return "#\(routine.id) \(routine.name)"
     }
 
     func template(for routine: Routine) -> JudgingTemplate {
@@ -441,6 +495,7 @@ final class JudgingStore: ObservableObject {
         if role(for: judge) != .admin {
             adminScoringJudge = nil
         }
+        Task { await reportJudgeAtHome() }
     }
 
     func beginAdminScoring(judge: String, routine: Routine) {
@@ -497,6 +552,34 @@ final class JudgingStore: ObservableObject {
             ?? routines.first { $0.blockID == block.id || $0.block == block.name }
             ?? routines.first
         selectedRoutineID = nextRoutine?.id ?? ""
+        if !isAdmin {
+            Task { await reportJudgeAtHome() }
+        }
+    }
+
+    func refreshJudgeActivity() async {
+        guard let remoteRepository, let eventID = selectedEventID else {
+            judgeActivities = []
+            return
+        }
+        do {
+            let rows = try await remoteRepository.fetchJudgeActivity(eventID: eventID)
+            applyJudgeActivityRows(rows)
+        } catch {
+            LoadDiagnostics.log("refreshJudgeActivity failed error=\(error.localizedDescription)")
+        }
+    }
+
+    func reportJudgeAtHome() async {
+        await reportJudgeActivity(state: .home, routine: nil)
+    }
+
+    func reportJudgeEnteredSheet(_ routine: Routine) async {
+        await reportJudgeActivity(state: .viewingSheet, routine: routine)
+    }
+
+    func reportJudgeLeftSheet(_ routine: Routine) async {
+        await reportJudgeActivity(state: .leftSheet, routine: routine)
     }
 
     func scoreKey(routineID: String, judge: String, criterionID: Int) -> String {
@@ -764,6 +847,10 @@ final class JudgingStore: ObservableObject {
     }
 
     func updateRoutineLevel(_ routine: Routine, level rawLevel: String) async throws {
+        try await updateRoutineMetadata(routine, field: .level, value: rawLevel)
+    }
+
+    func updateRoutineMetadata(_ routine: Routine, field: RoutineMetadataField, value rawValue: String) async throws {
         guard let remoteRepository else {
             throw RoutineUpdateError.missingRemoteConfiguration
         }
@@ -774,21 +861,178 @@ final class JudgingStore: ObservableObject {
             throw RoutineUpdateError.missingSelectedEvent
         }
 
-        let level = rawLevel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        var division = routine.division
+        var genre = routine.genre
+        var level = routine.level
+        var category = routine.category
+
+        switch field {
+        case .division:
+            division = cleanValue
+        case .genre:
+            genre = cleanValue
+        case .level:
+            level = cleanValue
+        case .category:
+            category = cleanValue
+        }
+
         let label = "#\(routine.id) \(routine.name)"
         syncStatus = .syncing
-        syncMessage = "Actualizando nivel de \(label)..."
-        _ = try await remoteRepository.updateRoutineLevel(
+        syncMessage = "Actualizando \(field.title.lowercased()) de \(label)..."
+        _ = try await remoteRepository.updateRoutineMetadata(
             eventID: eventID,
             routineID: routine.id,
-            level: level
+            division: division,
+            genre: genre,
+            level: level,
+            category: category
         )
 
         let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+        guard let updatedRoutine = bundle.appData.routines.first(where: { $0.id == routine.id }),
+              field.value(in: updatedRoutine).trimmingCharacters(in: .whitespacesAndNewlines).normalizedKey == cleanValue.normalizedKey
+        else {
+            applyRemoteBundle(bundle)
+            throw RoutineUpdateError.updateNotApplied(field.title)
+        }
+
         applyRemoteBundle(bundle)
         await syncPending()
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(label) actualizado."
+    }
+
+    func setSpecialAward(_ category: SpecialAwardCategory, routine: Routine?) async throws {
+        if category.isManualEntry {
+            try await setManualSpecialAward(category, value: nil)
+            return
+        }
+        guard isAdmin else {
+            throw SpecialAwardSaveError.notAllowed
+        }
+        guard let block = selectedBlock else {
+            throw SpecialAwardSaveError.missingSelectedBlock
+        }
+
+        let key = specialAwardKey(blockID: block.id, category: category)
+        let previousRoutineID = specialAwards[key]
+        let previousManualValue = specialAwardManualValues[key]
+
+        if let remoteRepository {
+            guard let eventID = selectedEventID else {
+                throw SpecialAwardSaveError.missingSelectedEvent
+            }
+
+            syncStatus = .syncing
+            syncMessage = "Guardando \(category.title.lowercased())..."
+            if let routine {
+                try await remoteRepository.upsertSpecialAward(
+                    SpecialAwardUpsertRow(
+                        eventID: eventID,
+                        blockID: block.id,
+                        routineID: routine.id,
+                        award: category.rawValue,
+                        manualValue: nil,
+                        deviceID: deviceID
+                    )
+                )
+                specialAwards[key] = routine.id
+                specialAwardManualValues.removeValue(forKey: key)
+                syncMessage = "\(category.title) guardado."
+            } else {
+                try await remoteRepository.deleteSpecialAward(
+                    SpecialAwardDeleteRow(
+                        eventID: eventID,
+                        blockID: block.id,
+                        award: category.rawValue
+                    )
+                )
+                specialAwards.removeValue(forKey: key)
+                specialAwardManualValues.removeValue(forKey: key)
+                syncMessage = "\(category.title) quedó sin asignar."
+            }
+            persistSpecialAwards()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            return
+        }
+
+        if let routine {
+            specialAwards[key] = routine.id
+            specialAwardManualValues.removeValue(forKey: key)
+        } else {
+            specialAwards.removeValue(forKey: key)
+            specialAwardManualValues.removeValue(forKey: key)
+        }
+        if previousRoutineID != specialAwards[key] || previousManualValue != specialAwardManualValues[key] {
+            persistSpecialAwards()
+        }
+    }
+
+    func setManualSpecialAward(_ category: SpecialAwardCategory, value: String?) async throws {
+        guard isAdmin else {
+            throw SpecialAwardSaveError.notAllowed
+        }
+        guard category.isManualEntry else {
+            throw SpecialAwardSaveError.notAllowed
+        }
+        guard let block = selectedBlock else {
+            throw SpecialAwardSaveError.missingSelectedBlock
+        }
+
+        let cleanValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let key = specialAwardKey(blockID: block.id, category: category)
+        let previousRoutineID = specialAwards[key]
+        let previousManualValue = specialAwardManualValues[key]
+
+        if let remoteRepository {
+            guard let eventID = selectedEventID else {
+                throw SpecialAwardSaveError.missingSelectedEvent
+            }
+
+            syncStatus = .syncing
+            syncMessage = "Guardando \(category.title.lowercased())..."
+            if cleanValue.isEmpty {
+                try await remoteRepository.deleteSpecialAward(
+                    SpecialAwardDeleteRow(
+                        eventID: eventID,
+                        blockID: block.id,
+                        award: category.rawValue
+                    )
+                )
+                specialAwards.removeValue(forKey: key)
+                specialAwardManualValues.removeValue(forKey: key)
+                syncMessage = "\(category.title) quedó sin asignar."
+            } else {
+                try await remoteRepository.upsertSpecialAward(
+                    SpecialAwardUpsertRow(
+                        eventID: eventID,
+                        blockID: block.id,
+                        routineID: nil,
+                        award: category.rawValue,
+                        manualValue: cleanValue,
+                        deviceID: deviceID
+                    )
+                )
+                specialAwards.removeValue(forKey: key)
+                specialAwardManualValues[key] = cleanValue
+                syncMessage = "\(category.title) guardado."
+            }
+            persistSpecialAwards()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            return
+        }
+
+        specialAwards.removeValue(forKey: key)
+        if cleanValue.isEmpty {
+            specialAwardManualValues.removeValue(forKey: key)
+        } else {
+            specialAwardManualValues[key] = cleanValue
+        }
+        if previousRoutineID != specialAwards[key] || previousManualValue != specialAwardManualValues[key] {
+            persistSpecialAwards()
+        }
     }
 
     func syncPending() async {
@@ -1024,7 +1268,8 @@ final class JudgingStore: ObservableObject {
         lastPDFURL = PDFExporter.exportDictamen(
             results: exportResults ?? rankings,
             sourceName: sourceName,
-            title: title
+            title: title,
+            specialAwards: specialAwardSummaries(for: selectedBlock)
         )
     }
 
@@ -1253,7 +1498,7 @@ final class JudgingStore: ObservableObject {
     private func applyRemoteBundle(_ bundle: RemoteEventBundle) {
         let start = LoadDiagnostics.start()
         LoadDiagnostics.log(
-            "applyRemoteBundle started event=\"\(bundle.event.name)\" routines=\(bundle.appData.routines.count) blocks=\(bundle.appData.blocks.count) judges=\(bundle.appData.judges.count) incomingScores=\(bundle.scores.count) incomingFeedback=\(bundle.feedback.count) incomingPenalties=\(bundle.penalties.count) incomingFavorites=\(bundle.favorites.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) pending=\(pendingSyncCount)"
+            "applyRemoteBundle started event=\"\(bundle.event.name)\" routines=\(bundle.appData.routines.count) blocks=\(bundle.appData.blocks.count) judges=\(bundle.appData.judges.count) incomingScores=\(bundle.scores.count) incomingFeedback=\(bundle.feedback.count) incomingPenalties=\(bundle.penalties.count) incomingFavorites=\(bundle.favorites.count) incomingSpecialAwards=\(bundle.specialAwards.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) pending=\(pendingSyncCount)"
         )
         let metadataStart = LoadDiagnostics.start()
         appData = bundle.appData
@@ -1376,9 +1621,92 @@ final class JudgingStore: ObservableObject {
         }
         favoriteSelections = updatedFavoriteSelections
         LoadDiagnostics.log("applyRemoteBundle favorites staleRemoved=\(staleFavoriteKeys.count) incoming=\(bundle.favorites.count) totalLocal=\(favoriteSelections.count) elapsed=\(LoadDiagnostics.elapsed(since: favoriteStart))")
+
+        let specialAwardStart = LoadDiagnostics.start()
+        var updatedSpecialAwards = specialAwards
+        var updatedSpecialAwardManualValues = specialAwardManualValues
+        let staleSpecialAwardKeys = specialAwards.keys.filter { $0.hasPrefix(eventPrefix) }
+        let staleSpecialAwardManualKeys = specialAwardManualValues.keys.filter { $0.hasPrefix(eventPrefix) }
+        for key in staleSpecialAwardKeys {
+            updatedSpecialAwards.removeValue(forKey: key)
+        }
+        for key in staleSpecialAwardManualKeys {
+            updatedSpecialAwardManualValues.removeValue(forKey: key)
+        }
+        for remoteAward in bundle.specialAwards {
+            guard let category = SpecialAwardCategory(rawValue: remoteAward.award) else { continue }
+            let key = specialAwardKey(
+                eventID: remoteAward.eventID,
+                blockID: remoteAward.blockID,
+                category: category
+            )
+            if category.isManualEntry {
+                if let manualValue = remoteAward.manualValue?.trimmingCharacters(in: .whitespacesAndNewlines), !manualValue.isEmpty {
+                    updatedSpecialAwards.removeValue(forKey: key)
+                    updatedSpecialAwardManualValues[key] = manualValue
+                } else if let routineID = remoteAward.routineID {
+                    updatedSpecialAwards[key] = routineID
+                    updatedSpecialAwardManualValues.removeValue(forKey: key)
+                }
+            } else if let routineID = remoteAward.routineID {
+                updatedSpecialAwards[key] = routineID
+                updatedSpecialAwardManualValues.removeValue(forKey: key)
+            }
+        }
+        specialAwards = updatedSpecialAwards
+        specialAwardManualValues = updatedSpecialAwardManualValues
+        persistSpecialAwards()
+        LoadDiagnostics.log("applyRemoteBundle specialAwards staleRemoved=\(staleSpecialAwardKeys.count) manualStaleRemoved=\(staleSpecialAwardManualKeys.count) incoming=\(bundle.specialAwards.count) totalLocal=\(specialAwards.count) manualLocal=\(specialAwardManualValues.count) elapsed=\(LoadDiagnostics.elapsed(since: specialAwardStart))")
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(bundle.event.name) cargado."
         LoadDiagnostics.log("applyRemoteBundle finished totalElapsed=\(LoadDiagnostics.elapsed(since: start)) pending=\(pendingSyncCount)")
+    }
+
+    private func reportJudgeActivity(state: JudgeActivityState, routine: Routine?) async {
+        guard let remoteRepository, let eventID = selectedEventID else { return }
+        guard !isAdmin else { return }
+        guard role(for: selectedJudge) == .judge else { return }
+
+        let activityBlock = routine.flatMap { self.block(containing: $0) } ?? selectedBlock
+        do {
+            try await remoteRepository.upsertJudgeActivity(
+                JudgeActivityUpsertRow(
+                    eventID: eventID,
+                    judgeID: selectedJudge.stableRemoteID,
+                    deviceID: deviceID,
+                    state: state.rawValue,
+                    blockID: activityBlock?.id,
+                    routineID: routine?.id,
+                    platform: appleActivityPlatform
+                )
+            )
+        } catch {
+            LoadDiagnostics.log("reportJudgeActivity failed state=\(state.rawValue) judge=\(selectedJudge) error=\(error.localizedDescription)")
+        }
+    }
+
+    private func applyJudgeActivityRows(_ rows: [RemoteJudgeActivityRow]) {
+        let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
+        let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
+        let blocksByID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0) })
+
+        judgeActivities = rows.compactMap { row in
+            guard let updatedAt = Self.parseSupabaseDate(row.updatedAt) else { return nil }
+            let state = JudgeActivityState(rawValue: row.state) ?? .home
+            return JudgeActivitySummary(
+                eventID: row.eventID,
+                judgeID: row.judgeID,
+                judgeName: judgeNamesByID[row.judgeID] ?? row.judgeID.uppercased(),
+                deviceID: row.deviceID,
+                state: state,
+                blockID: row.blockID,
+                blockName: row.blockID.flatMap { blocksByID[$0]?.name },
+                routine: row.routineID.flatMap { routinesByID[$0] },
+                routineID: row.routineID,
+                platform: row.platform ?? "",
+                updatedAt: updatedAt
+            )
+        }
     }
 
     private func markScorePending(_ key: String) {
@@ -1472,6 +1800,10 @@ final class JudgingStore: ObservableObject {
             guard let parsed = parseFavoriteKey(key), parsed.eventID == currentDataScopeKey else { return true }
             return value != routineID
         }
+        specialAwards = specialAwards.filter { key, value in
+            guard let parsed = parseSpecialAwardKey(key), parsed.eventID == currentDataScopeKey else { return true }
+            return value != routineID
+        }
 
         pendingScoreKeys = Set(pendingScoreKeys.filter { key in
             guard let parsed = parseScoreKey(key) else { return true }
@@ -1510,11 +1842,17 @@ final class JudgingStore: ObservableObject {
         Self.saveDictionary(persistedFavoriteSelections, key: favoriteSelectionsKey)
     }
 
+    private func persistSpecialAwards() {
+        Self.saveDictionary(specialAwards, key: specialAwardsKey)
+        Self.saveDictionary(specialAwardManualValues, key: specialAwardManualValuesKey)
+    }
+
     private func persistLocalCaches() {
         persistScores()
         persistFeedback()
         persistPenalties()
         persistFavoriteSelections()
+        persistSpecialAwards()
     }
 
     private var persistedScores: [String: Double] {
@@ -1564,6 +1902,14 @@ final class JudgingStore: ObservableObject {
         let created = UUID().uuidString
         UserDefaults.standard.set(created, forKey: deviceIDKey)
         return created
+    }
+
+    private var appleActivityPlatform: String {
+        #if os(macOS)
+        "macOS"
+        #else
+        "iOS"
+        #endif
     }
 
     private var currentDataScopeKey: String {
@@ -1621,6 +1967,12 @@ final class JudgingStore: ObservableObject {
         return (parts[0], parts[1], parts[2], category)
     }
 
+    private func parseSpecialAwardKey(_ key: String) -> (eventID: String, blockID: String, category: SpecialAwardCategory)? {
+        let parts = key.components(separatedBy: "::")
+        guard parts.count == 3, let category = SpecialAwardCategory(rawValue: parts[2]) else { return nil }
+        return (parts[0], parts[1], category)
+    }
+
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
         appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
     }
@@ -1649,6 +2001,15 @@ final class JudgingStore: ObservableObject {
         let eventKey = eventID ?? appData.sourceName.stableRemoteID
         let blockKey = blockID ?? "sin-bloque"
         return "\(eventKey)::\(blockKey)::\(judge.normalizedKey)::\(category.rawValue)"
+    }
+
+    private func specialAwardKey(blockID: String, category: SpecialAwardCategory) -> String {
+        specialAwardKey(eventID: selectedEventID, blockID: blockID, category: category)
+    }
+
+    private func specialAwardKey(eventID: String?, blockID: String, category: SpecialAwardCategory) -> String {
+        let eventKey = eventID ?? appData.sourceName.stableRemoteID
+        return "\(eventKey)::\(blockID)::\(category.rawValue)"
     }
 
     private func blockName(for blockID: String) -> String {
@@ -1809,6 +2170,18 @@ final class JudgingStore: ObservableObject {
                 self?.operationNoticeTask = nil
             }
         }
+    }
+
+    private static func parseSupabaseDate(_ rawValue: String) -> Date? {
+        let fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalFormatter.date(from: rawValue) {
+            return date
+        }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: rawValue)
     }
 
     private static func loadBundledData() -> AppData {

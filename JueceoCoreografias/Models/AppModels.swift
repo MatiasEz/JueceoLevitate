@@ -103,6 +103,45 @@ enum FavoriteCategory: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+enum SpecialAwardCategory: String, CaseIterable, Identifiable, Codable, Sendable, Hashable {
+    case bestCostume = "best_costume"
+    case bestMusic = "best_music"
+    case bestChoreographicIdea = "best_choreographic_idea"
+    case bestPorra = "best_porra"
+
+    static var routineBackedCases: [SpecialAwardCategory] {
+        allCases.filter { !$0.isManualEntry }
+    }
+
+    static var manualEntryCases: [SpecialAwardCategory] {
+        allCases.filter(\.isManualEntry)
+    }
+
+    var id: String { rawValue }
+
+    var isManualEntry: Bool {
+        true
+    }
+
+    var title: String {
+        switch self {
+        case .bestCostume: "Mejor vestuario"
+        case .bestMusic: "Mejor música"
+        case .bestChoreographicIdea: "Mejor idea coreográfica"
+        case .bestPorra: "Mejor porra"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .bestCostume: "tshirt.fill"
+        case .bestMusic: "music.note"
+        case .bestChoreographicIdea: "sparkles"
+        case .bestPorra: "megaphone.fill"
+        }
+    }
+}
+
 struct JudgeProfile: Codable, Identifiable, Hashable, Sendable {
     var id: String { judgeID }
     let judgeID: String
@@ -143,6 +182,50 @@ struct Routine: Codable, Identifiable, Hashable, Sendable {
     let state: String
     let time: String
     let duration: String
+}
+
+extension Routine {
+    var levelTagText: String? {
+        let trimmed = level.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "-", trimmed.normalizedKey != "SIN NIVEL" else { return nil }
+        return trimmed
+    }
+}
+
+enum RoutineMetadataField: String, CaseIterable, Identifiable, Sendable {
+    case division
+    case level
+    case category
+    case genre
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .division: "División"
+        case .level: "Nivel"
+        case .category: "Categoría"
+        case .genre: "Género"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .division: "person.2.fill"
+        case .level: "slider.horizontal.3"
+        case .category: "square.grid.2x2.fill"
+        case .genre: "figure.dance"
+        }
+    }
+
+    func value(in routine: Routine) -> String {
+        switch self {
+        case .division: routine.division
+        case .level: routine.level
+        case .category: routine.category
+        case .genre: routine.genre
+        }
+    }
 }
 
 struct JudgingTemplate: Codable, Identifiable, Hashable, Sendable {
@@ -212,6 +295,95 @@ struct FavoriteRankingItem: Identifiable, Hashable, Sendable {
     let routine: Routine
     let votes: Int
     let judges: [String]
+}
+
+struct SpecialAwardSummary: Identifiable, Hashable, Sendable {
+    let category: SpecialAwardCategory
+    let blockName: String
+    let routine: Routine?
+    let manualValue: String?
+
+    var id: String {
+        "\(blockName.normalizedKey)::\(category.rawValue)"
+    }
+
+    var displayValue: String {
+        if let manualValue = manualValue?.trimmingCharacters(in: .whitespacesAndNewlines), !manualValue.isEmpty {
+            return manualValue
+        }
+        if let routine {
+            return "#\(routine.id) \(routine.name)"
+        }
+        return "Sin asignar"
+    }
+
+    var isAssigned: Bool {
+        if routine != nil { return true }
+        return !(manualValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+}
+
+enum JudgeActivityState: String, Codable, Sendable {
+    case home
+    case viewingSheet = "viewing_sheet"
+    case leftSheet = "left_sheet"
+}
+
+struct JudgeActivitySummary: Identifiable, Hashable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let judgeName: String
+    let deviceID: String
+    let state: JudgeActivityState
+    let blockID: String?
+    let blockName: String?
+    let routine: Routine?
+    let routineID: String?
+    let platform: String
+    let updatedAt: Date
+
+    var id: String {
+        "\(eventID)::\(judgeID)::\(deviceID)"
+    }
+
+    func isInactive(now: Date = Date(), threshold: TimeInterval = 600) -> Bool {
+        now.timeIntervalSince(updatedAt) > threshold
+    }
+
+    var statusTitle: String {
+        switch state {
+        case .home:
+            "Está en Home"
+        case .viewingSheet:
+            if let routine {
+                "Está en hoja #\(routine.id) \(routine.name)"
+            } else if let routineID, !routineID.isEmpty {
+                "Está en hoja #\(routineID)"
+            } else {
+                "Está en una hoja"
+            }
+        case .leftSheet:
+            if let routine {
+                "Salió de hoja #\(routine.id) \(routine.name)"
+            } else if let routineID, !routineID.isEmpty {
+                "Salió de hoja #\(routineID)"
+            } else {
+                "Salió de una hoja"
+            }
+        }
+    }
+
+    var detail: String {
+        let platformLabel = platform.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanBlock = blockName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleanAcademy = routine?.academy.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = [
+            cleanBlock?.isEmpty == false ? cleanBlock : nil,
+            cleanAcademy?.isEmpty == false ? cleanAcademy : nil,
+            platformLabel.isEmpty ? nil : platformLabel.capitalized
+        ].compactMap { $0 }
+        return parts.isEmpty ? "Sin detalle" : parts.joined(separator: " · ")
+    }
 }
 
 struct EventSummary: Identifiable, Codable, Hashable, Sendable {
@@ -293,6 +465,7 @@ enum RoutineUpdateError: LocalizedError {
     case missingRemoteConfiguration
     case missingSelectedEvent
     case notAllowed
+    case updateNotApplied(String)
 
     var errorDescription: String? {
         switch self {
@@ -302,6 +475,28 @@ enum RoutineUpdateError: LocalizedError {
             "Elegí un programa online antes de editar una coreografía."
         case .notAllowed:
             "Solo un admin puede editar coreografías."
+        case .updateNotApplied(let field):
+            "No se pudo aplicar el cambio de \(field). Puede que falte desplegar la función update-routine en Supabase."
+        }
+    }
+}
+
+enum SpecialAwardSaveError: LocalizedError {
+    case missingRemoteConfiguration
+    case missingSelectedEvent
+    case missingSelectedBlock
+    case notAllowed
+
+    var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de guardar premios especiales."
+        case .missingSelectedBlock:
+            "Elegí un bloque antes de guardar premios especiales."
+        case .notAllowed:
+            "Solo un admin puede editar premios especiales."
         }
     }
 }

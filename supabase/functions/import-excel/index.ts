@@ -643,9 +643,10 @@ async function uploadToSupabase(
     if (!options.forceReplace && (
       await eventRowsExist("scores", eventID) ||
       await eventRowsExist("feedback", eventID) ||
-      await eventRowsExist("penalties", eventID)
+      await eventRowsExist("penalties", eventID) ||
+      await eventRowsExist("special_awards", eventID)
     )) {
-      throw new HTTPError(409, "El evento ya tiene puntajes, feedback o penalizaciones.");
+      throw new HTTPError(409, "El evento ya tiene puntajes, feedback, penalizaciones o premios especiales.");
     }
     await deleteEventRows(eventID);
   } else {
@@ -727,7 +728,7 @@ async function uploadToSupabase(
 }
 
 async function deleteEventRows(eventID: string): Promise<void> {
-  for (const table of ["penalties", "feedback", "scores", "criteria", "criteria_templates", "judges", "routines", "blocks"]) {
+  for (const table of ["special_awards", "penalties", "feedback", "scores", "criteria", "criteria_templates", "judges", "routines", "blocks"]) {
     await supabaseRequest("DELETE", `${table}?event_id=eq.${encodeURIComponent(eventID)}`, undefined, "return=minimal");
   }
 }
@@ -739,9 +740,10 @@ async function deleteBlockRows(eventID: string, blockIDs: string[], forceReplace
   if (!forceReplace && (
     await rowsExist("scores", eventID, blockIDs) ||
     await rowsExist("feedback", eventID, blockIDs) ||
-    await rowsExist("penalties", eventID, blockIDs)
+    await rowsExist("penalties", eventID, blockIDs) ||
+    await rowsExist("special_awards", eventID, blockIDs)
   )) {
-    throw new HTTPError(409, "El bloque ya tiene puntajes, feedback o penalizaciones.");
+    throw new HTTPError(409, "El bloque ya tiene puntajes, feedback, penalizaciones o premios especiales.");
   }
   const blockFilter = blockIDs.map(encodeURIComponent).join(",");
   await supabaseRequest(

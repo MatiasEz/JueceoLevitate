@@ -13,7 +13,11 @@
 9. Run `supabase/migrations/0007_routine_participants.sql` to persist program participants.
 10. Run `supabase/migrations/0008_judge_hero_images.sql` to persist judge hero image names.
 11. Run `supabase/migrations/0009_default_judges.sql` to seed the active program with Levitate's default judges.
-12. Copy `.env.example` to `.env` at the repo root and fill:
+12. Run `supabase/migrations/0010_special_awards.sql` to persist official special awards by block.
+13. Run `supabase/migrations/0011_special_awards_manual_porra.sql` so `Mejor porra` is stored as manual text instead of a routine assignment.
+14. Run `supabase/migrations/0012_judge_activity.sql` to persist judge presence/activity in the judging sheet.
+15. Run `supabase/migrations/0013_special_awards_all_manual.sql` so all special awards are stored as manual text.
+16. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
 SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co
@@ -22,7 +26,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-for-imports-only
 IMPORT_SECRET=levitate2026
 ```
 
-The first migration enables permissive pilot RLS policies: anonymous clients can read event data and upsert scores/feedback. Later migrations extend the same pilot policy to favorites and penalties. Tighten this with per-event codes or judge auth before production.
+The first migration enables permissive pilot RLS policies: anonymous clients can read event data and upsert scores/feedback. Later migrations extend the same pilot policy to favorites, penalties and special awards. Tighten this with per-event codes or judge auth before production.
 
 ## Importar Excel desde la app
 
@@ -42,7 +46,7 @@ supabase functions deploy update-routine
 
 `supabase/config.toml` deja `verify_jwt = false` para `import-excel`, `archive-event`, `delete-routine`, `delete-judge`, `upsert-judge` y `update-routine` porque esta app todavia no usa Supabase Auth. `import-excel` y `delete-routine` validan el header `x-import-secret`; para esta instalacion esa clave es `levitate2026`. `archive-event`, `delete-judge`, `upsert-judge` y `update-routine` no piden clave desde la app. Despues usan una secret key disponible en el runtime de Supabase para escribir tablas admin. No pongas esa secret key en iOS.
 
-By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback or penalties. Use `force_replace` only for deliberate admin resets.
+By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback, penalties or special awards. Use `force_replace` only for deliberate admin resets.
 
 Program-only Excels can omit judging-template sheets. In that case the Edge Function uses embedded templates generated from `JueceoCoreografias/Resources/Bloque2.xlsx` and creates aliases such as `TELA`, `ARO`, `OPEN:*` and `URBANOS`.
 
@@ -55,7 +59,7 @@ python3 scripts/import_excel_to_app_data.py "JueceoCoreografias/Resources/Bloque
 
 Use `SUPABASE_SERVICE_ROLE_KEY` for imports because event/routine/template tables are admin-owned. The mobile apps only need `SUPABASE_PUBLISHABLE_KEY`.
 
-By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback or penalties. Use `--force-replace` only for deliberate admin resets.
+By default, the importer replaces only the blocks present in the Excel and refuses to replace blocks that already have scores, feedback, penalties or special awards. Use `--force-replace` only for deliberate admin resets.
 
 Program-only Excels can omit judging-template sheets. In that case the importer uses `JueceoCoreografias/Resources/Bloque2.xlsx` as the default template source and creates aliases such as `TELA`, `ARO`, `OPEN:*` and `URBANOS`.
 

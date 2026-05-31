@@ -87,7 +87,9 @@ struct AdminView: View {
             normalizeSelection()
             prepareDefaultDriveFolderName()
         }
-        .onChange(of: store.selectedBlock?.id ?? "") { _, _ in normalizeSelection() }
+        .onChange(of: store.selectedBlock?.id ?? "") { _, _ in
+            normalizeSelection()
+        }
         .onChange(of: store.judges) { _, _ in normalizeSelection() }
         .onChange(of: store.visibleRoutines) { _, _ in normalizeSelection() }
         .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
@@ -607,6 +609,1138 @@ struct AdminView: View {
     }
 }
 
+struct ScoreEditorView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @Binding var section: AppSection
+
+    @State private var searchText = ""
+    @State private var isRefreshingData = false
+    @State private var driveFolderName = ""
+    @State private var isDriveFolderPromptPresented = false
+    @State private var driveFolderPendingOverwrite: String?
+    @State private var isDriveOverwriteAlertPresented = false
+    @State private var driveFolderErrorMessage: String?
+    @State private var isCheckingDriveFolder = false
+    @State private var routineMetadataUpdateKey: String?
+
+    private let minimumRoutineColumnWidth: CGFloat = 560
+    private let judgeColumnWidth: CGFloat = 178
+    private let totalColumnWidth: CGFloat = 178
+    private let scoreEditorHeaderHeight: CGFloat = 74
+    private let scoreEditorRowHeight: CGFloat = 116
+    private let scoreEditorEmptyRowHeight: CGFloat = 96
+
+    private var sortedRoutines: [Routine] {
+        store.visibleRoutines.sorted { lhs, rhs in
+            let lhsNumber = Int(lhs.id) ?? Int.max
+            let rhsNumber = Int(rhs.id) ?? Int.max
+            if lhsNumber == rhsNumber {
+                return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+            }
+            return lhsNumber < rhsNumber
+        }
+    }
+
+    private var filteredRoutines: [Routine] {
+        let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty else { return sortedRoutines }
+        return sortedRoutines.filter { routine in
+            routine.id.localizedCaseInsensitiveContains(query)
+                || routine.name.localizedCaseInsensitiveContains(query)
+                || routine.academy.localizedCaseInsensitiveContains(query)
+                || routine.genre.localizedCaseInsensitiveContains(query)
+                || routine.level.localizedCaseInsensitiveContains(query)
+                || routine.division.localizedCaseInsensitiveContains(query)
+                || routine.category.localizedCaseInsensitiveContains(query)
+                || routine.state.localizedCaseInsensitiveContains(query)
+        }
+    }
+
+    private var editableJudges: [String] {
+        let judgesByKey = Dictionary(
+            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
+        )
+        return allowedJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
+    }
+
+    private var allowedJudgeNames: [String] {
+        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
+    }
+
+    private var isSelectedBlockFour: Bool {
+        guard let block = store.selectedBlock else { return false }
+        let candidates = [block.id, block.name, block.title]
+            .map(\.normalizedKey)
+        return candidates.contains { value in
+            value == "4"
+                || value == "BLOQUE 4"
+                || value == "BLOQUE 04"
+                || value.contains("BLOQUE 4")
+                || value.contains("BLOQUE 04")
+                || value.hasSuffix("-4")
+                || value.hasSuffix("_4")
+        }
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                driveExportPanel
+                editorPanel
+            }
+            .padding(.horizontal, 34)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1360, alignment: .leading)
+        }
+        .background(LevitTheme.paper.ignoresSafeArea())
+        .foregroundStyle(LevitTheme.ink)
+        .onAppear {
+            prepareDefaultDriveFolderName()
+        }
+        .task {
+            await pollJudgeActivity()
+        }
+        .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
+            TextField("Nombre de carpeta", text: $driveFolderName)
+                .textInputAutocapitalization(.words)
+                .disableAutocorrection(true)
+
+            Button("Continuar") {
+                Task { await prepareDriveExport() }
+            }
+            .disabled(cleanDriveFolderName.isEmpty || isCheckingDriveFolder || store.driveExportStatus.isExporting)
+
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Elegí el nombre de la carpeta principal donde se van a guardar los PDFs.")
+        }
+        .alert("Carpeta existente", isPresented: $isDriveOverwriteAlertPresented) {
+            Button("Exportar igual") {
+                guard let folderName = driveFolderPendingOverwrite else { return }
+                Task { await exportDrive(named: folderName) }
+            }
+            Button("Cancelar", role: .cancel) {
+                resetPendingDriveOverwrite()
+            }
+        } message: {
+            Text("La carpeta \(driveFolderPendingOverwrite ?? "") ya existe en Drive. Los PDFs con el mismo nombre se van a actualizar.")
+        }
+        .alert("No se pudo revisar Drive", isPresented: Binding(
+            get: { driveFolderErrorMessage != nil },
+            set: { if !$0 { driveFolderErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {
+                driveFolderErrorMessage = nil
+            }
+        } message: {
+            Text(driveFolderErrorMessage ?? "")
+        }
+    }
+
+    private var driveExportPanel: some View {
+        HStack(alignment: .center, spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(driveStatusColor.opacity(0.15))
+                    .frame(width: 52, height: 52)
+                if store.driveExportStatus.isExporting {
+                    ProgressView()
+                        .tint(LevitTheme.pink)
+                } else {
+                    Image(systemName: store.driveExportStatus.systemImage)
+                        .font(.title3.weight(.black))
+                        .foregroundStyle(driveStatusColor)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(store.driveExportStatus.title)
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                Text(driveStatusMessage)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            Button {
+                presentDriveFolderPrompt()
+            } label: {
+                Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
+                    .font(.headline.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.74)
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 16)
+                    .foregroundStyle(.white)
+                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
+            .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
+        }
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [
+                    LevitTheme.elevatedSurface,
+                    LevitTheme.darkPanel2.opacity(0.78)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
+        )
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(LevitTheme.line))
+    }
+
+    private var editorPanel: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 14) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Editar calificaciones")
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .foregroundStyle(LevitTheme.ink)
+                    Text("Revisa y edita las coreografías por cada juez. Los totales se actualizan automáticamente.")
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(LevitTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 20)
+
+                ScoreEditorBlockMenu()
+                    .frame(width: 176)
+
+                searchField
+                    .frame(width: 260)
+
+                RefreshDataButton(isRefreshing: isRefreshingData) {
+                    Task { await refreshAdminData() }
+                }
+                .disabled(store.isLoadingBackendData)
+                .opacity(store.isLoadingBackendData ? 0.58 : 1)
+            }
+
+            if editableJudges.isEmpty {
+                emptyState
+            } else {
+                scoresTable
+            }
+        }
+        .padding(22)
+        .background(LevitTheme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(LevitTheme.cardStroke))
+        .shadow(color: .black.opacity(0.055), radius: 24, x: 0, y: 12)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 9) {
+            Image(systemName: "magnifyingglass")
+                .font(.callout.weight(.bold))
+                .foregroundStyle(LevitTheme.muted)
+            TextField("Buscar coreografía...", text: $searchText)
+                .textInputAutocapitalization(.never)
+                .disableAutocorrection(true)
+        }
+        .font(.callout.weight(.semibold))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 13)
+        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(LevitTheme.line))
+    }
+
+    private var scoresTable: some View {
+        let judges = editableJudges
+        let height = scoreEditorHeaderHeight + (filteredRoutines.isEmpty ? scoreEditorEmptyRowHeight : CGFloat(filteredRoutines.count) * scoreEditorRowHeight)
+
+        return GeometryReader { proxy in
+            let metrics = scoreTableMetrics(availableWidth: proxy.size.width, judgeCount: judges.count)
+
+            ScrollView(.horizontal, showsIndicators: metrics.tableWidth > proxy.size.width + 1) {
+                VStack(spacing: 0) {
+                    ScoreEditorHeaderRow(
+                        judges: judges,
+                        routineColumnWidth: metrics.routineColumnWidth,
+                        judgeColumnWidth: judgeColumnWidth,
+                        totalColumnWidth: totalColumnWidth
+                    )
+
+                    if filteredRoutines.isEmpty {
+                        noResultsRow(width: metrics.tableWidth)
+                    } else {
+                        ForEach(filteredRoutines) { routine in
+                            ScoreEditorRoutineRow(
+                                routine: routine,
+                                judges: judges,
+                                routineColumnWidth: metrics.routineColumnWidth,
+                                judgeColumnWidth: judgeColumnWidth,
+                                totalColumnWidth: totalColumnWidth,
+                                judgeScore: { judge in judgeScore(for: routine, judge: judge) },
+                                totalScore: totalScore(for: routine, judges: judges),
+                                totalMaxScore: store.template(for: routine).maxScore * Double(judges.count),
+                                metadataOptions: { field in routineMetadataOptions(for: field, routine: routine) },
+                                isMetadataUpdating: routineMetadataUpdateKey?.hasPrefix("\(routine.id)::") == true,
+                                updateMetadata: { field, value in
+                                    Task { await updateRoutineMetadata(routine, field: field, value: value) }
+                                },
+                                openJudgeSheet: { judge in openJudgeSheet(routine: routine, judge: judge) }
+                            )
+                        }
+                    }
+                }
+                .frame(width: metrics.tableWidth, alignment: .leading)
+                .background(LevitTheme.darkPanel.opacity(0.24), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(LevitTheme.line))
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+        }
+        .frame(height: height)
+    }
+
+    private func scoreTableMetrics(availableWidth: CGFloat, judgeCount: Int) -> (routineColumnWidth: CGFloat, tableWidth: CGFloat) {
+        let fixedWidth = totalColumnWidth + CGFloat(judgeCount) * judgeColumnWidth
+        let routineWidth = max(minimumRoutineColumnWidth, availableWidth - fixedWidth)
+        let tableWidth = max(availableWidth, fixedWidth + routineWidth)
+        return (routineWidth, tableWidth)
+    }
+
+    private var emptyState: some View {
+        VStack(alignment: .center, spacing: 10) {
+            Image(systemName: "person.crop.circle.badge.exclamationmark")
+                .font(.system(size: 32, weight: .bold))
+                .foregroundStyle(LevitTheme.pink)
+            Text("Sin jueces para editar")
+                .font(.headline.weight(.black))
+                .foregroundStyle(LevitTheme.ink)
+            Text("Agregá jueces al programa para poder cargar o corregir calificaciones.")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(LevitTheme.muted)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 46)
+        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func noResultsRow(width: CGFloat) -> some View {
+        Text("No hay coreografías que coincidan con la búsqueda.")
+            .font(.callout.weight(.semibold))
+            .foregroundStyle(LevitTheme.muted)
+            .frame(width: width, height: 96)
+            .background(LevitTheme.softFill.opacity(0.5))
+    }
+
+    private func openJudgeSheet(routine: Routine, judge: String) {
+        guard !judge.isEmpty else { return }
+        store.beginAdminScoring(judge: judge, routine: routine)
+        section = .jueceo
+    }
+
+    private func routineMetadataOptions(for field: RoutineMetadataField, routine: Routine) -> [String] {
+        let currentValue = cleanRoutineMetadataValue(field.value(in: routine))
+        let rawValues: [String]
+        switch field {
+        case .division:
+            rawValues = store.routines.map(\.division)
+        case .level:
+            rawValues = ["PRINCIPIANTE", "INTERMEDIO", "AVANZADO", "ELITE", "NUDO"] + store.routines.map(\.level)
+        case .category:
+            rawValues = store.routines.map(\.category)
+        case .genre:
+            rawValues = store.routines.map(\.genre)
+        }
+
+        var seen = Set<String>()
+        var options: [String] = []
+        for value in ([currentValue] + rawValues) {
+            let cleanValue = cleanRoutineMetadataValue(value)
+            guard !cleanValue.isEmpty else { continue }
+            guard seen.insert(cleanValue.normalizedKey).inserted else { continue }
+            options.append(cleanValue)
+        }
+
+        if field == .level {
+            let priority = ["PRINCIPIANTE", "INTERMEDIO", "AVANZADO", "ELITE", "NUDO"]
+            return options.sorted { lhs, rhs in
+                let lhsIndex = priority.firstIndex { $0.normalizedKey == lhs.normalizedKey } ?? Int.max
+                let rhsIndex = priority.firstIndex { $0.normalizedKey == rhs.normalizedKey } ?? Int.max
+                if lhsIndex != rhsIndex {
+                    return lhsIndex < rhsIndex
+                }
+                return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+            }
+        }
+
+        return options.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    @MainActor
+    private func updateRoutineMetadata(_ routine: Routine, field: RoutineMetadataField, value: String) async {
+        let cleanValue = cleanRoutineMetadataValue(value)
+        let currentValue = cleanRoutineMetadataValue(field.value(in: routine))
+        guard currentValue.normalizedKey != cleanValue.normalizedKey else { return }
+        guard routineMetadataUpdateKey == nil else { return }
+
+        routineMetadataUpdateKey = "\(routine.id)::\(field.rawValue)"
+        defer { routineMetadataUpdateKey = nil }
+
+        do {
+            try await store.updateRoutineMetadata(routine, field: field, value: cleanValue)
+            store.showOperationSuccess(
+                "Coreografía actualizada",
+                message: "#\(routine.id) \(routine.name): \(field.title) ahora es \(cleanValue)."
+            )
+        } catch {
+            store.showOperationFailure("No se pudo editar coreografía", message: error.localizedDescription)
+        }
+    }
+
+    private func cleanRoutineMetadataValue(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed == "-" || trimmed.normalizedKey == "SIN NIVEL" ? "" : trimmed
+    }
+
+    @MainActor
+    private func refreshAdminData() async {
+        guard !isRefreshingData else { return }
+        isRefreshingData = true
+        defer { isRefreshingData = false }
+
+        do {
+            try await store.refreshCurrentEvent()
+            await store.refreshJudgeActivity()
+            store.showOperationSuccess("Datos actualizados", message: "Se volvieron a traer las coreografías y puntajes del programa actual.")
+        } catch {
+            store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
+    }
+
+    private func judgeScore(for routine: Routine, judge: String) -> ScoreEditorJudgeScore {
+        let template = store.template(for: routine)
+        let values = template.criteria.map { store.score(for: routine, judge: judge, criterion: $0) }
+        let subtotal = values.reduce(0, +)
+        let hasAnyScore = values.contains { $0 > 0 }
+        let isComplete = !values.isEmpty && values.allSatisfy { $0 > 0 }
+        let total = hasAnyScore ? max(0, subtotal + store.penalty(for: routine, judge: judge)) : 0
+        return ScoreEditorJudgeScore(
+            judge: judge,
+            total: total,
+            maxScore: template.maxScore,
+            isComplete: isComplete,
+            hasAnyScore: hasAnyScore,
+            isCurrentlyScoring: isJudgeCurrentlyScoring(routine: routine, judge: judge)
+        )
+    }
+
+    private func isJudgeCurrentlyScoring(routine: Routine, judge: String) -> Bool {
+        store.latestJudgeActivities.contains { activity in
+            let matchesJudge = activity.judgeID == judge.stableRemoteID
+                || activity.judgeName.normalizedKey == judge.normalizedKey
+            let matchesRoutine = activity.routine?.id == routine.id
+                || activity.routineID == routine.id
+            return matchesJudge
+                && matchesRoutine
+                && activity.state == .viewingSheet
+                && !activity.isInactive()
+        }
+    }
+
+    private func pollJudgeActivity() async {
+        await store.refreshJudgeActivity()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            await store.refreshJudgeActivity()
+        }
+    }
+
+    private func totalScore(for routine: Routine, judges: [String]) -> Double {
+        judges.reduce(0) { sum, judge in
+            sum + judgeScore(for: routine, judge: judge).total
+        }
+    }
+
+    private var driveStatusMessage: String {
+        if let message = store.driveExportMessage {
+            return message
+        }
+        if store.hasGoogleDriveConfiguration {
+            return "Crea carpetas por bloque, academia y coreografía; sube una hoja de jueceo por juez."
+        }
+        return "Faltan GOOGLE_CLIENT_ID y GOOGLE_REVERSED_CLIENT_ID para habilitar Drive."
+    }
+
+    private var cleanDriveFolderName: String {
+        driveFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func prepareDefaultDriveFolderName() {
+        guard cleanDriveFolderName.isEmpty else { return }
+        driveFolderName = store.defaultDriveRootFolderName
+    }
+
+    private func presentDriveFolderPrompt() {
+        guard !store.driveExportStatus.isExporting, !isCheckingDriveFolder else { return }
+        prepareDefaultDriveFolderName()
+        isDriveFolderPromptPresented = true
+    }
+
+    @MainActor
+    private func prepareDriveExport() async {
+        let folderName = cleanDriveFolderName
+        guard !folderName.isEmpty else { return }
+
+        isCheckingDriveFolder = true
+        do {
+            let exists = try await store.driveFolderExists(named: folderName)
+            isCheckingDriveFolder = false
+            if exists {
+                driveFolderPendingOverwrite = folderName
+                isDriveOverwriteAlertPresented = true
+            } else {
+                await exportDrive(named: folderName)
+            }
+        } catch {
+            isCheckingDriveFolder = false
+            driveFolderErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func exportDrive(named folderName: String) async {
+        resetPendingDriveOverwrite()
+        await store.exportSelectedBlockToDrive(rootFolderName: folderName)
+    }
+
+    private func resetPendingDriveOverwrite() {
+        isDriveOverwriteAlertPresented = false
+        driveFolderPendingOverwrite = nil
+    }
+
+    private var driveStatusColor: Color {
+        switch store.driveExportStatus {
+        case .idle:
+            store.hasGoogleDriveConfiguration ? .green : .orange
+        case .exporting:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
+        }
+    }
+}
+
+private struct ScoreEditorJudgeScore {
+    let judge: String
+    let total: Double
+    let maxScore: Double
+    let isComplete: Bool
+    let hasAnyScore: Bool
+    let isCurrentlyScoring: Bool
+}
+
+private struct ScoreEditorBlockMenu: View {
+    @EnvironmentObject private var store: JudgingStore
+
+    var body: some View {
+        Menu {
+            if store.blocks.isEmpty {
+                Text("Sin bloques")
+            } else {
+                ForEach(store.blocks) { block in
+                    Button {
+                        store.selectBlock(block)
+                    } label: {
+                        Label(block.name, systemImage: block.id == store.selectedBlock?.id ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 9) {
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                Text(store.selectedBlock?.name.uppercased() ?? "BLOQUE")
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct ScoreEditorHeaderRow: View {
+    let judges: [String]
+    let routineColumnWidth: CGFloat
+    let judgeColumnWidth: CGFloat
+    let totalColumnWidth: CGFloat
+
+    var body: some View {
+        HStack(spacing: 0) {
+            headerCell(width: routineColumnWidth, alignment: .leading) {
+                HStack(spacing: 6) {
+                    Text("Coreografía")
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.caption2.weight(.black))
+                }
+            }
+
+            ForEach(judges, id: \.self) { judge in
+                headerCell(width: judgeColumnWidth, alignment: .center) {
+                    VStack(spacing: 2) {
+                        Text(judge.capitalized)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                        Text("Juez")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(LevitTheme.muted)
+                    }
+                }
+            }
+
+            headerCell(width: totalColumnWidth, alignment: .center) {
+                VStack(spacing: 2) {
+                    Text("Total")
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(LevitTheme.ink)
+                    Text("(\(judges.count) jueces)")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
+            }
+        }
+        .frame(height: 74)
+        .background(LevitTheme.softFill.opacity(0.45))
+    }
+
+    private func headerCell<Content: View>(
+        width: CGFloat,
+        alignment: Alignment,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .font(.caption.weight(.black))
+            .textCase(.uppercase)
+            .foregroundStyle(LevitTheme.muted)
+            .frame(maxWidth: .infinity, alignment: alignment)
+            .padding(.horizontal, alignment == .leading ? 34 : 12)
+            .frame(width: width, height: 74, alignment: alignment)
+            .overlay(alignment: .trailing) {
+                Rectangle()
+                    .fill(LevitTheme.line)
+                    .frame(width: 1)
+            }
+    }
+}
+
+private struct ScoreEditorRoutineRow: View {
+    let routine: Routine
+    let judges: [String]
+    let routineColumnWidth: CGFloat
+    let judgeColumnWidth: CGFloat
+    let totalColumnWidth: CGFloat
+    let judgeScore: (String) -> ScoreEditorJudgeScore
+    let totalScore: Double
+    let totalMaxScore: Double
+    let metadataOptions: (RoutineMetadataField) -> [String]
+    let isMetadataUpdating: Bool
+    let updateMetadata: (RoutineMetadataField, String) -> Void
+    let openJudgeSheet: (String) -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            routineCell
+
+            ForEach(judges, id: \.self) { judge in
+                Button {
+                    openJudgeSheet(judge)
+                } label: {
+                    judgeCell(judgeScore(judge))
+                }
+                .buttonStyle(.plain)
+            }
+
+            totalCell
+        }
+        .frame(height: 116)
+        .background(rowBackground)
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(LevitTheme.line)
+                .frame(height: 1)
+        }
+    }
+
+    private var routineCell: some View {
+        HStack(spacing: 14) {
+            Button {
+                openFirstJudgeSheet()
+            } label: {
+                Text("#\(routine.id)")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 58, height: 48)
+                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 8) {
+                Button {
+                    openFirstJudgeSheet()
+                } label: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(routine.name)
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+
+                        Text(routine.academy.uppercased())
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(LevitTheme.muted)
+                            .lineLimit(1)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                HStack(spacing: 7) {
+                    ForEach(RoutineMetadataField.allCases) { field in
+                        let value = displayMetadataValue(field.value(in: routine), field: field)
+                        if !value.isEmpty {
+                            ScoreEditorMetadataPill(
+                                title: field.title,
+                                value: value,
+                                systemImage: field.systemImage,
+                                options: metadataOptions(field),
+                                isEnabled: !isMetadataUpdating,
+                                onSelect: { selectedValue in updateMetadata(field, selectedValue) }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 34)
+        .frame(width: routineColumnWidth, height: 116, alignment: .leading)
+        .contentShape(Rectangle())
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(LevitTheme.line)
+                .frame(width: 1)
+        }
+    }
+
+    private func openFirstJudgeSheet() {
+        if let judge = judges.first {
+            openJudgeSheet(judge)
+        }
+    }
+
+    private func displayMetadataValue(_ value: String, field: RoutineMetadataField) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if field == .level, (trimmed.isEmpty || trimmed == "-" || trimmed.normalizedKey == "SIN NIVEL") {
+            return ""
+        }
+        return trimmed
+    }
+
+    private func judgeCell(_ score: ScoreEditorJudgeScore) -> some View {
+        VStack(spacing: 7) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(score.hasAnyScore ? scoreText(score.total) : "-")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+                Text("/\(scoreText(score.maxScore))")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+
+            HStack(spacing: 5) {
+                statusIndicator(for: score)
+                Text(statusText(for: score))
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(score.isCurrentlyScoring || score.isComplete ? LevitTheme.ink : LevitTheme.muted)
+            }
+        }
+        .frame(width: judgeColumnWidth, height: 116)
+        .contentShape(Rectangle())
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(LevitTheme.line)
+                .frame(width: 1)
+        }
+    }
+
+    private var totalCell: some View {
+        let progress = totalMaxScore > 0 ? min(max(totalScore / totalMaxScore, 0), 1) : 0
+
+        return VStack(spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(scoreText(totalScore))
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(LevitTheme.pink)
+                Text("/\(scoreText(totalMaxScore))")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+
+            Text("\(Int((progress * 100).rounded()))%")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(LevitTheme.muted)
+
+            ProgressView(value: progress)
+                .tint(LevitTheme.pink)
+                .frame(width: 104)
+        }
+        .frame(width: totalColumnWidth, height: 116)
+    }
+
+    private var rowBackground: some ShapeStyle {
+        totalScore > 0 ? LevitTheme.palePink.opacity(0.65) : LevitTheme.softFill.opacity(0.34)
+    }
+
+    @ViewBuilder
+    private func statusIndicator(for score: ScoreEditorJudgeScore) -> some View {
+        if score.isCurrentlyScoring {
+            ProgressView()
+                .controlSize(.small)
+                .tint(LevitTheme.pink)
+        } else {
+            Image(systemName: score.isComplete ? "checkmark.circle.fill" : "circle")
+                .font(.caption.weight(.black))
+                .foregroundStyle(score.isComplete ? LevitTheme.pink : LevitTheme.muted)
+        }
+    }
+
+    private func statusText(for score: ScoreEditorJudgeScore) -> String {
+        if score.isCurrentlyScoring {
+            return "Calificando"
+        }
+        if score.isComplete {
+            return "Calificado"
+        }
+        if score.hasAnyScore {
+            return "Incompleto"
+        }
+        return "Pendiente"
+    }
+
+    private func scoreText(_ value: Double) -> String {
+        let rounded = value.rounded()
+        if abs(value - rounded) < 0.001 {
+            return "\(Int(rounded))"
+        }
+        return String(format: "%.1f", value)
+    }
+}
+
+private struct ScoreEditorMetadataPill: View {
+    let title: String
+    let value: String
+    let systemImage: String
+    let options: [String]
+    let isEnabled: Bool
+    let onSelect: (String) -> Void
+
+    @State private var isPresented = false
+
+    var body: some View {
+        Button {
+            guard isEnabled, !options.isEmpty else { return }
+            isPresented.toggle()
+        } label: {
+            HStack(spacing: 5) {
+                Text(value.uppercased())
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Image(systemName: isPresented ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+            .font(.caption.weight(.black))
+            .foregroundStyle(LevitTheme.muted)
+            .padding(.horizontal, 9)
+            .padding(.vertical, 6)
+            .background(LevitTheme.solidSurface.opacity(0.72), in: Capsule())
+            .overlay(Capsule().stroke(LevitTheme.line))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled || options.isEmpty)
+        .opacity(isEnabled ? 1 : 0.58)
+        .popover(isPresented: $isPresented, arrowEdge: .bottom) {
+            dropdownContent
+        }
+    }
+
+    private var dropdownContent: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 9) {
+                Image(systemName: systemImage)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 22)
+                Text(title)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                    .textCase(.uppercase)
+            }
+            .padding(.horizontal, 10)
+            .padding(.top, 8)
+            .padding(.bottom, 4)
+
+            Divider()
+                .overlay(LevitTheme.line)
+
+            ForEach(options, id: \.normalizedKey) { option in
+                Button {
+                    isPresented = false
+                    onSelect(option)
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: option.normalizedKey == value.normalizedKey ? "checkmark.circle.fill" : systemImage)
+                            .font(.callout.weight(.black))
+                            .foregroundStyle(option.normalizedKey == value.normalizedKey ? LevitTheme.pink : LevitTheme.muted)
+                            .frame(width: 24)
+                        Text(option.uppercased())
+                            .font(.callout.weight(.black))
+                            .foregroundStyle(LevitTheme.ink)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.72)
+                        Spacer()
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(option.normalizedKey == value.normalizedKey ? LevitTheme.palePink : Color.clear, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(8)
+        .frame(width: 250, alignment: .topLeading)
+        .background(LevitTheme.surface)
+        #if os(iOS)
+        .presentationCompactAdaptation(.popover)
+        #endif
+    }
+}
+
+struct JudgeActivityView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @State private var isRefreshingActivity = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                activityPanel
+            }
+            .padding(.horizontal, 34)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1240, alignment: .leading)
+        }
+        .background(LevitTheme.paper.ignoresSafeArea())
+        .foregroundStyle(LevitTheme.ink)
+        .task {
+            await pollJudgeActivity()
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top, spacing: 22) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Actividad de jueces")
+                    .font(.system(size: 38, weight: .black, design: .rounded))
+                    .foregroundStyle(LevitTheme.ink)
+                Text("Estado actual de cada juez en el programa")
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            HStack(spacing: 18) {
+                EventPill()
+                BlockPill()
+                SyncPill(status: store.syncStatus, pendingCount: store.pendingSyncCount)
+            }
+        }
+    }
+
+    private var activityPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Label("Monitoreo en vivo", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(LevitTheme.ink)
+
+                Spacer()
+
+                Text("Inactivo a los 10 min")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+
+                RefreshDataButton(isRefreshing: isRefreshingActivity) {
+                    Task { await refreshJudgeActivity() }
+                }
+                .disabled(!store.hasRemoteConfiguration)
+                .opacity(store.hasRemoteConfiguration ? 1 : 0.58)
+            }
+
+            if store.latestJudgeActivities.isEmpty {
+                Text(emptyMessage)
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 15))
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 250), spacing: 10)], spacing: 10) {
+                    ForEach(store.latestJudgeActivities) { activity in
+                        JudgeActivityCard(activity: activity)
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+
+    private var emptyMessage: String {
+        store.hasRemoteConfiguration
+            ? "Todavía no hay actividad registrada en este programa."
+            : "Supabase no está configurado."
+    }
+
+    @MainActor
+    private func refreshJudgeActivity() async {
+        guard !isRefreshingActivity else { return }
+        isRefreshingActivity = true
+        defer { isRefreshingActivity = false }
+        await store.refreshJudgeActivity()
+    }
+
+    private func pollJudgeActivity() async {
+        await refreshJudgeActivity()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            await refreshJudgeActivity()
+        }
+    }
+}
+
+private struct JudgeActivityCard: View {
+    let activity: JudgeActivitySummary
+
+    private var isInactive: Bool {
+        activity.isInactive()
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: symbol)
+                .font(.headline.weight(.black))
+                .foregroundStyle(tint)
+                .frame(width: 40, height: 40)
+                .background(tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Text(activity.judgeName)
+                        .font(.headline.weight(.black))
+                        .foregroundStyle(LevitTheme.ink)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text(relativeUpdatedAt)
+                        .font(.caption2.monospacedDigit().weight(.black))
+                        .foregroundStyle(isInactive ? .red : LevitTheme.muted)
+                        .lineLimit(1)
+                }
+
+                Text(isInactive ? "Inactivo hace \(inactiveDuration)" : activity.statusTitle)
+                    .font(.callout.weight(.black))
+                    .foregroundStyle(isInactive ? .red : LevitTheme.ink)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.78)
+
+                Text(isInactive ? activity.statusTitle : activity.detail)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(isInactive ? Color.red.opacity(0.28) : LevitTheme.line))
+    }
+
+    private var symbol: String {
+        if isInactive { return "clock.badge.exclamationmark" }
+        switch activity.state {
+        case .home:
+            return "house.fill"
+        case .viewingSheet:
+            return "doc.text.magnifyingglass"
+        case .leftSheet:
+            return "rectangle.portrait.and.arrow.right"
+        }
+    }
+
+    private var tint: Color {
+        if isInactive { return .red }
+        switch activity.state {
+        case .home:
+            return .green
+        case .viewingSheet:
+            return LevitTheme.pink
+        case .leftSheet:
+            return .orange
+        }
+    }
+
+    private var relativeUpdatedAt: String {
+        "hace \(durationText)"
+    }
+
+    private var inactiveDuration: String {
+        durationText
+    }
+
+    private var durationText: String {
+        let seconds = max(0, Int(Date().timeIntervalSince(activity.updatedAt)))
+        if seconds < 60 {
+            return "\(seconds)s"
+        }
+        let minutes = seconds / 60
+        if minutes < 60 {
+            return "\(minutes)m"
+        }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        return remainingMinutes == 0 ? "\(hours)h" : "\(hours)h \(remainingMinutes)m"
+    }
+}
+
 private struct AdminMetricCard: View {
     let icon: String
     let value: String
@@ -804,6 +1938,150 @@ private struct AdminMenuField: View {
 
     private var hasEnabledOptions: Bool {
         optionSections.flatMap { $0 }.contains { $0.isEnabled }
+    }
+}
+
+private struct AdminSpecialAwardButton: View {
+    let category: SpecialAwardCategory
+    let assignedRoutine: Routine?
+    let isCurrentRoutine: Bool
+    let isSaving: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(isCurrentRoutine ? LevitTheme.pinkGradient : LinearGradient(colors: [LevitTheme.palePink, LevitTheme.palePink], startPoint: .top, endPoint: .bottom))
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(isCurrentRoutine ? .white : LevitTheme.pink)
+                        } else {
+                            Image(systemName: isCurrentRoutine ? "checkmark" : category.systemImage)
+                                .font(.caption.weight(.black))
+                                .foregroundStyle(isCurrentRoutine ? .white : LevitTheme.pink)
+                        }
+                    }
+                    .frame(width: 32, height: 32)
+
+                    Text(category.title)
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.ink)
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.72)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Text(detailText)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(isCurrentRoutine ? LevitTheme.pink : LevitTheme.muted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.68)
+            }
+            .padding(10)
+            .frame(maxWidth: .infinity, minHeight: 86, alignment: .leading)
+            .background(isCurrentRoutine ? LevitTheme.palePink.opacity(0.74) : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isCurrentRoutine ? LevitTheme.pink.opacity(0.38) : LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var detailText: String {
+        if isCurrentRoutine {
+            return "Asignada"
+        }
+        if let assignedRoutine {
+            return "#\(assignedRoutine.id) \(assignedRoutine.name)"
+        }
+        return "Sin asignar"
+    }
+}
+
+private struct AdminManualSpecialAwardField: View {
+    let category: SpecialAwardCategory
+    @Binding var value: String
+    let currentValue: String?
+    let isSaving: Bool
+    let onSave: () -> Void
+    let onClear: () -> Void
+
+    private var hasSavedValue: Bool {
+        !(currentValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    private var canSave: Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 8) {
+                Image(systemName: category.systemImage)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .frame(width: 32, height: 32)
+                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(category.title)
+                        .font(.caption.weight(.black))
+                    Text(hasSavedValue ? "Guardada manualmente" : "Escritura manual")
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(hasSavedValue ? LevitTheme.pink : LevitTheme.muted)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                TextField("Escribir nombre", text: $value)
+                    .textInputAutocapitalization(.words)
+                    .disableAutocorrection(true)
+                    .font(.callout.weight(.black))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(LevitTheme.line))
+
+                Button(action: onSave) {
+                    if isSaving {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "checkmark")
+                            .font(.callout.weight(.black))
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .foregroundStyle(.white)
+                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.48)
+                .buttonStyle(.plain)
+
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                        .font(.callout.weight(.black))
+                }
+                .frame(width: 44, height: 44)
+                .foregroundStyle(LevitTheme.muted)
+                .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(LevitTheme.line))
+                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .disabled(isSaving || (!hasSavedValue && value.isEmpty))
+                .opacity(isSaving || (!hasSavedValue && value.isEmpty) ? 0.48 : 1)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(10)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(LevitTheme.line))
     }
 }
 

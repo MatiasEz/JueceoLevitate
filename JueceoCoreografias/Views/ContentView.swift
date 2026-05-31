@@ -7,6 +7,8 @@ import UIKit
 enum AppSection: String, CaseIterable, Identifiable {
     case inicio = "Home"
     case admin = "Panel admin"
+    case editarCalificaciones = "Editar calificaciones"
+    case actividad = "Actividad"
     case favoritos = "Favoritos"
     case bloques = "Rutinas"
     case jueceo = "Jueceo"
@@ -20,6 +22,8 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .inicio: "house"
         case .admin: "gearshape.fill"
+        case .editarCalificaciones: "tablecells.fill"
+        case .actividad: "dot.radiowaves.left.and.right"
         case .favoritos: "star.fill"
         case .bloques: "list.bullet"
         case .jueceo: "checklist"
@@ -33,14 +37,14 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .inicio, .bloques, .jueceo:
             false
-        case .admin, .favoritos, .calificaciones, .dictamen, .importar:
+        case .admin, .editarCalificaciones, .actividad, .favoritos, .calificaciones, .dictamen, .importar:
             true
         }
     }
 
     static let adminNavigation: [AppSection] = [
         .inicio,
-        .admin,
+        .editarCalificaciones,
         .dictamen,
         .favoritos,
         .importar
@@ -120,7 +124,14 @@ struct ContentView: View {
                     )
                 } else if activeSection == .jueceo {
                     JudgingView(routines: store.visibleRoutines, addingJudge: $addingJudge) {
-                        section = store.canAccess(.bloques) ? .bloques : .inicio
+                        if store.isAdminEditingAsJudge {
+                            store.clearAdminScoringOverride()
+                            section = .editarCalificaciones
+                        } else {
+                            section = store.canAccess(.bloques) ? .bloques : .inicio
+                        }
+                    } onFinishedBlock: {
+                        section = .inicio
                     }
                 } else {
                     HStack(spacing: 0) {
@@ -133,6 +144,10 @@ struct ContentView: View {
                             EmptyView()
                         case .admin:
                             AdminView(section: $section, onExportPDF: exportPDF)
+                        case .editarCalificaciones:
+                            ScoreEditorView(section: $section)
+                        case .actividad:
+                            JudgeActivityView()
                         case .favoritos:
                             FavoritesView()
                         case .bloques:
@@ -202,12 +217,12 @@ struct ContentView: View {
             if !store.canAccess(section) {
                 section = .inicio
             } else if shouldRouteAdminToJudgePicker {
-                section = .admin
+                section = .editarCalificaciones
             }
         }
         .onChange(of: store.isAdminEditingAsJudge) { _, _ in
             if shouldRouteAdminToJudgePicker {
-                section = .admin
+                section = .editarCalificaciones
             }
         }
     }
@@ -243,9 +258,12 @@ struct ContentView: View {
         if requestedSection == .calificaciones {
             return store.canAccess(.dictamen) ? .dictamen : .inicio
         }
+        if requestedSection == .admin {
+            return store.canAccess(.editarCalificaciones) ? .editarCalificaciones : .inicio
+        }
         let allowedSection = store.canAccess(requestedSection) ? requestedSection : .inicio
         if allowedSection == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge {
-            return .admin
+            return .editarCalificaciones
         }
         return allowedSection
     }
@@ -254,7 +272,7 @@ struct ContentView: View {
         if let routine {
             store.selectedRoutineID = routine.id
         }
-        section = store.isAdmin && !store.isAdminEditingAsJudge ? .admin : .jueceo
+        section = store.isAdmin && !store.isAdminEditingAsJudge ? .editarCalificaciones : .jueceo
     }
 }
 
@@ -412,6 +430,9 @@ private struct DashboardView: View {
             .scrollIndicators(.hidden)
         }
         .background(DashboardBackground())
+        .task {
+            await store.reportJudgeAtHome()
+        }
     }
 
     private func dashboardStack(
@@ -555,7 +576,7 @@ private struct DashboardView: View {
         HStack(spacing: isCompact ? 10 : 14) {
             Button {
                 if store.isAdmin {
-                    section = .admin
+                    section = .editarCalificaciones
                     return
                 }
                 if let nextRoutine {
@@ -563,7 +584,7 @@ private struct DashboardView: View {
                 }
                 section = .jueceo
             } label: {
-                Label(store.isAdmin ? "Panel admin" : "Entrar al jueceo", systemImage: store.isAdmin ? "gearshape.fill" : "play.fill")
+                Label(store.isAdmin ? "Editar calificaciones" : "Entrar al jueceo", systemImage: store.isAdmin ? "tablecells.fill" : "play.fill")
                     .font(.system(size: isCompact ? 18 : 24, weight: .black, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
@@ -583,7 +604,7 @@ private struct DashboardView: View {
 
     private func openJudging(for routine: Routine) {
         store.selectedRoutineID = routine.id
-        section = store.isAdmin && !store.isAdminEditingAsJudge ? .admin : .jueceo
+        section = store.isAdmin && !store.isAdminEditingAsJudge ? .editarCalificaciones : .jueceo
     }
 
     private func percentage(_ value: Int, _ total: Int) -> Int {
@@ -606,7 +627,7 @@ struct LevitSidebar: View {
             VStack(spacing: 18) {
                 ForEach(visibleSections) { item in
                     Button {
-                        section = item == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge ? .admin : item
+                        section = item == .jueceo && store.isAdmin && !store.isAdminEditingAsJudge ? .editarCalificaciones : item
                     } label: {
                         SidebarItemIcon(item: item, isSelected: section == item)
                     }
@@ -1113,6 +1134,9 @@ private struct DashboardRoutineCard: View {
 
                         HStack(spacing: 5) {
                             LevitTag(routine.division)
+                            if let level = routine.levelTagText {
+                                LevitTag(level)
+                            }
                             LevitTag(routine.category)
                         }
                     }

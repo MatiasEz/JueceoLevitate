@@ -37,6 +37,8 @@
 	<string>FEEDBACK LEVITATE MX</string>
 	<key>GOOGLE_REVERSED_CLIENT_ID</key>
 	<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>SUPABASE_PUBLISHABLE_KEY</key>

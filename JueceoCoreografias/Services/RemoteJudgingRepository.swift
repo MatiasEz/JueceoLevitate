@@ -59,6 +59,7 @@ struct RemoteEventBundle: Sendable {
     let feedback: [RemoteFeedbackRow]
     let penalties: [RemotePenaltyRow]
     let favorites: [RemoteFavoriteRow]
+    let specialAwards: [RemoteSpecialAwardRow]
 }
 
 struct RemoteScoreRow: Codable, Hashable, Sendable {
@@ -120,6 +121,44 @@ struct RemoteFavoriteRow: Codable, Hashable, Sendable {
         case routineID = "routine_id"
         case judgeID = "judge_id"
         case category
+    }
+}
+
+struct RemoteSpecialAwardRow: Codable, Hashable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String?
+    let award: String
+    let manualValue: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case award
+        case manualValue = "manual_value"
+    }
+}
+
+struct RemoteJudgeActivityRow: Codable, Hashable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let deviceID: String
+    let state: String
+    let blockID: String?
+    let routineID: String?
+    let platform: String?
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+        case deviceID = "device_id"
+        case state
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case platform
+        case updatedAt = "updated_at"
     }
 }
 
@@ -198,6 +237,87 @@ struct FavoriteDeleteRow: Sendable {
     let blockID: String
     let judgeID: String
     let category: String
+}
+
+struct SpecialAwardUpsertRow: Encodable, Sendable {
+    let eventID: String
+    let blockID: String
+    let routineID: String?
+    let award: String
+    let manualValue: String?
+    let deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case award
+        case manualValue = "manual_value"
+        case deviceID = "device_id"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(eventID, forKey: .eventID)
+        try container.encode(blockID, forKey: .blockID)
+        if let routineID {
+            try container.encode(routineID, forKey: .routineID)
+        } else {
+            try container.encodeNil(forKey: .routineID)
+        }
+        try container.encode(award, forKey: .award)
+        if let manualValue {
+            try container.encode(manualValue, forKey: .manualValue)
+        } else {
+            try container.encodeNil(forKey: .manualValue)
+        }
+        try container.encode(deviceID, forKey: .deviceID)
+    }
+}
+
+struct SpecialAwardDeleteRow: Sendable {
+    let eventID: String
+    let blockID: String
+    let award: String
+}
+
+struct JudgeActivityUpsertRow: Encodable, Sendable {
+    let eventID: String
+    let judgeID: String
+    let deviceID: String
+    let state: String
+    let blockID: String?
+    let routineID: String?
+    let platform: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case judgeID = "judge_id"
+        case deviceID = "device_id"
+        case state
+        case blockID = "block_id"
+        case routineID = "routine_id"
+        case platform
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(eventID, forKey: .eventID)
+        try container.encode(judgeID, forKey: .judgeID)
+        try container.encode(deviceID, forKey: .deviceID)
+        try container.encode(state, forKey: .state)
+        if let blockID {
+            try container.encode(blockID, forKey: .blockID)
+        } else {
+            try container.encodeNil(forKey: .blockID)
+        }
+        if let routineID {
+            try container.encode(routineID, forKey: .routineID)
+        } else {
+            try container.encodeNil(forKey: .routineID)
+        }
+        try container.encode(platform, forKey: .platform)
+    }
 }
 
 struct ExcelImportUploadRow: Encodable, Sendable {
@@ -283,12 +403,18 @@ struct RoutineDeleteResponse: Decodable, Sendable {
 struct RoutineUpdateRequest: Encodable, Sendable {
     let eventID: String
     let routineID: String
+    let division: String
+    let genre: String
     let level: String
+    let category: String
 
     enum CodingKeys: String, CodingKey {
         case eventID = "event_id"
         case routineID = "routine_id"
+        case division
+        case genre
         case level
+        case category
     }
 }
 
@@ -296,14 +422,20 @@ struct RoutineUpdateResponse: Decodable, Sendable {
     let eventID: String
     let routineID: String
     let routineName: String
-    let level: String
+    let division: String?
+    let genre: String?
+    let level: String?
+    let category: String?
     let updated: Bool
 
     enum CodingKeys: String, CodingKey {
         case eventID = "event_id"
         case routineID = "routine_id"
         case routineName = "routine_name"
+        case division
+        case genre
         case level
+        case category
         case updated
     }
 }
@@ -418,6 +550,7 @@ actor RemoteJudgingRepository {
         async let feedback: [RemoteFeedbackRow] = getAll("feedback?select=*&event_id=eq.\(encodedEventID)&order=routine_id.asc,judge_id.asc")
         async let penalties: [RemotePenaltyRow] = fetchPenalties(eventID: encodedEventID)
         async let favorites: [RemoteFavoriteRow] = fetchFavorites(eventID: encodedEventID)
+        async let specialAwards: [RemoteSpecialAwardRow] = fetchSpecialAwards(eventID: encodedEventID)
 
         let blockRows = try await blocks
         let routineRows = try await routines
@@ -428,8 +561,9 @@ actor RemoteJudgingRepository {
         let feedbackRows = try await feedback
         let penaltyRows = try await penalties
         let favoriteRows = try await favorites
+        let specialAwardRows = try await specialAwards
         LoadDiagnostics.log(
-            "fetchEventBundle rows blocks=\(blockRows.count) routines=\(routineRows.count) judges=\(judgeRows.count) templates=\(templateRows.count) criteria=\(criterionRows.count) scores=\(scoreRows.count) feedback=\(feedbackRows.count) penalties=\(penaltyRows.count) favorites=\(favoriteRows.count) elapsed=\(LoadDiagnostics.elapsed(since: start))"
+            "fetchEventBundle rows blocks=\(blockRows.count) routines=\(routineRows.count) judges=\(judgeRows.count) templates=\(templateRows.count) criteria=\(criterionRows.count) scores=\(scoreRows.count) feedback=\(feedbackRows.count) penalties=\(penaltyRows.count) favorites=\(favoriteRows.count) specialAwards=\(specialAwardRows.count) elapsed=\(LoadDiagnostics.elapsed(since: start))"
         )
 
         let criteriaByTemplate = Dictionary(grouping: criterionRows, by: \.templateID)
@@ -483,7 +617,7 @@ actor RemoteJudgingRepository {
             judgeProfiles: judgeRows.map(\.profile)
         )
         LoadDiagnostics.log("fetchEventBundle built AppData elapsed=\(LoadDiagnostics.elapsed(since: start))")
-        return RemoteEventBundle(event: event, appData: appData, scores: scoreRows, feedback: feedbackRows, penalties: penaltyRows, favorites: favoriteRows)
+        return RemoteEventBundle(event: event, appData: appData, scores: scoreRows, feedback: feedbackRows, penalties: penaltyRows, favorites: favoriteRows, specialAwards: specialAwardRows)
     }
 
     func upsertScores(_ rows: [ScoreUpsertRow]) async throws {
@@ -527,6 +661,36 @@ actor RemoteJudgingRepository {
         }
     }
 
+    func upsertSpecialAward(_ row: SpecialAwardUpsertRow) async throws {
+        try await post(
+            "special_awards?on_conflict=event_id,block_id,award",
+            row,
+            prefer: "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
+    func deleteSpecialAward(_ row: SpecialAwardDeleteRow) async throws {
+        try await delete(
+            "special_awards?event_id=eq.\(Self.queryValue(row.eventID))&block_id=eq.\(Self.queryValue(row.blockID))&award=eq.\(Self.queryValue(row.award))",
+            prefer: "return=minimal"
+        )
+    }
+
+    func fetchJudgeActivity(eventID: String) async throws -> [RemoteJudgeActivityRow] {
+        let encodedEventID = Self.queryValue(eventID)
+        return try await getAll(
+            "judge_activity?select=*&event_id=eq.\(encodedEventID)&order=updated_at.desc"
+        )
+    }
+
+    func upsertJudgeActivity(_ row: JudgeActivityUpsertRow) async throws {
+        try await post(
+            "judge_activity?on_conflict=event_id,judge_id,device_id",
+            row,
+            prefer: "resolution=merge-duplicates,return=minimal"
+        )
+    }
+
     func importExcel(_ row: ExcelImportUploadRow, importSecret: String) async throws -> ExcelImportResponse {
         let data = try encoder.encode(row)
         let response = try await functionRequest(name: "import-excel", body: data, importSecret: importSecret)
@@ -545,8 +709,39 @@ actor RemoteJudgingRepository {
         return try decoder.decode(RoutineDeleteResponse.self, from: response)
     }
 
-    func updateRoutineLevel(eventID: String, routineID: String, level: String) async throws -> RoutineUpdateResponse {
-        let data = try encoder.encode(RoutineUpdateRequest(eventID: eventID, routineID: routineID, level: level))
+    func updateRoutineMetadata(
+        eventID: String,
+        routineID: String,
+        division: String,
+        genre: String,
+        level: String,
+        category: String
+    ) async throws -> RoutineUpdateResponse {
+        let data = try encoder.encode(
+            RoutineUpdateRequest(
+                eventID: eventID,
+                routineID: routineID,
+                division: division,
+                genre: genre,
+                level: level,
+                category: category
+            )
+        )
+        let response = try await functionRequest(name: "update-routine", body: data)
+        return try decoder.decode(RoutineUpdateResponse.self, from: response)
+    }
+
+    func updateRoutineLevel(eventID: String, routineID: String, routine: Routine, level: String) async throws -> RoutineUpdateResponse {
+        let data = try encoder.encode(
+            RoutineUpdateRequest(
+                eventID: eventID,
+                routineID: routineID,
+                division: routine.division,
+                genre: routine.genre,
+                level: level,
+                category: routine.category
+            )
+        )
         let response = try await functionRequest(name: "update-routine", body: data)
         return try decoder.decode(RoutineUpdateResponse.self, from: response)
     }
@@ -621,6 +816,14 @@ actor RemoteJudgingRepository {
     private func fetchPenalties(eventID: String) async throws -> [RemotePenaltyRow] {
         do {
             return try await getAll("penalties?select=*&event_id=eq.\(eventID)&order=routine_id.asc,judge_id.asc")
+        } catch {
+            return []
+        }
+    }
+
+    private func fetchSpecialAwards(eventID: String) async throws -> [RemoteSpecialAwardRow] {
+        do {
+            return try await getAll("special_awards?select=*&event_id=eq.\(eventID)&order=block_id.asc,award.asc")
         } catch {
             return []
         }

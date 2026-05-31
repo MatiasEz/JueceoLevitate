@@ -10,7 +10,7 @@ struct PhoneContentView: View {
     @State private var isAdminJudgingPresented = false
 
     private var availableTabs: [PhoneTab] {
-        store.isAdmin ? [.home, .admin, .dictamen, .favorites, .excel] : [.home, .routines, .judging]
+        store.isAdmin ? [.home, .admin, .activity, .dictamen, .favorites, .excel] : [.home, .routines, .judging]
     }
 
     var body: some View {
@@ -66,6 +66,10 @@ struct PhoneContentView: View {
         }
         .fullScreenCover(isPresented: $isAdminJudgingPresented) {
             PhoneJudgingView(selectedTab: $selectedTab) {
+                if store.isAdminEditingAsJudge {
+                    store.clearAdminScoringOverride()
+                    selectedTab = .admin
+                }
                 isAdminJudgingPresented = false
             }
             .environmentObject(store)
@@ -105,6 +109,8 @@ struct PhoneContentView: View {
             PhoneAdminView(
                 isAdminJudgingPresented: $isAdminJudgingPresented
             )
+        case .activity:
+            PhoneJudgeActivityView()
         }
     }
 
@@ -132,6 +138,7 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
     case dictamen
     case excel
     case admin
+    case activity
 
     var id: String { rawValue }
 
@@ -145,6 +152,7 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
         case .dictamen: "Dictamen final"
         case .excel: "Importar Excel"
         case .admin: "Panel admin"
+        case .activity: "Actividad"
         }
     }
 
@@ -158,6 +166,7 @@ private enum PhoneTab: String, CaseIterable, Identifiable, Hashable {
         case .dictamen: "trophy.fill"
         case .excel: "square.and.arrow.up"
         case .admin: "gearshape.fill"
+        case .activity: "dot.radiowaves.left.and.right"
         }
     }
 }
@@ -202,6 +211,9 @@ private struct PhoneHomeView: View {
             }
             .background(DashboardBackground())
             .navigationBarTitleDisplayMode(.inline)
+        }
+        .task {
+            await store.reportJudgeAtHome()
         }
     }
 
@@ -439,6 +451,7 @@ private struct PhoneRoutinesView: View {
             routine.name,
             routine.academy,
             routine.genre,
+            routine.level,
             routine.division,
             routine.category
         ]
@@ -520,6 +533,7 @@ private struct PhoneScoreSheet: View {
     @State private var customPenalty = ""
     @State private var didSubmit = false
     @State private var errorMessage: String?
+    @State private var pendingFocusCriterionID: Int?
     @FocusState private var focusedCriterionID: Int?
 
     private var template: JudgingTemplate {
@@ -568,20 +582,54 @@ private struct PhoneScoreSheet: View {
         return routines[routines.index(before: index)]
     }
 
+    private var adminScoringJudgeOptions: [String] {
+        let judgesByKey = Dictionary(
+            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
+        )
+        var judges = allowedAdminScoringJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
+        if !judges.contains(scoringJudge), store.orderedEditableJudges.contains(scoringJudge) {
+            judges.insert(scoringJudge, at: 0)
+        }
+        return judges
+    }
+
+    private var allowedAdminScoringJudgeNames: [String] {
+        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
+    }
+
+    private var isSelectedBlockFour: Bool {
+        guard let block = store.selectedBlock else { return false }
+        let candidates = [block.id, block.name, block.title].map(\.normalizedKey)
+        return candidates.contains { value in
+            value == "4"
+                || value == "BLOQUE 4"
+                || value == "BLOQUE 04"
+                || value.contains("BLOQUE 4")
+                || value.contains("BLOQUE 04")
+                || value.hasSuffix("-4")
+                || value.hasSuffix("_4")
+        }
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                routineHeader
-                totalPanel
-                criteriaList
-                penaltyControl
-                favoriteButtons
-                feedbackEditor
-                saveButtons
+        ScrollViewReader { scoreProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    routineHeader
+                    totalPanel
+                    criteriaList
+                    penaltyControl
+                    favoriteButtons
+                    feedbackEditor
+                    saveButtons
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 28)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-            .padding(.bottom, 28)
+            .onChange(of: pendingFocusCriterionID) { _, criterionID in
+                revealAndFocusCriterion(criterionID, scrollProxy: scoreProxy)
+            }
         }
         .background(LevitTheme.paper)
         .navigationTitle("Jueceo")
@@ -604,8 +652,17 @@ private struct PhoneScoreSheet: View {
                 }
             }
         }
-        .onAppear(perform: loadDraft)
-        .onChange(of: routine.id) { _, _ in loadDraft() }
+        .onAppear {
+            loadDraft()
+            Task { await store.reportJudgeEnteredSheet(routine) }
+        }
+        .onDisappear {
+            Task { await store.reportJudgeLeftSheet(routine) }
+        }
+        .onChange(of: routine.id) { _, _ in
+            loadDraft()
+            Task { await store.reportJudgeEnteredSheet(routine) }
+        }
         .onChange(of: scoringJudge) { _, _ in loadDraft() }
     }
 
@@ -632,23 +689,50 @@ private struct PhoneScoreSheet: View {
                 .lineLimit(2)
 
             HStack(spacing: 6) {
-                LevitTag(routine.genre)
                 LevitTag(routine.division)
+                if let level = routine.levelTagText {
+                    LevitTag(level)
+                }
                 LevitTag(routine.category)
+                LevitTag(routine.genre)
             }
 
             if store.isAdminEditingAsJudge {
-                Label(scoringJudge, systemImage: "person.fill.viewfinder")
-                    .font(.caption.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 8)
-                    .background(LevitTheme.palePink, in: Capsule())
+                adminJudgeSelector
             }
         }
         .padding(16)
         .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
         .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+
+    private var adminJudgeSelector: some View {
+        Menu {
+            ForEach(adminScoringJudgeOptions, id: \.self) { judge in
+                Button {
+                    store.beginAdminScoring(judge: judge, routine: routine)
+                } label: {
+                    Label(judge, systemImage: judge == scoringJudge ? "checkmark.circle.fill" : "person.fill")
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "person.fill.viewfinder")
+                    .font(.caption.weight(.black))
+                Text("Editando como \(scoringJudge)")
+                    .font(.caption.weight(.black))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.black))
+            }
+            .foregroundStyle(LevitTheme.pink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(LevitTheme.palePink, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(adminScoringJudgeOptions.isEmpty)
     }
 
     private var totalPanel: some View {
@@ -706,6 +790,7 @@ private struct PhoneScoreSheet: View {
                                 onIncrement: { adjust(criterion, delta: 1) },
                                 focusedCriterionID: $focusedCriterionID
                             )
+                            .id(criterionRowID(criterion.id))
                         }
                     }
                 }
@@ -957,6 +1042,7 @@ private struct PhoneScoreSheet: View {
         didSubmit = false
         errorMessage = nil
         focusedCriterionID = nil
+        pendingFocusCriterionID = nil
     }
 
     @discardableResult
@@ -970,8 +1056,14 @@ private struct PhoneScoreSheet: View {
         didSubmit = true
         errorMessage = nil
         focusedCriterionID = nil
-        if advance, let nextRoutine {
-            store.selectedRoutineID = nextRoutine.id
+        pendingFocusCriterionID = nil
+        if advance {
+            if let nextRoutine {
+                store.selectedRoutineID = nextRoutine.id
+            } else if !store.isAdmin {
+                Task { await store.reportJudgeAtHome() }
+                selectedTab = .home
+            }
         }
         return true
     }
@@ -990,8 +1082,31 @@ private struct PhoneScoreSheet: View {
         }
         didSubmit = false
         errorMessage = "Completa todas las notas entre 1 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
-        focusedCriterionID = missingOrInvalid.id
+        requestFocus(for: missingOrInvalid.id)
         return false
+    }
+
+    private func criterionRowID(_ criterionID: Int) -> String {
+        "criterion-\(criterionID)"
+    }
+
+    private func requestFocus(for criterionID: Int) {
+        focusedCriterionID = nil
+        pendingFocusCriterionID = nil
+        DispatchQueue.main.async {
+            pendingFocusCriterionID = criterionID
+        }
+    }
+
+    private func revealAndFocusCriterion(_ criterionID: Int?, scrollProxy: ScrollViewProxy) {
+        guard let criterionID else { return }
+        withAnimation(.easeInOut(duration: 0.24)) {
+            scrollProxy.scrollTo(criterionRowID(criterionID), anchor: .center)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            focusedCriterionID = criterionID
+            pendingFocusCriterionID = nil
+        }
     }
 
     private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {
@@ -1084,7 +1199,7 @@ private struct PhoneFavoritesView: View {
                         PhoneEmptyState(
                             icon: "star.slash",
                             title: "Sin favoritos",
-                            detail: "El top 3 de cada bloque aparece acá."
+                            detail: "Los votos de cada bloque aparecen acá."
                         )
                     } else {
                         ForEach(rankingBlocks) { block in
@@ -1185,28 +1300,37 @@ private struct PhoneFavoriteCategoryRanking: View {
 private struct PhoneFavoriteRankingRow: View {
     let item: FavoriteRankingItem
 
+    private var judgesText: String {
+        let names = item.judges.joined(separator: ", ")
+        return item.votes == 1 ? "Votó: \(names)" : "Votaron: \(names)"
+    }
+
     var body: some View {
         HStack(spacing: 12) {
-            Text("\(item.rank)")
-                .font(.headline.weight(.black))
-                .foregroundStyle(item.rank == 1 ? .white : LevitTheme.pink)
-                .frame(width: 36, height: 36)
-                .background(item.rank == 1 ? LevitTheme.pink : LevitTheme.palePink, in: Circle())
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(item.routine.academy.isEmpty ? item.routine.name : item.routine.academy)
-                    .font(.callout.weight(.black))
-                    .lineLimit(1)
-                Text("#\(item.routine.id) \(item.routine.name)")
-                    .font(.caption.weight(.bold))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(item.routine.name)
+                    .font(.headline.weight(.black))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.76)
+                Text("#\(item.routine.id)")
+                    .font(.caption.monospacedDigit().weight(.black))
                     .foregroundStyle(LevitTheme.muted)
                     .lineLimit(1)
+                Text(judgesText)
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(LevitTheme.pink)
+                    .lineLimit(2)
             }
 
             Spacer()
 
-            Text("\(item.votes)")
-                .font(.headline.monospacedDigit().weight(.black))
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(item.votes)")
+                    .font(.headline.monospacedDigit().weight(.black))
+                Text("voto\(item.votes == 1 ? "" : "s")")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
         }
         .padding(12)
         .foregroundStyle(LevitTheme.ink)
@@ -1220,6 +1344,10 @@ private struct PhoneDictamenView: View {
 
     private var sections: [DictamenGenreSection] {
         DictamenBuilder.sections(from: store.rankings)
+    }
+
+    private var specialAwards: [SpecialAwardSummary] {
+        store.specialAwardSummaries(for: store.selectedBlock)
     }
 
     var body: some View {
@@ -1236,6 +1364,7 @@ private struct PhoneDictamenView: View {
                         ForEach(sections) { section in
                             DictamenGenreTable(section: section, layout: .compact)
                         }
+                        DictamenSpecialAwardsSection(awards: specialAwards, layout: .compact)
                     }
                 }
                 .padding(16)
@@ -1582,6 +1711,80 @@ private struct PhoneRankingView: View {
     }
 }
 
+private struct PhoneJudgeActivityView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @State private var isRefreshingActivity = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Text("Monitoreo en vivo")
+                            .font(.caption.weight(.black))
+                            .foregroundStyle(LevitTheme.muted)
+                        Spacer()
+                        Text("Inactivo a los 10 min")
+                            .font(.caption2.weight(.black))
+                            .foregroundStyle(LevitTheme.muted)
+                    }
+
+                    if store.latestJudgeActivities.isEmpty {
+                        Text(emptyMessage)
+                            .font(.callout.weight(.semibold))
+                            .foregroundStyle(LevitTheme.muted)
+                            .frame(maxWidth: .infinity, minHeight: 120)
+                            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14))
+                    } else {
+                        VStack(spacing: 8) {
+                            ForEach(store.latestJudgeActivities) { activity in
+                                PhoneJudgeActivityRow(activity: activity)
+                            }
+                        }
+                    }
+                }
+                .padding(16)
+                .padding(.bottom, 24)
+            }
+            .background(LevitTheme.paper)
+            .navigationTitle("Actividad")
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    RefreshDataButton(isRefreshing: isRefreshingActivity, isCompact: true) {
+                        Task { await refreshJudgeActivity() }
+                    }
+                    .disabled(!store.hasRemoteConfiguration || isRefreshingActivity)
+                }
+            }
+        }
+        .task {
+            await pollJudgeActivity()
+        }
+    }
+
+    private var emptyMessage: String {
+        store.hasRemoteConfiguration
+            ? "Sin actividad registrada todavía."
+            : "Supabase no está configurado."
+    }
+
+    @MainActor
+    private func refreshJudgeActivity() async {
+        guard !isRefreshingActivity else { return }
+        isRefreshingActivity = true
+        defer { isRefreshingActivity = false }
+        await store.refreshJudgeActivity()
+    }
+
+    private func pollJudgeActivity() async {
+        await refreshJudgeActivity()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            await refreshJudgeActivity()
+        }
+    }
+}
+
 private struct PhoneAdminView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var isAdminJudgingPresented: Bool
@@ -1596,6 +1799,8 @@ private struct PhoneAdminView: View {
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
     @State private var isRefreshingData = false
+    @State private var savingSpecialAward: SpecialAwardCategory?
+    @State private var specialAwardDrafts: [SpecialAwardCategory: String] = [:]
 
     private var orderedRoutines: [Routine] {
         store.visibleRoutines.sorted(by: routineOrder)
@@ -1607,6 +1812,7 @@ private struct PhoneAdminView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     driveExport
                     editAsJudge
+                    specialAwards
                     deleteRoutineMenu
                 }
                 .padding(16)
@@ -1623,7 +1829,16 @@ private struct PhoneAdminView: View {
                 }
             }
         }
-        .onAppear(perform: prepareDefaultDriveFolderName)
+        .onAppear {
+            prepareDefaultDriveFolderName()
+            syncSpecialAwardDrafts()
+        }
+        .onChange(of: store.selectedBlock?.id ?? "") { _, _ in
+            syncSpecialAwardDrafts()
+        }
+        .onChange(of: store.specialAwardManualValues) { _, _ in
+            syncSpecialAwardDrafts()
+        }
         .alert("Exportar a Drive", isPresented: $isDriveFolderPromptPresented) {
             TextField("Nombre de carpeta", text: $driveFolderName)
                 .textInputAutocapitalization(.words)
@@ -1756,6 +1971,32 @@ private struct PhoneAdminView: View {
         }
     }
 
+    private var specialAwards: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Premios especiales")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            ForEach(SpecialAwardCategory.manualEntryCases) { category in
+                PhoneManualSpecialAwardRow(
+                    category: category,
+                    value: specialAwardDraftBinding(for: category),
+                    currentValue: store.specialAwardManualValue(for: category),
+                    isSaving: savingSpecialAward == category,
+                    onSave: {
+                        Task { await updateManualSpecialAward(category, value: specialAwardDraftValue(for: category)) }
+                    },
+                    onClear: {
+                        specialAwardDrafts[category] = ""
+                        Task { await updateManualSpecialAward(category, value: nil) }
+                    }
+                )
+                .disabled(savingSpecialAward != nil || store.selectedBlock == nil)
+                .opacity(savingSpecialAward != nil || store.selectedBlock == nil ? 0.58 : 1)
+            }
+        }
+    }
+
     private var deleteRoutineMenu: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Coreografías")
@@ -1785,6 +2026,73 @@ private struct PhoneAdminView: View {
                 )
             }
         }
+    }
+
+    private func specialAwardValue(for category: SpecialAwardCategory) -> String {
+        if category.isManualEntry {
+            return store.specialAwardManualValue(for: category) ?? "Sin asignar"
+        }
+        guard let routine = store.specialAwardRoutine(for: category) else {
+            return "Sin asignar"
+        }
+        return "#\(routine.id) \(routine.name)"
+    }
+
+    @MainActor
+    private func updateSpecialAward(_ category: SpecialAwardCategory, routine: Routine?) async {
+        guard savingSpecialAward == nil else { return }
+        savingSpecialAward = category
+        defer { savingSpecialAward = nil }
+
+        do {
+            try await store.setSpecialAward(category, routine: routine)
+            if let routine {
+                store.showOperationSuccess("Premio guardado", message: "\(category.title): #\(routine.id) \(routine.name).")
+            } else {
+                store.showOperationSuccess("Premio actualizado", message: "\(category.title) quedó sin asignar.")
+            }
+        } catch {
+            store.showOperationFailure("No se pudo guardar premio", message: error.localizedDescription)
+        }
+    }
+
+    @MainActor
+    private func updateManualSpecialAward(_ category: SpecialAwardCategory, value: String?) async {
+        guard savingSpecialAward == nil else { return }
+        savingSpecialAward = category
+        defer { savingSpecialAward = nil }
+
+        let cleanValue = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        do {
+            try await store.setManualSpecialAward(category, value: cleanValue)
+            specialAwardDrafts[category] = cleanValue
+            if cleanValue.isEmpty {
+                store.showOperationSuccess("Premio actualizado", message: "\(category.title) quedó sin asignar.")
+            } else {
+                store.showOperationSuccess("Premio guardado", message: "\(category.title): \(cleanValue).")
+            }
+        } catch {
+            store.showOperationFailure("No se pudo guardar premio", message: error.localizedDescription)
+        }
+    }
+
+    private func specialAwardDraftBinding(for category: SpecialAwardCategory) -> Binding<String> {
+        Binding(
+            get: { specialAwardDraftValue(for: category) },
+            set: { specialAwardDrafts[category] = $0 }
+        )
+    }
+
+    private func specialAwardDraftValue(for category: SpecialAwardCategory) -> String {
+        specialAwardDrafts[category] ?? store.specialAwardManualValue(for: category) ?? ""
+    }
+
+    private func syncSpecialAwardDrafts() {
+        specialAwardDrafts = Dictionary(
+            uniqueKeysWithValues: SpecialAwardCategory.manualEntryCases.map { category in
+                (category, store.specialAwardManualValue(for: category) ?? "")
+            }
+        )
     }
 
     private var driveHelpText: String {
@@ -2117,8 +2425,11 @@ private struct PhoneRoutineRow: View {
                         .foregroundStyle(LevitTheme.muted)
                         .lineLimit(1)
                     HStack(spacing: 5) {
-                        LevitTag(routine.genre)
+                        if let level = routine.levelTagText {
+                            LevitTag(level)
+                        }
                         LevitTag(routine.category)
+                        LevitTag(routine.genre)
                     }
                 }
 
@@ -2237,6 +2548,79 @@ private struct PhoneRankingRow: View {
     }
 }
 
+private struct PhoneJudgeActivityRow: View {
+    let activity: JudgeActivitySummary
+
+    private var isInactive: Bool {
+        activity.isInactive()
+    }
+
+    var body: some View {
+        HStack(spacing: 13) {
+            Image(systemName: symbol)
+                .font(.headline.weight(.bold))
+                .frame(width: 36, height: 36)
+                .foregroundStyle(tint)
+                .background(tint.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(activity.judgeName)
+                        .font(.headline.weight(.black))
+                        .lineLimit(1)
+                    Spacer()
+                    Text("hace \(durationText)")
+                        .font(.caption2.monospacedDigit().weight(.black))
+                        .foregroundStyle(isInactive ? .red : LevitTheme.muted)
+                }
+
+                Text(isInactive ? "Inactivo hace \(durationText)" : activity.statusTitle)
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(isInactive ? .red : LevitTheme.muted)
+                    .lineLimit(2)
+            }
+        }
+        .padding(14)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(isInactive ? Color.red.opacity(0.28) : LevitTheme.line))
+    }
+
+    private var symbol: String {
+        if isInactive { return "clock.badge.exclamationmark" }
+        switch activity.state {
+        case .home:
+            return "house.fill"
+        case .viewingSheet:
+            return "doc.text.magnifyingglass"
+        case .leftSheet:
+            return "rectangle.portrait.and.arrow.right"
+        }
+    }
+
+    private var tint: Color {
+        if isInactive { return .red }
+        switch activity.state {
+        case .home:
+            return .green
+        case .viewingSheet:
+            return LevitTheme.pink
+        case .leftSheet:
+            return .orange
+        }
+    }
+
+    private var durationText: String {
+        let seconds = max(0, Int(Date().timeIntervalSince(activity.updatedAt)))
+        if seconds < 60 { return "\(seconds)s" }
+        let minutes = seconds / 60
+        if minutes < 60 { return "\(minutes)m" }
+        let hours = minutes / 60
+        let remainingMinutes = minutes % 60
+        return remainingMinutes == 0 ? "\(hours)h" : "\(hours)h \(remainingMinutes)m"
+    }
+}
+
 private struct PhoneActionRow: View {
     let title: String
     let detail: String
@@ -2263,6 +2647,86 @@ private struct PhoneActionRow: View {
             Image(systemName: "chevron.down")
                 .font(.caption.weight(.black))
                 .foregroundStyle(LevitTheme.muted)
+        }
+        .padding(16)
+        .foregroundStyle(LevitTheme.ink)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+    }
+}
+
+private struct PhoneManualSpecialAwardRow: View {
+    let category: SpecialAwardCategory
+    @Binding var value: String
+    let currentValue: String?
+    let isSaving: Bool
+    let onSave: () -> Void
+    let onClear: () -> Void
+
+    private var hasSavedValue: Bool {
+        !(currentValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+    }
+
+    private var canSave: Bool {
+        !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 13) {
+                Image(systemName: category.systemImage)
+                    .font(.headline.weight(.bold))
+                    .frame(width: 36, height: 36)
+                    .foregroundStyle(LevitTheme.pink)
+                    .background(LevitTheme.pink.opacity(0.12), in: Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(category.title)
+                        .font(.headline.weight(.black))
+                    Text(hasSavedValue ? "Guardada manualmente" : "Escritura manual")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(hasSavedValue ? LevitTheme.pink : LevitTheme.muted)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 8) {
+                TextField("Escribir nombre", text: $value)
+                    .textInputAutocapitalization(.words)
+                    .disableAutocorrection(true)
+                    .font(.callout.weight(.black))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 11)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).stroke(LevitTheme.line))
+
+                Button(action: onSave) {
+                    if isSaving {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.white)
+                    } else {
+                        Image(systemName: "checkmark")
+                            .font(.callout.weight(.black))
+                    }
+                }
+                .frame(width: 44, height: 44)
+                .foregroundStyle(.white)
+                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 12))
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.48)
+
+                Button(action: onClear) {
+                    Image(systemName: "xmark")
+                        .font(.callout.weight(.black))
+                }
+                .frame(width: 44, height: 44)
+                .foregroundStyle(LevitTheme.muted)
+                .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12))
+                .disabled(isSaving || (!hasSavedValue && value.isEmpty))
+                .opacity(isSaving || (!hasSavedValue && value.isEmpty) ? 0.48 : 1)
+            }
         }
         .padding(16)
         .foregroundStyle(LevitTheme.ink)

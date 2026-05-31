@@ -127,6 +127,7 @@ struct JudgingView: View {
     let routines: [Routine]
     @Binding var addingJudge: Bool
     let onBack: () -> Void
+    let onFinishedBlock: () -> Void
     @State private var isChoosingJudge = false
 
     var body: some View {
@@ -141,7 +142,8 @@ struct JudgingView: View {
                 routines: routines,
                 addingJudge: $addingJudge,
                 isChoosingJudge: $isChoosingJudge,
-                onBack: onBack
+                onBack: onBack,
+                onFinishedBlock: onFinishedBlock
             )
         } else {
             ContentUnavailableView("Sin coreografías", systemImage: "tray")
@@ -231,12 +233,14 @@ private struct ScoreSheet: View {
     @Binding var addingJudge: Bool
     @Binding var isChoosingJudge: Bool
     let onBack: () -> Void
+    let onFinishedBlock: () -> Void
 
     @State private var draftScores: [Int: String] = [:]
     @State private var penalty = "0"
     @State private var customPenalty = ""
     @State private var didSubmit = false
     @State private var errorMessage: String?
+    @State private var pendingFocusCriterionID: Int?
     @FocusState private var focusedCriterionID: Int?
 
     private var routineIndex: Int {
@@ -278,47 +282,82 @@ private struct ScoreSheet: View {
         store.isAdmin ? ["0", "-1", "-2", "Otro"] : ["0", "-1", "-2"]
     }
 
+    private var adminScoringJudgeOptions: [String] {
+        let judgesByKey = Dictionary(
+            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
+        )
+        var judges = allowedAdminScoringJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
+        if !judges.contains(scoringJudge), store.orderedEditableJudges.contains(scoringJudge) {
+            judges.insert(scoringJudge, at: 0)
+        }
+        return judges
+    }
+
+    private var allowedAdminScoringJudgeNames: [String] {
+        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
+    }
+
+    private var isSelectedBlockFour: Bool {
+        guard let block = store.selectedBlock else { return false }
+        let candidates = [block.id, block.name, block.title].map(\.normalizedKey)
+        return candidates.contains { value in
+            value == "4"
+                || value == "BLOQUE 4"
+                || value == "BLOQUE 04"
+                || value.contains("BLOQUE 4")
+                || value.contains("BLOQUE 04")
+                || value.hasSuffix("-4")
+                || value.hasSuffix("_4")
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             topHeader
             Divider().overlay(LevitTheme.line)
 
             HStack(alignment: .top, spacing: 28) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        ForEach(groupedCriteria, id: \.section) { group in
-                            VStack(alignment: .leading, spacing: 10) {
-                                Text(group.section.uppercased())
-                                    .font(.caption.weight(.black))
-                                    .foregroundStyle(LevitTheme.muted)
-                                    .tracking(0.6)
+                ScrollViewReader { scoreProxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 18) {
+                            ForEach(groupedCriteria, id: \.section) { group in
+                                VStack(alignment: .leading, spacing: 10) {
+                                    Text(group.section.uppercased())
+                                        .font(.caption.weight(.black))
+                                        .foregroundStyle(LevitTheme.muted)
+                                        .tracking(0.6)
 
-                                VStack(spacing: 0) {
-                                    ForEach(group.criteria) { criterion in
-                                        DarkCriterionRow(
-                                            criterion: criterion,
-                                            value: Binding(
-                                                get: { draftScores[criterion.id] ?? "" },
-                                                set: {
-                                                    draftScores[criterion.id] = sanitizedScoreText($0, maxScore: criterion.maxScore)
-                                                    didSubmit = false
-                                                    errorMessage = nil
-                                                }
-                                            ),
-                                            onDecrement: { adjust(criterion, delta: -1) },
-                                            onIncrement: { adjust(criterion, delta: 1) },
-                                            focusedCriterionID: $focusedCriterionID
-                                        )
+                                    VStack(spacing: 0) {
+                                        ForEach(group.criteria) { criterion in
+                                            DarkCriterionRow(
+                                                criterion: criterion,
+                                                value: Binding(
+                                                    get: { draftScores[criterion.id] ?? "" },
+                                                    set: {
+                                                        draftScores[criterion.id] = sanitizedScoreText($0, maxScore: criterion.maxScore)
+                                                        didSubmit = false
+                                                        errorMessage = nil
+                                                    }
+                                                ),
+                                                onDecrement: { adjust(criterion, delta: -1) },
+                                                onIncrement: { adjust(criterion, delta: 1) },
+                                                focusedCriterionID: $focusedCriterionID
+                                            )
+                                            .id(criterionRowID(criterion.id))
+                                        }
                                     }
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
-                        }
 
-                        penaltyControl
-                        feedbackEditor
+                            penaltyControl
+                            feedbackEditor
+                        }
+                        .padding(.vertical, 22)
                     }
-                    .padding(.vertical, 22)
+                    .onChange(of: pendingFocusCriterionID) { _, criterionID in
+                        revealAndFocusCriterion(criterionID, scrollProxy: scoreProxy)
+                    }
                 }
 
                 ScrollView {
@@ -334,8 +373,17 @@ private struct ScoreSheet: View {
         .foregroundStyle(LevitTheme.ink)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(LevitTheme.paper.ignoresSafeArea())
-        .onAppear(perform: loadDraft)
-        .onChange(of: routine.id) { _, _ in loadDraft() }
+        .onAppear {
+            loadDraft()
+            Task { await store.reportJudgeEnteredSheet(routine) }
+        }
+        .onDisappear {
+            Task { await store.reportJudgeLeftSheet(routine) }
+        }
+        .onChange(of: routine.id) { _, _ in
+            loadDraft()
+            Task { await store.reportJudgeEnteredSheet(routine) }
+        }
         .onChange(of: scoringJudge) { _, _ in loadDraft() }
     }
 
@@ -363,6 +411,9 @@ private struct ScoreSheet: View {
                     .foregroundStyle(LevitTheme.muted)
                 HStack(spacing: 6) {
                     LevitTag(routine.division)
+                    if let level = routine.levelTagText {
+                        LevitTag(level)
+                    }
                     LevitTag(routine.category)
                     LevitTag(routine.genre)
                 }
@@ -390,13 +441,7 @@ private struct ScoreSheet: View {
     private var sidePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
             if store.isAdminEditingAsJudge {
-                Label("Editando como \(scoringJudge)", systemImage: "person.fill.viewfinder")
-                    .font(.callout.weight(.black))
-                    .foregroundStyle(LevitTheme.pink)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 15))
+                adminJudgeSelector
             }
 
             VStack(alignment: .leading, spacing: 22) {
@@ -498,6 +543,38 @@ private struct ScoreSheet: View {
 
             Spacer(minLength: 0)
         }
+    }
+
+    private var adminJudgeSelector: some View {
+        Menu {
+            ForEach(adminScoringJudgeOptions, id: \.self) { judge in
+                Button {
+                    store.beginAdminScoring(judge: judge, routine: routine)
+                } label: {
+                    Label(judge, systemImage: judge == scoringJudge ? "checkmark.circle.fill" : "person.fill")
+                }
+            }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "person.fill.viewfinder")
+                    .font(.headline.weight(.black))
+                Text("Editando como \(scoringJudge)")
+                    .font(.callout.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.black))
+            }
+            .foregroundStyle(LevitTheme.pink)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LevitTheme.palePink, in: RoundedRectangle(cornerRadius: 15))
+            .contentShape(RoundedRectangle(cornerRadius: 15))
+        }
+        .buttonStyle(.plain)
+        .disabled(adminScoringJudgeOptions.isEmpty)
     }
 
     private var favoriteButtons: some View {
@@ -690,6 +767,7 @@ private struct ScoreSheet: View {
         didSubmit = false
         errorMessage = nil
         focusedCriterionID = nil
+        pendingFocusCriterionID = nil
     }
 
     @discardableResult
@@ -705,9 +783,15 @@ private struct ScoreSheet: View {
         didSubmit = true
         errorMessage = nil
         focusedCriterionID = nil
+        pendingFocusCriterionID = nil
 
-        if advance, let nextRoutine {
-            store.selectedRoutineID = nextRoutine.id
+        if advance {
+            if let nextRoutine {
+                store.selectedRoutineID = nextRoutine.id
+            } else if !store.isAdmin {
+                Task { await store.reportJudgeAtHome() }
+                onFinishedBlock()
+            }
         }
         return true
     }
@@ -727,8 +811,31 @@ private struct ScoreSheet: View {
 
         didSubmit = false
         errorMessage = "Completa todas las notas entre 1 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
-        focusedCriterionID = missingOrInvalid.id
+        requestFocus(for: missingOrInvalid.id)
         return false
+    }
+
+    private func criterionRowID(_ criterionID: Int) -> String {
+        "criterion-\(criterionID)"
+    }
+
+    private func requestFocus(for criterionID: Int) {
+        focusedCriterionID = nil
+        pendingFocusCriterionID = nil
+        DispatchQueue.main.async {
+            pendingFocusCriterionID = criterionID
+        }
+    }
+
+    private func revealAndFocusCriterion(_ criterionID: Int?, scrollProxy: ScrollViewProxy) {
+        guard let criterionID else { return }
+        withAnimation(.easeInOut(duration: 0.24)) {
+            scrollProxy.scrollTo(criterionRowID(criterionID), anchor: .center)
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            focusedCriterionID = criterionID
+            pendingFocusCriterionID = nil
+        }
     }
 
     private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {

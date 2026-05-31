@@ -82,7 +82,8 @@ enum PDFExporter {
     static func exportDictamen(
         results: [RoutineResult],
         sourceName: String,
-        title: String = "Dictamen final"
+        title: String = "Dictamen final",
+        specialAwards: [SpecialAwardSummary] = []
     ) -> URL? {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent(filename(for: title))
@@ -102,9 +103,10 @@ enum PDFExporter {
         do {
             try renderer.writePDF(to: url) { context in
                 var didStartPage = false
+                var y = margin
 
                 for section in sections {
-                    var y = margin
+                    y = margin
                     context.beginPage()
                     didStartPage = true
                     y = drawDictamenTitle(sectionTitle: section.genre, y: y, margin: margin, page: page)
@@ -121,6 +123,23 @@ enum PDFExporter {
 
                         y = drawDictamenCategoryCard(category, y: y, margin: margin, page: page)
                     }
+                }
+
+                if !specialAwards.isEmpty {
+                    if !didStartPage {
+                        context.beginPage()
+                        didStartPage = true
+                        y = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
+                        y += 14
+                    }
+
+                    let neededHeight = DictamenPDFLayout.specialAwardsHeight(rowCount: specialAwards.count)
+                    if y + neededHeight > page.height - margin {
+                        context.beginPage()
+                        y = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
+                        y += 14
+                    }
+                    _ = drawDictamenSpecialAwardsCard(specialAwards, y: y, margin: margin, page: page)
                 }
 
                 if !didStartPage {
@@ -411,7 +430,22 @@ enum PDFExporter {
             )
 
             let scoreWidth: CGFloat = 58
-            let textX = badgeRect.maxX + 10
+            let participationRect = CGRect(x: badgeRect.maxX + 8, y: rowRect.midY - 12, width: 44, height: 24)
+            drawRoundedRect(
+                participationRect,
+                radius: 8,
+                fill: Theme.dictamenHeaderFill,
+                stroke: Theme.dictamenSoftStroke
+            )
+            drawText(
+                "#\(clean(row.result.routine.id, fallback: "-"))",
+                in: participationRect.insetBy(dx: 3, dy: 6),
+                size: 8.8,
+                weight: .bold,
+                color: Theme.dictamenAccent
+            )
+
+            let textX = participationRect.maxX + 10
             let textWidth = rowRect.width - (textX - rowRect.minX) - scoreWidth - 18
             drawText(
                 clean(row.result.routine.name, fallback: "SIN DATO"),
@@ -450,6 +484,83 @@ enum PDFExporter {
             )
 
             currentY += DictamenPDFLayout.cardRowHeight + (index == category.rows.count - 1 ? 0 : DictamenPDFLayout.cardRowSpacing)
+        }
+
+        return cardRect.maxY + DictamenPDFLayout.categorySpacing
+    }
+
+    private static func drawDictamenSpecialAwardsCard(_ awards: [SpecialAwardSummary], y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        guard UIGraphicsGetCurrentContext() != nil else { return y }
+
+        let cardWidth = page.width - margin * 2
+        let cardHeight = DictamenPDFLayout.specialAwardsHeight(rowCount: awards.count) - DictamenPDFLayout.categorySpacing
+        let cardRect = CGRect(x: margin, y: y, width: cardWidth, height: cardHeight)
+        drawRoundedRect(cardRect, radius: 10, fill: .white, stroke: Theme.dictamenSoftStroke)
+
+        let contentX = cardRect.minX + DictamenPDFLayout.cardInset
+        let contentWidth = cardRect.width - DictamenPDFLayout.cardInset * 2
+        var currentY = cardRect.minY + DictamenPDFLayout.cardInset
+
+        drawRoundedRect(
+            CGRect(x: contentX, y: currentY, width: contentWidth, height: 32),
+            radius: 9,
+            fill: Theme.dictamenTitleFill,
+            stroke: Theme.dictamenSoftStroke
+        )
+        drawText(
+            "PREMIOS ESPECIALES",
+            in: CGRect(x: contentX + 12, y: currentY + 8, width: contentWidth - 24, height: 16),
+            size: 13,
+            weight: .bold,
+            color: .white,
+            alignment: .left
+        )
+
+        currentY += 42
+
+        for (index, award) in awards.enumerated() {
+            let rowRect = CGRect(x: contentX, y: currentY, width: contentWidth, height: DictamenPDFLayout.specialAwardRowHeight)
+            drawRoundedRect(rowRect, radius: 9, fill: Theme.dictamenAltFill, stroke: Theme.dictamenSoftStroke)
+
+            let labelWidth: CGFloat = 190
+            drawText(
+                award.category.title.uppercased(),
+                in: CGRect(x: rowRect.minX + 12, y: rowRect.minY + 9, width: labelWidth, height: 14),
+                size: 8.8,
+                weight: .bold,
+                color: Theme.dictamenAccent,
+                alignment: .left
+            )
+
+            let routineMeta: String
+            if let routine = award.routine {
+                routineMeta = "\(clean(routine.academy, fallback: "SIN DATO").uppercased())   \(clean(routine.state, fallback: "SIN DATO").uppercased())"
+            } else {
+                routineMeta = ""
+            }
+
+            let routineX = rowRect.minX + labelWidth + 22
+            let routineWidth = rowRect.width - labelWidth - 34
+            drawText(
+                award.displayValue,
+                in: CGRect(x: routineX, y: rowRect.minY + 7, width: routineWidth, height: 16),
+                size: 11.5,
+                weight: .bold,
+                color: award.isAssigned ? .black : .darkGray,
+                alignment: .left
+            )
+            if !routineMeta.isEmpty {
+                drawText(
+                    routineMeta,
+                    in: CGRect(x: routineX, y: rowRect.minY + 24, width: routineWidth, height: 11),
+                    size: 7.4,
+                    weight: .bold,
+                    color: .darkGray,
+                    alignment: .left
+                )
+            }
+
+            currentY += DictamenPDFLayout.specialAwardRowHeight + (index == awards.count - 1 ? 0 : DictamenPDFLayout.cardRowSpacing)
         }
 
         return cardRect.maxY + DictamenPDFLayout.categorySpacing
@@ -677,11 +788,18 @@ enum PDFExporter {
         static let cardHeaderHeight: CGFloat = 34
         static let cardRowHeight: CGFloat = 44
         static let cardRowSpacing: CGFloat = 7
+        static let specialAwardRowHeight: CGFloat = 42
 
         static func categoryCardHeight(rowCount: Int) -> CGFloat {
             let rows = CGFloat(max(rowCount, 1))
             let gaps = CGFloat(max(rowCount - 1, 0)) * cardRowSpacing
             return cardInset * 2 + cardHeaderHeight + rows * cardRowHeight + gaps + categorySpacing
+        }
+
+        static func specialAwardsHeight(rowCount: Int) -> CGFloat {
+            let rows = CGFloat(max(rowCount, 1))
+            let gaps = CGFloat(max(rowCount - 1, 0)) * cardRowSpacing
+            return cardInset * 2 + 42 + rows * specialAwardRowHeight + gaps + categorySpacing
         }
 
         static func metrics(pageWidth: CGFloat, margin: CGFloat) -> DictamenMetrics {

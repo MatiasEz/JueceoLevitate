@@ -25,7 +25,7 @@ struct BlocksView: View {
                 matchesSearch = true
             } else {
                 let needle = searchText.normalizedKey
-                matchesSearch = [routine.id, routine.name, routine.academy, routine.genre, routine.division, routine.category]
+                matchesSearch = [routine.id, routine.name, routine.academy, routine.genre, routine.level, routine.division, routine.category]
                     .joined(separator: " ")
                     .normalizedKey
                     .contains(needle)
@@ -211,9 +211,12 @@ private struct RoutineListRow: View {
                         .foregroundStyle(LevitTheme.muted)
                         .lineLimit(1)
                     HStack(spacing: 6) {
-                        LevitTag(routine.genre)
-                        LevitTag(routine.category)
                         LevitTag(routine.division)
+                        if let level = routine.levelTagText {
+                            LevitTag(level)
+                        }
+                        LevitTag(routine.category)
+                        LevitTag(routine.genre)
                     }
                 }
 
