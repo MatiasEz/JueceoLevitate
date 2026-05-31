@@ -6,7 +6,14 @@ import UIKit
 
 @main
 struct JueceoCoreografiasApp: App {
-    @StateObject private var store = JudgingStore()
+    @StateObject private var store: JudgingStore
+
+    init() {
+        #if targetEnvironment(macCatalyst)
+        Self.resetMacCatalystDefaults()
+        #endif
+        _store = StateObject(wrappedValue: JudgingStore())
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -32,4 +39,12 @@ struct JueceoCoreografiasApp: App {
         ContentView()
         #endif
     }
+
+    #if targetEnvironment(macCatalyst)
+    private static func resetMacCatalystDefaults() {
+        guard let bundleIdentifier = Bundle.main.bundleIdentifier else { return }
+        UserDefaults.standard.removePersistentDomain(forName: bundleIdentifier)
+        UserDefaults.standard.synchronize()
+    }
+    #endif
 }
