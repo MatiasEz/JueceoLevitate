@@ -1,0 +1,36 @@
+name: Brand Matrix
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: brand-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-build:
+    name: Validate and build brands
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+          python3 --version
+
+      - name: Validate brand configuration
+        run: python3 scripts/validate_brands.py
+
+      - name: Build brand matrix
+        run: python3 scripts/build_brand_matrix.py --skip-validation

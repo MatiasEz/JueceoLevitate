@@ -54,6 +54,8 @@ Para compilar toda la matriz de brands:
 python3 scripts/build_brand_matrix.py
 ```
 
+La misma verificacion corre en GitHub Actions con `.github/workflows/brand-matrix.yml` en cada push/PR a `main`. El workflow valida los brands y compila todos los schemes con signing deshabilitado.
+
 Para crear el esqueleto de una competencia nueva:
 
 ```bash
