@@ -6,4 +6,5 @@ APP_DISPLAY_NAME = Prisma Open
 PRODUCT_NAME = PrismaOpen
 PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen
 PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = com.goldencrowvs.jueceoprismaopen.mac
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIconPrismaOpen
 GOOGLE_DRIVE_ROOT_FOLDER = FEEDBACK PRISMA OPEN

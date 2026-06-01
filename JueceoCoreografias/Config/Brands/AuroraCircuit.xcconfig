@@ -6,4 +6,5 @@ APP_DISPLAY_NAME = Aurora Circuit
 PRODUCT_NAME = AuroraCircuit
 PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit
 PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = com.goldencrowvs.jueceoauroracircuit.mac
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIconAuroraCircuit
 GOOGLE_DRIVE_ROOT_FOLDER = FEEDBACK AURORA CIRCUIT

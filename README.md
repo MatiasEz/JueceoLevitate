@@ -34,6 +34,38 @@ Para otro brand, el camino esperado es registrar su `CompetitionBranding` con un
 
 Por ahora todos los shells usan la misma configuracion de Supabase definida en `Info.plist`. Separar datos por competencia requiere una decision de backend aparte; no hace falta tocar la BD para sumar identidad visual, bundle IDs y carpeta de Drive por brand.
 
+Cada brand tambien tiene app icon propio:
+
+- `Levitate`: `AppIconLevitate`
+- `AuroraCircuit`: `AppIconAuroraCircuit`
+- `PrismaOpen`: `AppIconPrismaOpen`
+
+### Automatizar brands
+
+Para validar que todos los brands esten completos:
+
+```bash
+python3 scripts/validate_brands.py
+```
+
+Para compilar toda la matriz de brands:
+
+```bash
+python3 scripts/build_brand_matrix.py
+```
+
+Para crear el esqueleto de una competencia nueva:
+
+```bash
+python3 scripts/add_brand.py \
+  --id skyline-open \
+  --display-name "Skyline Open" \
+  --primary "#2563eb" \
+  --secondary "#f59e0b"
+```
+
+Ese script crea `.xcconfig`, target/scheme, app icon, logo/hero placeholders y registra el brand en `CompetitionBranding`. Despues hay que ajustar paleta, jueces admin, assets finales y credenciales OAuth propias antes de publicar.
+
 Build local por brand:
 
 ```bash
