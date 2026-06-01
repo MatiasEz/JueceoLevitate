@@ -1,4 +1,5 @@
 import Foundation
+import JueceoCore
 import UIKit
 
 enum JudgingSheetPDFExporter {
@@ -739,12 +740,12 @@ enum JudgingSheetPDFExporter {
 
         context.saveGState()
         context.setAlpha(alpha)
-        if let image = UIImage(named: "LevitateLogo") {
+        if let image = UIImage(named: AppBrand.competition.logoAssetName) {
             image.withRenderingMode(.alwaysOriginal)
                 .draw(in: aspectFit(image.size, in: rect))
         } else {
             drawText(
-                "Levitate",
+                AppBrand.competition.displayName,
                 in: rect,
                 size: min(rect.height * 0.72, 42),
                 weight: .black,
@@ -883,17 +884,19 @@ enum JudgingSheetPDFExporter {
     }
 
     private enum Theme {
-        static let black = UIColor(red: 0.018, green: 0.018, blue: 0.02, alpha: 1)
-        static let deepGray = UIColor(red: 0.055, green: 0.055, blue: 0.06, alpha: 1)
+        private static var palette: CompetitionColorPalette { AppBrand.competition.colorPalette }
+
+        static var black: UIColor { palette.dark.uiColor }
+        static var deepGray: UIColor { palette.darkPanel.uiColor }
         static let gray = UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 1)
         static let silver = UIColor(red: 0.72, green: 0.72, blue: 0.72, alpha: 1)
         static let rowGray = UIColor(red: 0.945, green: 0.945, blue: 0.95, alpha: 1)
-        static let surface = UIColor(red: 0.985, green: 0.985, blue: 0.985, alpha: 1)
+        static var surface: UIColor { palette.paper.lightUIColor }
         static let white = UIColor.white
-        static let pink = UIColor(red: 0.93, green: 0.0, blue: 0.36, alpha: 1)
-        static let pinkTint = UIColor(red: 1, green: 0.89, blue: 0.93, alpha: 1)
-        static let pillFill = UIColor(red: 0.965, green: 0.965, blue: 0.97, alpha: 1)
-        static let pillStroke = UIColor(red: 0.84, green: 0.84, blue: 0.86, alpha: 1)
+        static var pink: UIColor { palette.primary.uiColor }
+        static var pinkTint: UIColor { palette.accentTint.lightUIColor }
+        static var pillFill: UIColor { palette.softFill.lightUIColor }
+        static var pillStroke: UIColor { palette.line.lightUIColor }
         static let grid = UIColor(red: 0.76, green: 0.76, blue: 0.78, alpha: 1)
     }
 

@@ -1,4 +1,5 @@
 import Foundation
+import JueceoCore
 import SwiftUI
 
 private enum DriveExportError: LocalizedError {
@@ -151,7 +152,7 @@ final class JudgingStore: ObservableObject {
             return profilesByID[judgeID] ?? JudgeProfile(
                 judgeID: judgeID,
                 name: judge,
-                role: judgeID == "ati" ? .admin : .judge
+                role: AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge
             )
         }
     }
@@ -197,7 +198,7 @@ final class JudgingStore: ObservableObject {
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
     var hasGoogleDriveConfiguration: Bool { GoogleDriveConfig.load() != nil }
     var defaultDriveRootFolderName: String {
-        GoogleDriveConfig.load()?.rootFolderName ?? "FEEDBACK LEVITATE MX"
+        GoogleDriveConfig.load()?.rootFolderName ?? AppBrand.competition.driveRootFolderName
     }
     var pendingSyncCount: Int {
         pendingScoreKeys.count + pendingFeedbackKeys.count + pendingPenaltyKeys.count + pendingFavoriteKeys.count
@@ -357,7 +358,7 @@ final class JudgingStore: ObservableObject {
     func addJudge(_ name: String) async throws -> String? {
         let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         guard !cleanName.isEmpty, !appData.judges.contains(cleanName) else { return nil }
-        let role: UserRole = cleanName.stableRemoteID == "ati" ? .admin : .judge
+        let role: UserRole = AppBrand.competition.adminJudgeIDs.contains(cleanName.stableRemoteID) ? .admin : .judge
 
         if let remoteRepository {
             guard isAdmin else {
@@ -519,7 +520,7 @@ final class JudgingStore: ObservableObject {
 
     func role(for judge: String) -> UserRole {
         let judgeID = judge.stableRemoteID
-        if judgeID == "ati" {
+        if AppBrand.competition.adminJudgeIDs.contains(judgeID) {
             return .admin
         }
         return appData.judgeProfiles?.first { $0.judgeID == judgeID || $0.name.normalizedKey == judge.normalizedKey }?.role ?? .judge

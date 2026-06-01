@@ -1,4 +1,5 @@
 import Foundation
+import JueceoCore
 import UIKit
 
 enum PDFExporter {
@@ -767,14 +768,14 @@ enum PDFExporter {
     )
 
     private enum Theme {
-        static let paleYellow = UIColor(red: 0.996, green: 0.949, blue: 0.796, alpha: 1)
-        static let headerFill = UIColor(red: 0.92, green: 0.92, blue: 0.92, alpha: 1)
+        static var paleYellow: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.48) }
+        static var headerFill: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.68) }
         static let grid = UIColor(white: 0.12, alpha: 1)
-        static let dictamenAccent = UIColor(red: 0.93, green: 0.16, blue: 0.45, alpha: 1)
-        static let dictamenTitleFill = UIColor(red: 0.12, green: 0.13, blue: 0.17, alpha: 1)
-        static let dictamenHeaderFill = UIColor(red: 0.98, green: 0.90, blue: 0.94, alpha: 1)
+        static var dictamenAccent: UIColor { AppBrand.competition.colorPalette.primary.uiColor }
+        static var dictamenTitleFill: UIColor { AppBrand.competition.colorPalette.ink.lightUIColor }
+        static var dictamenHeaderFill: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor }
         static let dictamenSoftStroke = UIColor(white: 0.0, alpha: 0.10)
-        static let dictamenPink = UIColor(red: 0.95, green: 0.84, blue: 0.91, alpha: 1)
+        static var dictamenPink: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor }
         static let dictamenRowFill = UIColor(white: 0.84, alpha: 1)
         static let dictamenAltFill = UIColor(white: 0.93, alpha: 1)
     }

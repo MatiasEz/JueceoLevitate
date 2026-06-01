@@ -6,6 +6,20 @@ App nativa de iPad creada en Xcode/SwiftUI a partir del Excel original.
 
 Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad físico y ejecuta el esquema `JueceoCoreografias`.
 
+## Arquitectura multi competencia
+
+El dominio compartido vive en el package local `Packages/JueceoCore`. Ahi estan los modelos base (`Routine`, `DanceBlock`, `JudgingTemplate`, resultados, favoritos, premios, errores y helpers de ids) y `CompetitionBranding`, que define parametros reutilizables por competencia.
+
+La app actual es el shell de marca Levitate. `JueceoCoreografias/AppBrand.swift` selecciona `CompetitionBranding.levitate`, y la UI/servicios leen de esa config para logo, nombre visible, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores. Tambien hay dos brands de ejemplo listos para usar: `CompetitionBranding.auroraCircuit` y `CompetitionBranding.prismaOpen`.
+
+Las paletas quedan separadas por competencia:
+
+- `Levitate`: magenta/rosa, la identidad original.
+- `Aurora Circuit`: teal/cian con verdes frios.
+- `Prisma Open`: violeta con acento ambar.
+
+Para otro brand, el camino esperado es crear otro target/app shell que consuma `JueceoCore` y apunte `AppBrand.competition` a otra configuracion.
+
 ## macOS para descarga directa
 
 El proyecto tambien compila como app de macOS usando Mac Catalyst. En Xcode elegi el esquema `JueceoCoreografias` y el destino `My Mac (Mac Catalyst)`.

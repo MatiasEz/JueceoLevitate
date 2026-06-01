@@ -10,6 +10,10 @@ DerivedData/
 *.xcuserdata/
 xcuserdata/
 
+# SwiftPM
+.build/
+Packages/**/.build/
+
 # Flutter/Dart
 .dart_tool/
 .flutter-plugins

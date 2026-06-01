@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 
 struct DictamenView: View {
     @EnvironmentObject private var store: JudgingStore

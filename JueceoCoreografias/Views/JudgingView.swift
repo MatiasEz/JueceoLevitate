@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 import UIKit
 
 struct LimitedScoreTextField: UIViewRepresentable {
@@ -85,12 +86,7 @@ struct LimitedScoreTextField: UIViewRepresentable {
     }
 
     private static var inkColor: UIColor {
-        UIColor { traitCollection in
-            if traitCollection.userInterfaceStyle == .dark {
-                return UIColor(red: 0.94, green: 0.95, blue: 0.98, alpha: 1.0)
-            }
-            return UIColor(red: 0.12, green: 0.13, blue: 0.17, alpha: 1.0)
-        }
+        AppBrand.competition.colorPalette.ink.dynamicUIColor
     }
 
     private static func normalizedCandidate(_ text: String) -> String? {
@@ -294,21 +290,7 @@ private struct ScoreSheet: View {
     }
 
     private var allowedAdminScoringJudgeNames: [String] {
-        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
-    }
-
-    private var isSelectedBlockFour: Bool {
-        guard let block = store.selectedBlock else { return false }
-        let candidates = [block.id, block.name, block.title].map(\.normalizedKey)
-        return candidates.contains { value in
-            value == "4"
-                || value == "BLOQUE 4"
-                || value == "BLOQUE 04"
-                || value.contains("BLOQUE 4")
-                || value.contains("BLOQUE 04")
-                || value.hasSuffix("-4")
-                || value.hasSuffix("_4")
-        }
+        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
     }
 
     var body: some View {

@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 
 private let judgeActivityPollingIntervalNanoseconds: UInt64 = 10_000_000_000
 
@@ -175,7 +176,7 @@ struct AdminView: View {
         LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 14)], spacing: 14) {
             AdminMetricCard(icon: "square.stack.3d.up.fill", value: "\(store.blocks.count)", label: "Bloques", detail: "\(store.visibleRoutines.count) en vista")
             AdminMetricCard(icon: "figure.dance", value: "\(store.routines.count)", label: "Coreografías", detail: "\(completedRoutines) calificadas")
-            AdminMetricCard(icon: "person.3.fill", value: "\(store.editableJudges.count)", label: "Jueces", detail: "ATI administra")
+            AdminMetricCard(icon: "person.3.fill", value: "\(store.editableJudges.count)", label: "Jueces", detail: "Admin configura")
             AdminMetricCard(icon: "checkmark.circle.fill", value: "\(completionPercent)%", label: "Avance", detail: store.pendingSyncCount == 0 ? "Sin pendientes" : "\(store.pendingSyncCount) por subir")
         }
     }
@@ -666,22 +667,7 @@ struct ScoreEditorView: View {
     }
 
     private var allowedJudgeNames: [String] {
-        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
-    }
-
-    private var isSelectedBlockFour: Bool {
-        guard let block = store.selectedBlock else { return false }
-        let candidates = [block.id, block.name, block.title]
-            .map(\.normalizedKey)
-        return candidates.contains { value in
-            value == "4"
-                || value == "BLOQUE 4"
-                || value == "BLOQUE 04"
-                || value.contains("BLOQUE 4")
-                || value.contains("BLOQUE 04")
-                || value.hasSuffix("-4")
-                || value.hasSuffix("_4")
-        }
+        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
     }
 
     var body: some View {

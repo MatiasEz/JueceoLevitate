@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		010000000000000000000001 /* JueceoCoreografiasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* JueceoCoreografiasApp.swift */; };
-		010000000000000000000002 /* AppModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppModels.swift */; };
+		010000000000000000000002 /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppBrand.swift */; };
 		010000000000000000000003 /* JudgingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* JudgingStore.swift */; };
 		010000000000000000000004 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* ContentView.swift */; };
 		010000000000000000000005 /* BlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* BlocksView.swift */; };
@@ -28,11 +28,12 @@
 		010000000000000000000021 /* ScoreSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000021 /* ScoreSheetPDFExporter.swift */; };
 		010000000000000000000022 /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
 		010000000000000000000023 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
+		010000000000000000000024 /* JueceoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0C0000000000000000000001 /* JueceoCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		020000000000000000000001 /* JueceoCoreografiasApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JueceoCoreografiasApp.swift; sourceTree = "<group>"; };
-		020000000000000000000002 /* AppModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppModels.swift; sourceTree = "<group>"; };
+		020000000000000000000002 /* AppBrand.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppBrand.swift; sourceTree = "<group>"; };
 		020000000000000000000003 /* JudgingStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgingStore.swift; sourceTree = "<group>"; };
 		020000000000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		020000000000000000000005 /* BlocksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BlocksView.swift; sourceTree = "<group>"; };
@@ -63,6 +64,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				010000000000000000000024 /* JueceoCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,6 +83,7 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000001 /* JueceoCoreografiasApp.swift */,
+				020000000000000000000002 /* AppBrand.swift */,
 				040000000000000000000004 /* Views */,
 				040000000000000000000005 /* Models */,
 				040000000000000000000006 /* Services */,
@@ -120,7 +123,6 @@
 		040000000000000000000005 /* Models */ = {
 			isa = PBXGroup;
 			children = (
-				020000000000000000000002 /* AppModels.swift */,
 				020000000000000000000003 /* JudgingStore.swift */,
 			);
 			path = Models;
@@ -167,6 +169,9 @@
 			productName = JueceoCoreografias;
 			productReference = 020000000000000000000014 /* JueceoCoreografias.app */;
 			productType = "com.apple.product-type.application";
+			packageProductDependencies = (
+				0C0000000000000000000001 /* JueceoCore */,
+			);
 		};
 /* End PBXNativeTarget section */
 
@@ -192,6 +197,9 @@
 				Base,
 			);
 			mainGroup = 040000000000000000000001;
+			packageReferences = (
+				0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */,
+			);
 			productRefGroup = 040000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -220,7 +228,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				010000000000000000000001 /* JueceoCoreografiasApp.swift in Sources */,
-				010000000000000000000002 /* AppModels.swift in Sources */,
+				010000000000000000000002 /* AppBrand.swift in Sources */,
 				010000000000000000000003 /* JudgingStore.swift in Sources */,
 				010000000000000000000004 /* ContentView.swift in Sources */,
 				010000000000000000000005 /* BlocksView.swift in Sources */,
@@ -241,6 +249,21 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/JueceoCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0C0000000000000000000001 /* JueceoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */;
+			productName = JueceoCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		090000000000000000000001 /* Debug */ = {
@@ -361,6 +384,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APP_DISPLAY_NAME = Levitate;
 				CODE_SIGN_STYLE = Automatic;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CURRENT_PROJECT_VERSION = 16;
@@ -369,6 +393,7 @@
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK LEVITATE MX";
 				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
 				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
@@ -399,6 +424,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				APP_DISPLAY_NAME = Levitate;
 				CODE_SIGN_STYLE = Automatic;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CURRENT_PROJECT_VERSION = 16;
@@ -407,6 +433,7 @@
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK LEVITATE MX";
 				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
 				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
 				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
