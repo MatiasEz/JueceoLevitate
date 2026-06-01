@@ -2,3 +2,4 @@
 
 GOOGLE_CLIENT_ID = 951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com
 GOOGLE_REVERSED_CLIENT_ID = com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9
+GOOGLE_OAUTH_SHARED_PLACEHOLDER = YES

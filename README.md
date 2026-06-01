@@ -56,6 +56,14 @@ python3 scripts/build_brand_matrix.py
 
 La misma verificacion corre en GitHub Actions con `.github/workflows/brand-matrix.yml` en cada push/PR a `main`. El workflow valida los brands y compila todos los schemes con signing deshabilitado.
 
+Para revisar readiness de publicacion sin crear builds, subir a TestFlight, tocar signing ni modificar BD:
+
+```bash
+python3 scripts/validate_release_readiness.py
+```
+
+El detalle esta en `RELEASE.md`. Ese chequeo es informativo y no bloquea CI por ahora.
+
 Para crear el esqueleto de una competencia nueva:
 
 ```bash
