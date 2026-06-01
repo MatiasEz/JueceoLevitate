@@ -76,6 +76,10 @@ def validate_assets(asset_map: Dict[str, Dict[str, str]], brand_id: str, errors:
             add_unique_error(errors, f"Falta el asset {asset_name}.imageset para el brand '{brand_id}'.")
 
 
+def resolved_xcconfig_url(value: str) -> str:
+    return value.replace(":/$()/", "://")
+
+
 def main() -> int:
     errors: List[str] = []
     warnings: List[str] = []
@@ -98,6 +102,9 @@ def main() -> int:
     if "APP_BRAND_ID" not in plist_text:
         errors.append("Info.plist/Info-macOS.plist no exponen APP_BRAND_ID.")
 
+    if "$(SUPABASE_URL)" not in plist_text or "$(SUPABASE_PUBLISHABLE_KEY)" not in plist_text:
+        errors.append("Info.plist/Info-macOS.plist deben leer Supabase desde build settings por brand.")
+
     if "AURORA_CIRCUIT" in project_text or "PRISMA_OPEN" in project_text:
         errors.append("El proyecto todavia contiene flags Swift de brand antiguos.")
 
@@ -105,6 +112,7 @@ def main() -> int:
     seen_bundle_ids: Dict[str, Path] = {}
     google_clients: Set[str] = set()
     google_reversed_clients: Set[str] = set()
+    supabase_urls: Dict[str, List[Path]] = {}
 
     for config in configs:
         relative_path = config.path.relative_to(ROOT)
@@ -143,10 +151,30 @@ def main() -> int:
             google_clients.add(google_client)
             google_reversed_clients.add(reversed_client)
 
+        supabase_url = resolved_xcconfig_url(config.settings.get("SUPABASE_URL", ""))
+        supabase_key = config.settings.get("SUPABASE_PUBLISHABLE_KEY", "")
+        if not supabase_url or not supabase_key:
+            warnings.append(
+                f"{relative_path} no define Supabase completo; ese brand queda en modo local hasta configurar SUPABASE_URL y SUPABASE_PUBLISHABLE_KEY."
+            )
+        else:
+            if not supabase_url.startswith("https://") or not supabase_url.endswith(".supabase.co"):
+                add_unique_error(errors, f"{relative_path} define SUPABASE_URL con formato inesperado.")
+            if not supabase_key.startswith("sb_publishable_"):
+                warnings.append(
+                    f"{relative_path} no usa una publishable key moderna de Supabase (sb_publishable_...)."
+                )
+            supabase_urls.setdefault(supabase_url, []).append(config.path)
+
     if len(configs) > 1 and len(google_clients) == 1 and len(google_reversed_clients) == 1:
         warnings.append(
             "Todos los brands comparten Google OAuth por ahora. Esta permitido para desarrollo, pero cada bundle id necesita cliente propio antes de publicar."
         )
+
+    for url, paths in sorted(supabase_urls.items()):
+        if len(paths) > 1:
+            brands = ", ".join(path.stem for path in paths)
+            warnings.append(f"Los brands {brands} comparten Supabase ({url}). OK para staging, confirmar antes de produccion.")
 
     for brand_id in sorted(seen_brand_ids):
         if brand_id not in asset_map:

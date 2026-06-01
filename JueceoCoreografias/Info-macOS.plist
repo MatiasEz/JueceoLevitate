@@ -48,9 +48,9 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>SUPABASE_PUBLISHABLE_KEY</key>
-	<string>sb_publishable_jZv2loPhbPvameq6bUOgqA_5hEQJ2tc</string>
+	<string>$(SUPABASE_PUBLISHABLE_KEY)</string>
 	<key>SUPABASE_URL</key>
-	<string>https://bozkbpirrwjtpmjqcexx.supabase.co</string>
+	<string>$(SUPABASE_URL)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

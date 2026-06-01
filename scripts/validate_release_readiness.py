@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List
 
 from brand_support import APP_DIR, ROOT, load_brand_configs, swift_brand_assets
@@ -41,9 +42,52 @@ def placeholder(value: str | None) -> bool:
     return truthy(value)
 
 
-def supabase_is_shared() -> bool:
-    plist_text = "\n".join(path.read_text() for path in INFO_PLISTS if path.exists())
-    return "SUPABASE_URL" in plist_text or "SUPABASE_PUBLISHABLE_KEY" in plist_text
+def plist_text() -> str:
+    return "\n".join(path.read_text() for path in INFO_PLISTS if path.exists())
+
+
+def supabase_is_hardcoded_in_plist() -> bool:
+    text = plist_text()
+    return ("https://" in text and ".supabase.co" in text) or "sb_publishable_" in text
+
+
+def supabase_build_settings_missing() -> bool:
+    text = plist_text()
+    return "$(SUPABASE_URL)" not in text or "$(SUPABASE_PUBLISHABLE_KEY)" not in text
+
+
+def brand_names(paths: List[Path]) -> str:
+    return ", ".join(path.stem for path in paths)
+
+
+def shared_supabase_urls(configs) -> List[tuple[str, List[Path]]]:
+    urls: dict[str, List[Path]] = {}
+    for config in configs:
+        url = resolved_xcconfig_url(config.settings.get("SUPABASE_URL", ""))
+        if url:
+            urls.setdefault(url, []).append(config.path)
+    return [(url, paths) for url, paths in urls.items() if len(paths) > 1]
+
+
+def resolved_xcconfig_url(value: str) -> str:
+    return value.replace(":/$()/", "://")
+
+
+def supabase_key_missing(settings: dict[str, str]) -> bool:
+    return not settings.get("SUPABASE_URL") or not settings.get("SUPABASE_PUBLISHABLE_KEY")
+
+
+def supabase_key_looks_publishable(settings: dict[str, str]) -> bool:
+    return settings.get("SUPABASE_PUBLISHABLE_KEY", "").startswith("sb_publishable_")
+
+
+def supabase_url_label(url: str) -> str:
+    return url.replace("https://", "").rstrip("/")
+
+
+def info_plist_uses_supabase_build_settings() -> bool:
+    text = plist_text()
+    return "$(SUPABASE_URL)" in text and "$(SUPABASE_PUBLISHABLE_KEY)" in text
 
 
 def collect_findings(selected_brand: str | None = None) -> List[Finding]:
@@ -105,13 +149,42 @@ def collect_findings(selected_brand: str | None = None) -> List[Finding]:
                 )
             )
 
-    if supabase_is_shared():
+        if supabase_key_missing(settings):
+            findings.append(
+                Finding(
+                    brand=label,
+                    severity="warning",
+                    message="Supabase is not fully configured for this brand.",
+                    next_step="Set SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY in the brand xcconfig, or intentionally keep the brand local-only.",
+                )
+            )
+        elif not supabase_key_looks_publishable(settings):
+            findings.append(
+                Finding(
+                    brand=label,
+                    severity="warning",
+                    message="Supabase key is not a modern publishable key.",
+                    next_step="Use the Supabase sb_publishable_ key for client app configuration.",
+                )
+            )
+
+    if not info_plist_uses_supabase_build_settings() or supabase_is_hardcoded_in_plist() or supabase_build_settings_missing():
+        findings.append(
+            Finding(
+                brand="Global",
+                severity="warning",
+                message="Info.plist/Info-macOS.plist do not cleanly use per-brand Supabase build settings.",
+                next_step="Keep SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY as build setting placeholders, then define values in each brand xcconfig.",
+            )
+        )
+
+    for url, paths in shared_supabase_urls(configs):
         findings.append(
             Finding(
                 brand="Global",
                 severity="info",
-                message="Supabase configuration is shared in Info.plist/Info-macOS.plist.",
-                next_step="Before using multiple real competitions, decide whether data stays shared with filtering or moves to per-brand config. No database change is made by this script.",
+                message=f"Multiple brands share Supabase {supabase_url_label(url)}: {brand_names(paths)}.",
+                next_step="This is fine for staging. Before production, confirm whether those brands should share data or use separate Supabase projects.",
             )
         )
 

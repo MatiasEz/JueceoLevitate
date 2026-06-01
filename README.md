@@ -10,7 +10,7 @@ Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad fisico y ejecuta 
 
 El dominio compartido vive en el package local `Packages/JueceoCore`. Ahi estan los modelos base (`Routine`, `DanceBlock`, `JudgingTemplate`, resultados, favoritos, premios, errores y helpers de ids) y `CompetitionBranding`, que define parametros reutilizables por competencia.
 
-La app actual tiene shells de marca separados por target/scheme. Cada shell apunta a un `.xcconfig` en `JueceoCoreografias/Config/Brands`, y ese archivo define `APP_BRAND_ID`, nombre visible, bundle IDs, carpeta de Drive y credenciales OAuth de Google. `JueceoCoreografias/AppBrand.swift` lee `APP_BRAND_ID` desde `Info.plist` y carga el `CompetitionBranding` correspondiente; la UI/servicios leen de esa config para logo, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores.
+La app actual tiene shells de marca separados por target/scheme. Cada shell apunta a un `.xcconfig` en `JueceoCoreografias/Config/Brands`, y ese archivo define `APP_BRAND_ID`, nombre visible, bundle IDs, carpeta de Drive, credenciales OAuth de Google y configuracion Supabase. `JueceoCoreografias/AppBrand.swift` lee `APP_BRAND_ID` desde `Info.plist` y carga el `CompetitionBranding` correspondiente; la UI/servicios leen de esa config para logo, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores.
 
 Schemes disponibles:
 
@@ -32,7 +32,7 @@ Cada shell define su configuracion en:
 
 Para otro brand, el camino esperado es registrar su `CompetitionBranding` con un `id` estable, crear un `.xcconfig` con ese `APP_BRAND_ID`, crear el target/scheme de app y asignarle ese `.xcconfig` como base configuration.
 
-Por ahora todos los shells usan la misma configuracion de Supabase definida en `Info.plist`. Separar datos por competencia requiere una decision de backend aparte; no hace falta tocar la BD para sumar identidad visual, bundle IDs y carpeta de Drive por brand.
+Supabase tambien queda definido por brand desde `.xcconfig`: `Levitate` sigue apuntando al proyecto actual, mientras que `AuroraCircuit` y `PrismaOpen` apuntan al proyecto sandbox nuevo. `Info.plist` solo expone `$(SUPABASE_URL)` y `$(SUPABASE_PUBLISHABLE_KEY)`, asi que cambiar backend por competencia no requiere tocar Swift ni modificar una BD existente. En `.xcconfig`, las URLs con `https://` se escriben como `https:/$()/...` para que Xcode no interprete `//` como comentario.
 
 Cada brand tambien tiene app icon propio:
 
@@ -71,10 +71,12 @@ python3 scripts/add_brand.py \
   --id skyline-open \
   --display-name "Skyline Open" \
   --primary "#2563eb" \
-  --secondary "#f59e0b"
+  --secondary "#f59e0b" \
+  --supabase-url "https://example.supabase.co" \
+  --supabase-publishable-key "sb_publishable_xxx"
 ```
 
-Ese script crea `.xcconfig`, target/scheme, app icon, logo/hero placeholders y registra el brand en `CompetitionBranding`. Despues hay que ajustar paleta, jueces admin, assets finales y credenciales OAuth propias antes de publicar.
+Ese script crea `.xcconfig`, target/scheme, app icon, logo/hero placeholders y registra el brand en `CompetitionBranding`. Si no pasas Supabase, el brand queda local-only hasta completar `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY`. Despues hay que ajustar paleta, jueces admin, assets finales, backend y credenciales OAuth propias antes de publicar.
 
 Build local por brand:
 
@@ -213,7 +215,7 @@ Las penalizaciones por rutina y juez se guardan en `supabase/migrations/0006_rou
 
 La columna `participant` para guardar el/la participante del programa esta en `supabase/migrations/0007_routine_participants.sql`.
 
-La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en `Info.plist`, carga eventos desde Supabase y sincroniza puntajes/feedback/penalizaciones/favoritos pendientes.
+La app iPad funciona en modo local si no hay claves configuradas. Si `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` estan disponibles en el esquema de Xcode o en el `.xcconfig` del brand, carga eventos desde Supabase y sincroniza puntajes/feedback/penalizaciones/favoritos pendientes.
 
 La importacion directa desde la app requiere la Edge Function `supabase/functions/import-excel`, `supabase/config.toml` desplegado con `verify_jwt = false`, y el secreto `IMPORT_SECRET` configurado en Supabase.
 

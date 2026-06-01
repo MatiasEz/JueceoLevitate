@@ -35,14 +35,14 @@ python3 scripts/validate_release_readiness.py --strict
 - Generated app icons are still marked as placeholders.
 - `AuroraCircuit` and `PrismaOpen` logo/hero assets are generated placeholders.
 - Bundle IDs have not been marked final.
-- Supabase config is still shared in `Info.plist` and `Info-macOS.plist`.
+- `AuroraCircuit` and `PrismaOpen` currently share the new Supabase sandbox project.
 
 ## Before Any Real Distribution
 
 - Replace placeholder icons, logos, and hero assets with final brand artwork.
 - Create a dedicated Google OAuth client per final bundle ID.
 - Confirm iOS and Mac Catalyst bundle IDs for each brand.
-- Decide the multi-competition data strategy before separating real production data.
+- Decide the final multi-competition data strategy before separating real production data.
 - Only then decide signing, provisioning, App Store Connect, TestFlight, or direct-download flows.
 
 ## Marking Items Final
@@ -54,6 +54,8 @@ APP_ICON_PLACEHOLDER = YES
 BRAND_ASSETS_PLACEHOLDER = YES
 BUNDLE_ID_FINAL_CONFIRMED = NO
 GOOGLE_OAUTH_FINAL = NO
+SUPABASE_URL = https:/$()/...
+SUPABASE_PUBLISHABLE_KEY = sb_publishable_...
 ```
 
 After replacing or confirming each item, flip the corresponding flag. Keep this

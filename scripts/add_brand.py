@@ -38,6 +38,8 @@ BRAND_KEYS = {
     "PRODUCT_BUNDLE_IDENTIFIER",
     "PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]",
     "PRODUCT_NAME",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_URL",
     "SWIFT_ACTIVE_COMPILATION_CONDITIONS",
 }
 
@@ -47,6 +49,10 @@ def initials(display_name: str) -> str:
     if not words:
         return "BR"
     return "".join(word[0].upper() for word in words[:2])
+
+
+def xcconfig_value(value: str) -> str:
+    return value.replace("://", ":/$()/")
 
 
 def write_xcconfig(path: Path, args: argparse.Namespace) -> None:
@@ -62,6 +68,8 @@ def write_xcconfig(path: Path, args: argparse.Namespace) -> None:
             f"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = {args.mac_bundle_id}",
             f"ASSETCATALOG_COMPILER_APPICON_NAME = {args.app_icon_name}",
             f"GOOGLE_DRIVE_ROOT_FOLDER = {args.drive_folder}",
+            f"SUPABASE_URL = {xcconfig_value(args.supabase_url)}",
+            f"SUPABASE_PUBLISHABLE_KEY = {args.supabase_publishable_key}",
             "",
         ]
     )
@@ -335,6 +343,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--app-icon-name", help="Asset catalog app icon name.")
     parser.add_argument("--logo-asset", help="Logo imageset name.")
     parser.add_argument("--hero-asset", help="Hero imageset name.")
+    parser.add_argument("--supabase-url", default="", help="Optional Supabase project URL for this brand.")
+    parser.add_argument("--supabase-publishable-key", default="", help="Optional Supabase sb_publishable_ key for this brand.")
     parser.add_argument("--swift-name", help="CompetitionBranding static property name.")
     parser.add_argument("--color-palette", default="levitate", help="CompetitionColorPalette static property to use initially.")
     parser.add_argument("--template-target", default="JueceoCoreografias", help="Target to clone sources/resources from.")
