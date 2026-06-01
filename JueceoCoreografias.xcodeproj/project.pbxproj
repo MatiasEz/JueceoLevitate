@@ -102,8 +102,13 @@
 		020000000000000000000024 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
 		020000000000000000000025 /* Levitate-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Levitate-macOS.entitlements"; sourceTree = "<group>"; };
 		338EC6DF15472F5A8566FDDB /* AuroraCircuit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AuroraCircuit.app; path = AuroraCircuit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		5289D140C90D9813D832530B /* BrandShared.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = BrandShared.xcconfig; sourceTree = "<group>"; };
 		7F22C5F4DAB9F4B197E0A328 /* PrismaOpen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = PrismaOpen.app; path = PrismaOpen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = AuroraCircuit.xcconfig; sourceTree = "<group>"; };
+		C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = PrismaOpen.xcconfig; sourceTree = "<group>"; };
 		E47F9C8C4827921C9B19E625 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = Levitate.xcconfig; sourceTree = "<group>"; };
+		F5305E07CD4045B2CBE31409 /* GoogleOAuth.shared.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = GoogleOAuth.shared.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -156,6 +161,7 @@
 				020000000000000000000013 /* Info.plist */,
 				020000000000000000000024 /* Info-macOS.plist */,
 				020000000000000000000025 /* Levitate-macOS.entitlements */,
+				F0E5AB0AA8B2D0CC8FB7D47A /* Config */,
 			);
 			path = JueceoCoreografias;
 			sourceTree = "<group>";
@@ -222,6 +228,28 @@
 				E47F9C8C4827921C9B19E625 /* Foundation.framework */,
 			);
 			name = iOS;
+			sourceTree = "<group>";
+		};
+		B789F90FC66C2DEF3573972C /* Brands */ = {
+			isa = PBXGroup;
+			children = (
+				5289D140C90D9813D832530B /* BrandShared.xcconfig */,
+				F5305E07CD4045B2CBE31409 /* GoogleOAuth.shared.xcconfig */,
+				EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */,
+				ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */,
+				C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */,
+			);
+			name = Brands;
+			path = Brands;
+			sourceTree = "<group>";
+		};
+		F0E5AB0AA8B2D0CC8FB7D47A /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				B789F90FC66C2DEF3573972C /* Brands */,
+			);
+			name = Config;
+			path = Config;
 			sourceTree = "<group>";
 		};
 		F93A672FD3CFCF3A05BE1457 /* Frameworks */ = {
@@ -567,21 +595,13 @@
 		};
 		090000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = Levitate;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK LEVITATE MX";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -593,9 +613,6 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceolevitate;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceolevitate.mac;
-				PRODUCT_NAME = Levitate;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
@@ -607,21 +624,13 @@
 		};
 		090000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = Levitate;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK LEVITATE MX";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -633,9 +642,6 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceolevitate;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceolevitate.mac;
-				PRODUCT_NAME = Levitate;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
@@ -647,21 +653,13 @@
 		};
 		4087976FFDA062E5E1575BFD /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = "Prisma Open";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK PRISMA OPEN";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -673,13 +671,9 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoprismaopen.mac;
-				PRODUCT_NAME = PrismaOpen;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PRISMA_OPEN";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
@@ -688,21 +682,13 @@
 		};
 		852B0B6AD1FCED515E758179 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = "Prisma Open";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK PRISMA OPEN";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -714,13 +700,9 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoprismaopen.mac;
-				PRODUCT_NAME = PrismaOpen;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PRISMA_OPEN";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
@@ -729,21 +711,13 @@
 		};
 		A396D101CABCC9BACDF5356B /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = "Aurora Circuit";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK AURORA CIRCUIT";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -755,13 +729,9 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoauroracircuit.mac;
-				PRODUCT_NAME = AuroraCircuit;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) AURORA_CIRCUIT";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";
@@ -770,21 +740,13 @@
 		};
 		FB3F5BAB7FBD76F5110C403A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */;
 			buildSettings = {
-				APP_DISPLAY_NAME = "Aurora Circuit";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
-				GENERATE_INFOPLIST_FILE = NO;
-				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
-				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK AURORA CIRCUIT";
-				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
-				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
-				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -796,13 +758,9 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit;
-				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoauroracircuit.mac;
-				PRODUCT_NAME = AuroraCircuit;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
 				SUPPORTS_MACCATALYST = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) AURORA_CIRCUIT";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2,6";

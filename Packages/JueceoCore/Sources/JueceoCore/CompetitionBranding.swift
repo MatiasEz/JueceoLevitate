@@ -163,6 +163,7 @@ public extension CompetitionColorPalette {
 }
 
 public struct CompetitionBranding: Codable, Hashable, Sendable {
+    public let id: String
     public let displayName: String
     public let logoAssetName: String
     public let heroFallbackAssetName: String
@@ -173,6 +174,7 @@ public struct CompetitionBranding: Codable, Hashable, Sendable {
     public let blockScopedAdminScoringJudgeNames: [String: [String]]
 
     public init(
+        id: String,
         displayName: String,
         logoAssetName: String,
         heroFallbackAssetName: String,
@@ -182,6 +184,7 @@ public struct CompetitionBranding: Codable, Hashable, Sendable {
         defaultAdminScoringJudgeNames: [String],
         blockScopedAdminScoringJudgeNames: [String: [String]] = [:]
     ) {
+        self.id = id
         self.displayName = displayName
         self.logoAssetName = logoAssetName
         self.heroFallbackAssetName = heroFallbackAssetName
@@ -210,6 +213,7 @@ public struct CompetitionBranding: Codable, Hashable, Sendable {
 
 public extension CompetitionBranding {
     static let levitate = CompetitionBranding(
+        id: "levitate",
         displayName: "Levitate",
         logoAssetName: "LevitateLogo",
         heroFallbackAssetName: "LevitateDancerHero",
@@ -225,6 +229,7 @@ public extension CompetitionBranding {
     )
 
     static let auroraCircuit = CompetitionBranding(
+        id: "aurora-circuit",
         displayName: "Aurora Circuit",
         logoAssetName: "AuroraCircuitLogo",
         heroFallbackAssetName: "AuroraCircuitHero",
@@ -240,6 +245,7 @@ public extension CompetitionBranding {
     )
 
     static let prismaOpen = CompetitionBranding(
+        id: "prisma-open",
         displayName: "Prisma Open",
         logoAssetName: "PrismaOpenLogo",
         heroFallbackAssetName: "PrismaOpenHero",
@@ -253,4 +259,19 @@ public extension CompetitionBranding {
             "MASTER": ["SARA", "NOA", "MAX"]
         ]
     )
+
+    static let allBrands = [
+        levitate,
+        auroraCircuit,
+        prismaOpen
+    ]
+
+    static func brand(id rawID: String?) -> CompetitionBranding? {
+        guard let normalizedID = rawID?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+              !normalizedID.isEmpty else {
+            return nil
+        }
+
+        return allBrands.first { $0.id == normalizedID }
+    }
 }

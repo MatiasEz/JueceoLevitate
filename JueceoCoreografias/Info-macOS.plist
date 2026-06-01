@@ -31,6 +31,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>APP_BRAND_ID</key>
+	<string>$(APP_BRAND_ID)</string>
 	<key>GOOGLE_CLIENT_ID</key>
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>GOOGLE_DRIVE_ROOT_FOLDER</key>

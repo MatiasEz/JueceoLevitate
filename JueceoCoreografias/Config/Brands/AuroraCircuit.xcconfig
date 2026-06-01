@@ -1,0 +1,9 @@
+#include "BrandShared.xcconfig"
+#include "GoogleOAuth.shared.xcconfig"
+
+APP_BRAND_ID = aurora-circuit
+APP_DISPLAY_NAME = Aurora Circuit
+PRODUCT_NAME = AuroraCircuit
+PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit
+PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = com.goldencrowvs.jueceoauroracircuit.mac
+GOOGLE_DRIVE_ROOT_FOLDER = FEEDBACK AURORA CIRCUIT

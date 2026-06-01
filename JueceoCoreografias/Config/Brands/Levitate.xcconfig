@@ -1,0 +1,9 @@
+#include "BrandShared.xcconfig"
+#include "GoogleOAuth.shared.xcconfig"
+
+APP_BRAND_ID = levitate
+APP_DISPLAY_NAME = Levitate
+PRODUCT_NAME = Levitate
+PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceolevitate
+PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = com.goldencrowvs.jueceolevitate.mac
+GOOGLE_DRIVE_ROOT_FOLDER = FEEDBACK LEVITATE MX

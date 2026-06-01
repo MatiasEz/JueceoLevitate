@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import JueceoCore
 
@@ -7,13 +8,7 @@ import UIKit
 
 enum AppBrand {
     static let competition: CompetitionBranding = {
-        #if AURORA_CIRCUIT
-        .auroraCircuit
-        #elseif PRISMA_OPEN
-        .prismaOpen
-        #else
-        .levitate
-        #endif
+        CompetitionBranding.brand(id: Bundle.main.object(forInfoDictionaryKey: "APP_BRAND_ID") as? String) ?? .levitate
     }()
 }
 

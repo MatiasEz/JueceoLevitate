@@ -1,0 +1,9 @@
+#include "BrandShared.xcconfig"
+#include "GoogleOAuth.shared.xcconfig"
+
+APP_BRAND_ID = prisma-open
+APP_DISPLAY_NAME = Prisma Open
+PRODUCT_NAME = PrismaOpen
+PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen
+PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*] = com.goldencrowvs.jueceoprismaopen.mac
+GOOGLE_DRIVE_ROOT_FOLDER = FEEDBACK PRISMA OPEN

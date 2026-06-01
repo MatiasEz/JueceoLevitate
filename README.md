@@ -10,7 +10,7 @@ Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad fisico y ejecuta 
 
 El dominio compartido vive en el package local `Packages/JueceoCore`. Ahi estan los modelos base (`Routine`, `DanceBlock`, `JudgingTemplate`, resultados, favoritos, premios, errores y helpers de ids) y `CompetitionBranding`, que define parametros reutilizables por competencia.
 
-La app actual tiene shells de marca separados por target/scheme. `JueceoCoreografias/AppBrand.swift` selecciona el brand segun flags de compilacion del target, y la UI/servicios leen de esa config para logo, nombre visible, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores.
+La app actual tiene shells de marca separados por target/scheme. Cada shell apunta a un `.xcconfig` en `JueceoCoreografias/Config/Brands`, y ese archivo define `APP_BRAND_ID`, nombre visible, bundle IDs, carpeta de Drive y credenciales OAuth de Google. `JueceoCoreografias/AppBrand.swift` lee `APP_BRAND_ID` desde `Info.plist` y carga el `CompetitionBranding` correspondiente; la UI/servicios leen de esa config para logo, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores.
 
 Schemes disponibles:
 
@@ -24,7 +24,15 @@ Las paletas quedan separadas por competencia:
 - `Aurora Circuit`: teal/cian con verdes frios.
 - `Prisma Open`: violeta con acento ambar.
 
-Cada shell define su `APP_DISPLAY_NAME`, `PRODUCT_BUNDLE_IDENTIFIER`, `GOOGLE_DRIVE_ROOT_FOLDER` y flag Swift (`AURORA_CIRCUIT` o `PRISMA_OPEN`) desde build settings. Para otro brand, el camino esperado es crear otro target/app shell que consuma `JueceoCore`, agregue su flag de compilacion y registre su configuracion en `CompetitionBranding`.
+Cada shell define su configuracion en:
+
+- `JueceoCoreografias/Config/Brands/Levitate.xcconfig`
+- `JueceoCoreografias/Config/Brands/AuroraCircuit.xcconfig`
+- `JueceoCoreografias/Config/Brands/PrismaOpen.xcconfig`
+
+Para otro brand, el camino esperado es registrar su `CompetitionBranding` con un `id` estable, crear un `.xcconfig` con ese `APP_BRAND_ID`, crear el target/scheme de app y asignarle ese `.xcconfig` como base configuration.
+
+Por ahora todos los shells usan la misma configuracion de Supabase definida en `Info.plist`. Separar datos por competencia requiere una decision de backend aparte; no hace falta tocar la BD para sumar identidad visual, bundle IDs y carpeta de Drive por brand.
 
 Build local por brand:
 
@@ -171,13 +179,13 @@ Para Excels que son solo programa (bloques/rutinas sin hojas de jueceo), el impo
 
 ## Exportar a Google Drive
 
-El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta `FEEDBACK LEVITATE MX`, luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` se lee desde Supabase/local y se resta del total.
+El panel `Admin` incluye `Exportar Drive`. La app inicia sesion con Google, crea la carpeta configurada por el brand (`GOOGLE_DRIVE_ROOT_FOLDER`), luego una subcarpeta del bloque, subcarpetas por academia y una carpeta por coreografia. Dentro de cada coreografia sube una hoja de jueceo PDF por juez; `PENALIZACION` se lee desde Supabase/local y se resta del total.
 
 Para habilitarlo:
 
 1. En Google Cloud habilita Google Drive API.
-2. Crea un OAuth Client tipo iOS con bundle id `com.goldencrowvs.jueceolevitate`.
-3. En Xcode reemplaza los build settings `GOOGLE_CLIENT_ID` y `GOOGLE_REVERSED_CLIENT_ID` con los valores de Google.
+2. Crea un OAuth Client tipo iOS con el bundle id del brand.
+3. Reemplaza `GOOGLE_CLIENT_ID` y `GOOGLE_REVERSED_CLIENT_ID` en el `.xcconfig` del brand.
 4. Si el OAuth consent screen esta en testing, agrega la cuenta que usara la app como test user.
 
 ## Funciones
