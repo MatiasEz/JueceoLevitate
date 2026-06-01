@@ -4,13 +4,19 @@ App nativa de iPad creada en Xcode/SwiftUI a partir del Excel original.
 
 ## Abrir en Xcode
 
-Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad físico y ejecuta el esquema `JueceoCoreografias`.
+Abre `JueceoCoreografias.xcodeproj`, elige un simulador o iPad fisico y ejecuta el esquema `Levitate`.
 
 ## Arquitectura multi competencia
 
 El dominio compartido vive en el package local `Packages/JueceoCore`. Ahi estan los modelos base (`Routine`, `DanceBlock`, `JudgingTemplate`, resultados, favoritos, premios, errores y helpers de ids) y `CompetitionBranding`, que define parametros reutilizables por competencia.
 
-La app actual es el shell de marca Levitate. `JueceoCoreografias/AppBrand.swift` selecciona `CompetitionBranding.levitate`, y la UI/servicios leen de esa config para logo, nombre visible, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores. Tambien hay dos brands de ejemplo listos para usar: `CompetitionBranding.auroraCircuit` y `CompetitionBranding.prismaOpen`.
+La app actual tiene shells de marca separados por target/scheme. `JueceoCoreografias/AppBrand.swift` selecciona el brand segun flags de compilacion del target, y la UI/servicios leen de esa config para logo, nombre visible, hero fallback, carpeta de Drive, jueces admin por bloque y paleta de colores.
+
+Schemes disponibles:
+
+- `Levitate`: usa `CompetitionBranding.levitate`.
+- `AuroraCircuit`: usa `CompetitionBranding.auroraCircuit`.
+- `PrismaOpen`: usa `CompetitionBranding.prismaOpen`.
 
 Las paletas quedan separadas por competencia:
 
@@ -18,18 +24,28 @@ Las paletas quedan separadas por competencia:
 - `Aurora Circuit`: teal/cian con verdes frios.
 - `Prisma Open`: violeta con acento ambar.
 
-Para otro brand, el camino esperado es crear otro target/app shell que consuma `JueceoCore` y apunte `AppBrand.competition` a otra configuracion.
+Cada shell define su `APP_DISPLAY_NAME`, `PRODUCT_BUNDLE_IDENTIFIER`, `GOOGLE_DRIVE_ROOT_FOLDER` y flag Swift (`AURORA_CIRCUIT` o `PRISMA_OPEN`) desde build settings. Para otro brand, el camino esperado es crear otro target/app shell que consuma `JueceoCore`, agregue su flag de compilacion y registre su configuracion en `CompetitionBranding`.
+
+Build local por brand:
+
+```bash
+xcodebuild -project JueceoCoreografias.xcodeproj -scheme Levitate -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project JueceoCoreografias.xcodeproj -scheme AuroraCircuit -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+xcodebuild -project JueceoCoreografias.xcodeproj -scheme PrismaOpen -destination 'generic/platform=iOS Simulator' -configuration Debug CODE_SIGNING_ALLOWED=NO build
+```
+
+Los shells nuevos comparten por ahora las credenciales de Google OAuth de Levitate para poder compilar. Antes de publicarlos hay que crear OAuth clients propios para sus bundle IDs y reemplazar `GOOGLE_CLIENT_ID` / `GOOGLE_REVERSED_CLIENT_ID`.
 
 ## macOS para descarga directa
 
-El proyecto tambien compila como app de macOS usando Mac Catalyst. En Xcode elegi el esquema `JueceoCoreografias` y el destino `My Mac (Mac Catalyst)`.
+El proyecto tambien compila como app de macOS usando Mac Catalyst. En Xcode elegi el esquema de marca (`Levitate`, `AuroraCircuit` o `PrismaOpen`) y el destino `My Mac (Mac Catalyst)`.
 
 Build local:
 
 ```bash
 xcodebuild \
   -project JueceoCoreografias.xcodeproj \
-  -scheme JueceoCoreografias \
+  -scheme Levitate \
   -destination 'platform=macOS,variant=Mac Catalyst' \
   -configuration Release \
   build
@@ -40,7 +56,7 @@ Para publicar por descarga directa, genera un archive de Mac Catalyst, exportalo
 ```bash
 xcodebuild archive \
   -project JueceoCoreografias.xcodeproj \
-  -scheme JueceoCoreografias \
+  -scheme Levitate \
   -destination 'generic/platform=macOS,variant=Mac Catalyst' \
   -archivePath build/JueceoCoreografias-macOS.xcarchive
 ```

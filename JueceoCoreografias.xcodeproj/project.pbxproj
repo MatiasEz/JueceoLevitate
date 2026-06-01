@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0045DC852AE0C667B3EEBE69 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* ContentView.swift */; };
+		0063F6484393362CC94F6B7B /* JueceoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0C0000000000000000000001 /* JueceoCore */; };
+		0092E5FE586F026AEC35EF92 /* ScoreSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000021 /* ScoreSheetPDFExporter.swift */; };
 		010000000000000000000001 /* JueceoCoreografiasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* JueceoCoreografiasApp.swift */; };
 		010000000000000000000002 /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppBrand.swift */; };
 		010000000000000000000003 /* JudgingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* JudgingStore.swift */; };
@@ -29,6 +32,47 @@
 		010000000000000000000022 /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
 		010000000000000000000023 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
 		010000000000000000000024 /* JueceoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0C0000000000000000000001 /* JueceoCore */; };
+		099588A0FC509B83D3DBFAFE /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
+		144FC3AD4EF5762E1AD02EB0 /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* AdminView.swift */; };
+		17A773F34CE38DFAA8954469 /* ScoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000007 /* ScoresView.swift */; };
+		17B9194FA302E3FE84436846 /* GoogleDriveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000020 /* GoogleDriveService.swift */; };
+		291F293D9C43D1C36E689BF9 /* JudgingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* JudgingStore.swift */; };
+		2A1F5535B15A17F5B7C5464D /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* FavoritesView.swift */; };
+		2EF11AEB368DAED83ACECAF7 /* BlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* BlocksView.swift */; };
+		30A5D04237009829B5AD719F /* FavoritesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000019 /* FavoritesView.swift */; };
+		3A622DDD53434122E91795E2 /* RemoteJudgingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* RemoteJudgingRepository.swift */; };
+		3BDD28C3314EDDDE47A7C38D /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppBrand.swift */; };
+		3FFB28DF6B4242DFC112049B /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* ShareSheet.swift */; };
+		47899F346D1F3BC63EE5D720 /* ExcelImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ExcelImportView.swift */; };
+		4892FDBE6840B7750213FA05 /* ScoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000007 /* ScoresView.swift */; };
+		4A77EA15DA8EBC2EC32D5836 /* RemoteJudgingRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000015 /* RemoteJudgingRepository.swift */; };
+		4F3E911B1361AF3BB6EF91C0 /* JueceoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0C0000000000000000000001 /* JueceoCore */; };
+		51872B0E628BBB67BA329ECF /* app_data.json in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* app_data.json */; };
+		599B493CCF983573795364EF /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* AdminView.swift */; };
+		6958AB6D5DB56DF568C3E079 /* BlocksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000005 /* BlocksView.swift */; };
+		86EEDA77B9DD4FA045187A64 /* ScoreSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000021 /* ScoreSheetPDFExporter.swift */; };
+		889308D0EBEDC8D1864E38D3 /* PDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000009 /* PDFExporter.swift */; };
+		893428710B16C279CE2D3E62 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* ShareSheet.swift */; };
+		8DAA140C92398650BB95CDB9 /* JudgingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* JudgingStore.swift */; };
+		A3171D964CAE9A2DE4BAFE6D /* DictamenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* DictamenView.swift */; };
+		AAF6BF9081E1FA4F76DB05C3 /* JueceoCoreografiasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* JueceoCoreografiasApp.swift */; };
+		AB0189ED731D983AF3F628E5 /* DictamenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* DictamenView.swift */; };
+		B1442A576BE79BD735B7E8BC /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
+		B4C6D1C82167BD132875FCDB /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000004 /* ContentView.swift */; };
+		B7956628AD247428479DEFED /* JudgingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* JudgingView.swift */; };
+		BB062D9919ED2B8358413D1A /* Bloque2.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* Bloque2.xlsx */; };
+		BE589D329EECB39EF1852A0E /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* Assets.xcassets */; };
+		BF9528BF9AADA94C8515A3BF /* PDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000009 /* PDFExporter.swift */; };
+		C3416F754724D80C6D84DD48 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
+		CE12A8007CA5CD82669F4532 /* JudgingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000006 /* JudgingView.swift */; };
+		D0644C1B7F11FBE935675184 /* AppBrand.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000002 /* AppBrand.swift */; };
+		D6A5B326BC7C79403A457A56 /* app_data.json in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000011 /* app_data.json */; };
+		DF6706125F4380C273180F1D /* GoogleDriveService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000020 /* GoogleDriveService.swift */; };
+		E003AC50292386BF971F901E /* Bloque2.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000012 /* Bloque2.xlsx */; };
+		E29BF9397F103CEE0A853291 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
+		EE45E32A0980048126A7FBC3 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000018 /* Assets.xcassets */; };
+		F54A80E31EE82D59752823F6 /* ExcelImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000016 /* ExcelImportView.swift */; };
+		FC48908535AF3CBF0A990B7C /* JueceoCoreografiasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* JueceoCoreografiasApp.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -45,8 +89,6 @@
 		020000000000000000000011 /* app_data.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = app_data.json; sourceTree = "<group>"; };
 		020000000000000000000012 /* Bloque2.xlsx */ = {isa = PBXFileReference; lastKnownFileType = file; path = Bloque2.xlsx; sourceTree = "<group>"; };
 		020000000000000000000013 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		020000000000000000000024 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
-		020000000000000000000025 /* Levitate-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Levitate-macOS.entitlements"; sourceTree = "<group>"; };
 		020000000000000000000014 /* JueceoCoreografias.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = JueceoCoreografias.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		020000000000000000000015 /* RemoteJudgingRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteJudgingRepository.swift; sourceTree = "<group>"; };
 		020000000000000000000016 /* ExcelImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExcelImportView.swift; sourceTree = "<group>"; };
@@ -57,6 +99,11 @@
 		020000000000000000000021 /* ScoreSheetPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScoreSheetPDFExporter.swift; sourceTree = "<group>"; };
 		020000000000000000000022 /* PhoneContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneContentView.swift; sourceTree = "<group>"; };
 		020000000000000000000023 /* JudgingSheetPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgingSheetPDFExporter.swift; sourceTree = "<group>"; };
+		020000000000000000000024 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
+		020000000000000000000025 /* Levitate-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Levitate-macOS.entitlements"; sourceTree = "<group>"; };
+		338EC6DF15472F5A8566FDDB /* AuroraCircuit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AuroraCircuit.app; path = AuroraCircuit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		7F22C5F4DAB9F4B197E0A328 /* PrismaOpen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = PrismaOpen.app; path = PrismaOpen.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		E47F9C8C4827921C9B19E625 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -68,6 +115,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		212BA1B35C8878BEBEE1F24F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4F3E911B1361AF3BB6EF91C0 /* JueceoCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3B25D5C21FD503A6518D36E3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0063F6484393362CC94F6B7B /* JueceoCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -76,6 +139,7 @@
 			children = (
 				040000000000000000000002 /* JueceoCoreografias */,
 				040000000000000000000003 /* Products */,
+				F93A672FD3CFCF3A05BE1457 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -100,6 +164,8 @@
 			isa = PBXGroup;
 			children = (
 				020000000000000000000014 /* JueceoCoreografias.app */,
+				338EC6DF15472F5A8566FDDB /* AuroraCircuit.app */,
+				7F22C5F4DAB9F4B197E0A328 /* PrismaOpen.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -150,6 +216,22 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		57FA1EC99174274A1B8D3AA3 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				E47F9C8C4827921C9B19E625 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		F93A672FD3CFCF3A05BE1457 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				57FA1EC99174274A1B8D3AA3 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -166,12 +248,52 @@
 			dependencies = (
 			);
 			name = JueceoCoreografias;
-			productName = JueceoCoreografias;
-			productReference = 020000000000000000000014 /* JueceoCoreografias.app */;
-			productType = "com.apple.product-type.application";
 			packageProductDependencies = (
 				0C0000000000000000000001 /* JueceoCore */,
 			);
+			productName = JueceoCoreografias;
+			productReference = 020000000000000000000014 /* JueceoCoreografias.app */;
+			productType = "com.apple.product-type.application";
+		};
+		68B6563C60A8BCF982006D52 /* PrismaOpen */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 00CCE2ED4176175BECAFFA87 /* Build configuration list for PBXNativeTarget "PrismaOpen" */;
+			buildPhases = (
+				400608FD54C96E5910E1672D /* Sources */,
+				212BA1B35C8878BEBEE1F24F /* Frameworks */,
+				283A329C6F3D42E63C905E44 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PrismaOpen;
+			packageProductDependencies = (
+				0C0000000000000000000001 /* JueceoCore */,
+			);
+			productName = PrismaOpen;
+			productReference = 7F22C5F4DAB9F4B197E0A328 /* PrismaOpen.app */;
+			productType = "com.apple.product-type.application";
+		};
+		9E2F2DD07173AE9EFDE500B0 /* AuroraCircuit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 866E2B72736F46D287580443 /* Build configuration list for PBXNativeTarget "AuroraCircuit" */;
+			buildPhases = (
+				B420CCE8A8986E412CECD60C /* Sources */,
+				3B25D5C21FD503A6518D36E3 /* Frameworks */,
+				86ACB144CC6311CE5836D00D /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AuroraCircuit;
+			packageProductDependencies = (
+				0C0000000000000000000001 /* JueceoCore */,
+			);
+			productName = AuroraCircuit;
+			productReference = 338EC6DF15472F5A8566FDDB /* AuroraCircuit.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -186,6 +308,12 @@
 					050000000000000000000001 = {
 						CreatedOnToolsVersion = 26.1.1;
 					};
+					68B6563C60A8BCF982006D52 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
+					9E2F2DD07173AE9EFDE500B0 = {
+						CreatedOnToolsVersion = 26.1.1;
+					};
 				};
 			};
 			buildConfigurationList = 060000000000000000000001 /* Build configuration list for PBXProject "JueceoCoreografias" */;
@@ -198,13 +326,15 @@
 			);
 			mainGroup = 040000000000000000000001;
 			packageReferences = (
-				0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */,
+				0B0000000000000000000001 /* XCLocalSwiftPackageReference "JueceoCore" */,
 			);
 			productRefGroup = 040000000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				050000000000000000000001 /* JueceoCoreografias */,
+				9E2F2DD07173AE9EFDE500B0 /* AuroraCircuit */,
+				68B6563C60A8BCF982006D52 /* PrismaOpen */,
 			);
 		};
 /* End PBXProject section */
@@ -217,6 +347,26 @@
 				010000000000000000000011 /* app_data.json in Resources */,
 				010000000000000000000012 /* Bloque2.xlsx in Resources */,
 				010000000000000000000018 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		283A329C6F3D42E63C905E44 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D6A5B326BC7C79403A457A56 /* app_data.json in Resources */,
+				E003AC50292386BF971F901E /* Bloque2.xlsx in Resources */,
+				BE589D329EECB39EF1852A0E /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		86ACB144CC6311CE5836D00D /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				51872B0E628BBB67BA329ECF /* app_data.json in Resources */,
+				BB062D9919ED2B8358413D1A /* Bloque2.xlsx in Resources */,
+				EE45E32A0980048126A7FBC3 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -248,22 +398,57 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		400608FD54C96E5910E1672D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AAF6BF9081E1FA4F76DB05C3 /* JueceoCoreografiasApp.swift in Sources */,
+				3BDD28C3314EDDDE47A7C38D /* AppBrand.swift in Sources */,
+				291F293D9C43D1C36E689BF9 /* JudgingStore.swift in Sources */,
+				0045DC852AE0C667B3EEBE69 /* ContentView.swift in Sources */,
+				6958AB6D5DB56DF568C3E079 /* BlocksView.swift in Sources */,
+				B7956628AD247428479DEFED /* JudgingView.swift in Sources */,
+				17A773F34CE38DFAA8954469 /* ScoresView.swift in Sources */,
+				A3171D964CAE9A2DE4BAFE6D /* DictamenView.swift in Sources */,
+				F54A80E31EE82D59752823F6 /* ExcelImportView.swift in Sources */,
+				144FC3AD4EF5762E1AD02EB0 /* AdminView.swift in Sources */,
+				30A5D04237009829B5AD719F /* FavoritesView.swift in Sources */,
+				B1442A576BE79BD735B7E8BC /* PhoneContentView.swift in Sources */,
+				BF9528BF9AADA94C8515A3BF /* PDFExporter.swift in Sources */,
+				86EEDA77B9DD4FA045187A64 /* ScoreSheetPDFExporter.swift in Sources */,
+				E29BF9397F103CEE0A853291 /* JudgingSheetPDFExporter.swift in Sources */,
+				3FFB28DF6B4242DFC112049B /* ShareSheet.swift in Sources */,
+				3A622DDD53434122E91795E2 /* RemoteJudgingRepository.swift in Sources */,
+				DF6706125F4380C273180F1D /* GoogleDriveService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B420CCE8A8986E412CECD60C /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FC48908535AF3CBF0A990B7C /* JueceoCoreografiasApp.swift in Sources */,
+				D0644C1B7F11FBE935675184 /* AppBrand.swift in Sources */,
+				8DAA140C92398650BB95CDB9 /* JudgingStore.swift in Sources */,
+				B4C6D1C82167BD132875FCDB /* ContentView.swift in Sources */,
+				2EF11AEB368DAED83ACECAF7 /* BlocksView.swift in Sources */,
+				CE12A8007CA5CD82669F4532 /* JudgingView.swift in Sources */,
+				4892FDBE6840B7750213FA05 /* ScoresView.swift in Sources */,
+				AB0189ED731D983AF3F628E5 /* DictamenView.swift in Sources */,
+				47899F346D1F3BC63EE5D720 /* ExcelImportView.swift in Sources */,
+				599B493CCF983573795364EF /* AdminView.swift in Sources */,
+				2A1F5535B15A17F5B7C5464D /* FavoritesView.swift in Sources */,
+				099588A0FC509B83D3DBFAFE /* PhoneContentView.swift in Sources */,
+				889308D0EBEDC8D1864E38D3 /* PDFExporter.swift in Sources */,
+				0092E5FE586F026AEC35EF92 /* ScoreSheetPDFExporter.swift in Sources */,
+				C3416F754724D80C6D84DD48 /* JudgingSheetPDFExporter.swift in Sources */,
+				893428710B16C279CE2D3E62 /* ShareSheet.swift in Sources */,
+				4A77EA15DA8EBC2EC32D5836 /* RemoteJudgingRepository.swift in Sources */,
+				17B9194FA302E3FE84436846 /* GoogleDriveService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin XCLocalSwiftPackageReference section */
-		0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = Packages/JueceoCore;
-		};
-/* End XCLocalSwiftPackageReference section */
-
-/* Begin XCSwiftPackageProductDependency section */
-		0C0000000000000000000001 /* JueceoCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 0B0000000000000000000001 /* XCLocalSwiftPackageReference "Packages/JueceoCore" */;
-			productName = JueceoCore;
-		};
-/* End XCSwiftPackageProductDependency section */
 
 /* Begin XCBuildConfiguration section */
 		090000000000000000000001 /* Debug */ = {
@@ -383,13 +568,13 @@
 		090000000000000000000003 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APP_DISPLAY_NAME = Levitate;
-				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
@@ -423,13 +608,13 @@
 		090000000000000000000004 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				APP_DISPLAY_NAME = Levitate;
-				CODE_SIGN_STYLE = Automatic;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 19;
-				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
@@ -460,9 +645,182 @@
 			};
 			name = Release;
 		};
+		4087976FFDA062E5E1575BFD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = "Prisma Open";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK PRISMA OPEN";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
+				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoprismaopen.mac;
+				PRODUCT_NAME = PrismaOpen;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PRISMA_OPEN";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Debug;
+		};
+		852B0B6AD1FCED515E758179 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = "Prisma Open";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK PRISMA OPEN";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
+				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoprismaopen;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoprismaopen.mac;
+				PRODUCT_NAME = PrismaOpen;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) PRISMA_OPEN";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Release;
+		};
+		A396D101CABCC9BACDF5356B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = "Aurora Circuit";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK AURORA CIRCUIT";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
+				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoauroracircuit.mac;
+				PRODUCT_NAME = AuroraCircuit;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) AURORA_CIRCUIT";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Release;
+		};
+		FB3F5BAB7FBD76F5110C403A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APP_DISPLAY_NAME = "Aurora Circuit";
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = "JueceoCoreografias/Levitate-macOS.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 19;
+				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
+				DEVELOPMENT_TEAM = F2VBZV9LC6;
+				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				GOOGLE_CLIENT_ID = "951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9.apps.googleusercontent.com";
+				GOOGLE_DRIVE_ROOT_FOLDER = "FEEDBACK AURORA CIRCUIT";
+				GOOGLE_REVERSED_CLIENT_ID = "com.googleusercontent.apps.951737113454-rf3b35lkbk57muqi8naue3ql5v8i2hi9";
+				INFOPLIST_FILE = JueceoCoreografias/Info.plist;
+				"INFOPLIST_FILE[sdk=macosx*]" = "JueceoCoreografias/Info-macOS.plist";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.goldencrowvs.jueceoauroracircuit;
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=macosx*]" = com.goldencrowvs.jueceoauroracircuit.mac;
+				PRODUCT_NAME = AuroraCircuit;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) AURORA_CIRCUIT";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		00CCE2ED4176175BECAFFA87 /* Build configuration list for PBXNativeTarget "PrismaOpen" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				852B0B6AD1FCED515E758179 /* Release */,
+				4087976FFDA062E5E1575BFD /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		060000000000000000000001 /* Build configuration list for PBXProject "JueceoCoreografias" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -481,7 +839,31 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		866E2B72736F46D287580443 /* Build configuration list for PBXNativeTarget "AuroraCircuit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A396D101CABCC9BACDF5356B /* Release */,
+				FB3F5BAB7FBD76F5110C403A /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		0B0000000000000000000001 /* XCLocalSwiftPackageReference "JueceoCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/JueceoCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		0C0000000000000000000001 /* JueceoCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 0B0000000000000000000001 /* XCLocalSwiftPackageReference "JueceoCore" */;
+			productName = JueceoCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 080000000000000000000001 /* Project object */;
 }

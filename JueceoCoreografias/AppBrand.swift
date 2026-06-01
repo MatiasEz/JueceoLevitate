@@ -6,8 +6,15 @@ import UIKit
 #endif
 
 enum AppBrand {
-    // Swap this value to `.auroraCircuit` or `.prismaOpen` when creating a new branded shell.
-    static let competition = CompetitionBranding.prismaOpen
+    static let competition: CompetitionBranding = {
+        #if AURORA_CIRCUIT
+        .auroraCircuit
+        #elseif PRISMA_OPEN
+        .prismaOpen
+        #else
+        .levitate
+        #endif
+    }()
 }
 
 extension CompetitionBrandColor {
