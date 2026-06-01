@@ -193,7 +193,10 @@ enum DictamenBuilder {
         }
 
         return rows.sorted { lhs, rhs in
-            routineOrder(lhs.result.routine, rhs.result.routine)
+            if abs(lhs.result.aggregateTotal - rhs.result.aggregateTotal) < 0.0001 {
+                return routineOrder(lhs.result.routine, rhs.result.routine)
+            }
+            return lhs.result.aggregateTotal < rhs.result.aggregateTotal
         }
     }
 

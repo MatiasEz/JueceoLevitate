@@ -8,7 +8,7 @@
 4. Run `supabase/migrations/0002_excel_imports.sql` only if you want to keep the legacy pending Excel queue.
 5. Run `supabase/migrations/0003_blocks_model.sql` to enable the event -> blocks -> routines model.
 6. Run `supabase/migrations/0004_judge_roles.sql` to persist judge/admin roles.
-7. Run `supabase/migrations/0005_routine_favorites.sql` to persist favorite routine picks.
+7. Run `supabase/migrations/0005_routine_favorites.sql` to persist legacy favorite routine picks.
 8. Run `supabase/migrations/0006_routine_penalties.sql` to persist penalties.
 9. Run `supabase/migrations/0007_routine_participants.sql` to persist program participants.
 10. Run `supabase/migrations/0008_judge_hero_images.sql` to persist judge hero image names.
@@ -17,7 +17,8 @@
 13. Run `supabase/migrations/0011_special_awards_manual_porra.sql` so `Mejor porra` is stored as manual text instead of a routine assignment.
 14. Run `supabase/migrations/0012_judge_activity.sql` to persist judge presence/activity in the judging sheet.
 15. Run `supabase/migrations/0013_special_awards_all_manual.sql` so all special awards are stored as manual text.
-16. Copy `.env.example` to `.env` at the repo root and fill:
+16. Run `supabase/migrations/0014_routine_favorite_votes.sql` to allow multiple favorite votes per category and routine.
+17. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
 SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co

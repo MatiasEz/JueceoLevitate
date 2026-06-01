@@ -127,7 +127,7 @@ python3 scripts/migrate_legacy_blocks_to_event.py
 
 Los roles de personas estan en `supabase/migrations/0004_judge_roles.sql`. `ATI` queda como `admin`; los demas quedan como `judge`. En la app, los jueces solo acceden a calificacion, mientras que admin puede entrar a bloques, ranking, dictamen e importacion Excel.
 
-Los favoritos de vestuario/coreografia/musica se guardan en `supabase/migrations/0005_routine_favorites.sql`. La tabla mantiene una seleccion por evento, bloque, juez y tipo de favorito.
+Los favoritos de vestuario/coreografia/musica se migran con `supabase/migrations/0014_routine_favorite_votes.sql`. La tabla nueva mantiene votos por evento, bloque, coreografia, juez y tipo de favorito, permitiendo mas de una favorita por categoria dentro del mismo bloque.
 
 Las penalizaciones por rutina y juez se guardan en `supabase/migrations/0006_routine_penalties.sql` y se aplican al total final.
 
