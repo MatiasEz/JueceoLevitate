@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 
 #if canImport(UIKit)
 import UIKit
@@ -58,45 +59,48 @@ enum AppSection: String, CaseIterable, Identifiable {
 }
 
 enum LevitTheme {
-    static let pink = Color(red: 0.93, green: 0.16, blue: 0.45)
-    static let hotPink = Color(red: 1.0, green: 0.25, blue: 0.56)
-    static let palePink = adaptive(light: (1.0, 0.90, 0.94, 1.0), dark: (0.24, 0.08, 0.15, 1.0))
-    static let dark = Color(red: 0.045, green: 0.055, blue: 0.075)
-    static let darkPanel = Color(red: 0.085, green: 0.10, blue: 0.13)
-    static let darkPanel2 = Color(red: 0.115, green: 0.13, blue: 0.16)
-    static let ink = adaptive(light: (0.12, 0.13, 0.17, 1.0), dark: (0.94, 0.95, 0.98, 1.0))
-    static let muted = adaptive(light: (0.48, 0.49, 0.56, 1.0), dark: (0.64, 0.66, 0.73, 1.0))
-    static let paper = adaptive(light: (0.985, 0.985, 0.99, 1.0), dark: (0.045, 0.055, 0.075, 1.0))
-    static let surface = adaptive(light: (1.0, 1.0, 1.0, 0.74), dark: (0.115, 0.13, 0.16, 0.78))
-    static let solidSurface = adaptive(light: (1.0, 1.0, 1.0, 1.0), dark: (0.115, 0.13, 0.16, 1.0))
-    static let elevatedSurface = adaptive(light: (1.0, 1.0, 1.0, 0.88), dark: (0.14, 0.155, 0.19, 0.92))
-    static let sidebarSurface = adaptive(light: (1.0, 1.0, 1.0, 0.76), dark: (1.0, 1.0, 1.0, 0.035))
-    static let softFill = adaptive(light: (0.0, 0.0, 0.0, 0.045), dark: (1.0, 1.0, 1.0, 0.075))
-    static let cardStroke = adaptive(light: (1.0, 1.0, 1.0, 0.86), dark: (1.0, 1.0, 1.0, 0.08))
-    static let line = adaptive(light: (0.0, 0.0, 0.0, 0.07), dark: (1.0, 1.0, 1.0, 0.08))
-    static let silverPodium = adaptive(light: (0.93, 0.93, 0.95, 1.0), dark: (0.15, 0.16, 0.19, 1.0))
-    static let bronzePodium = adaptive(light: (0.98, 0.90, 0.84, 1.0), dark: (0.20, 0.15, 0.12, 1.0))
+    private static var palette: CompetitionColorPalette { AppBrand.competition.colorPalette }
+
+    static var pink: Color { color(palette.primary) }
+    static var hotPink: Color { color(palette.secondary) }
+    static var palePink: Color { adaptive(palette.accentTint) }
+    static var dark: Color { color(palette.dark) }
+    static var darkPanel: Color { color(palette.darkPanel) }
+    static var darkPanel2: Color { color(palette.darkPanel2) }
+    static var ink: Color { adaptive(palette.ink) }
+    static var muted: Color { adaptive(palette.muted) }
+    static var paper: Color { adaptive(palette.paper) }
+    static var surface: Color { adaptive(palette.surface) }
+    static var solidSurface: Color { adaptive(palette.solidSurface) }
+    static var elevatedSurface: Color { adaptive(palette.elevatedSurface) }
+    static var sidebarSurface: Color { adaptive(palette.sidebarSurface) }
+    static var softFill: Color { adaptive(palette.softFill) }
+    static var cardStroke: Color { adaptive(palette.cardStroke) }
+    static var line: Color { adaptive(palette.line) }
+    static var silverPodium: Color { adaptive(palette.silverPodium) }
+    static var bronzePodium: Color { adaptive(palette.bronzePodium) }
 
     static var pinkGradient: LinearGradient {
         LinearGradient(colors: [hotPink, pink], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    private static func adaptive(
-        light: (Double, Double, Double, Double),
-        dark: (Double, Double, Double, Double)
-    ) -> Color {
+    private static func color(_ value: CompetitionBrandColor) -> Color {
+        Color(red: value.red, green: value.green, blue: value.blue, opacity: value.alpha)
+    }
+
+    private static func adaptive(_ value: CompetitionAdaptiveColor) -> Color {
         #if canImport(UIKit)
         Color(UIColor { traits in
-            let value = traits.userInterfaceStyle == .dark ? dark : light
+            let resolved = traits.userInterfaceStyle == .dark ? value.dark : value.light
             return UIColor(
-                red: CGFloat(value.0),
-                green: CGFloat(value.1),
-                blue: CGFloat(value.2),
-                alpha: CGFloat(value.3)
+                red: CGFloat(resolved.red),
+                green: CGFloat(resolved.green),
+                blue: CGFloat(resolved.blue),
+                alpha: CGFloat(resolved.alpha)
             )
         })
         #else
-        Color(red: light.0, green: light.1, blue: light.2, opacity: light.3)
+        color(value.light)
         #endif
     }
 }
@@ -710,13 +714,13 @@ struct LevitBrand: View {
     var isCompact = false
 
     var body: some View {
-        Image("LevitateLogo")
+        Image(AppBrand.competition.logoAssetName)
             .renderingMode(.template)
             .resizable()
             .scaledToFit()
             .frame(width: isCompact ? 136 : 204, height: isCompact ? 40 : 60, alignment: .leading)
             .foregroundStyle(LevitTheme.ink)
-            .accessibilityLabel("Levitate")
+            .accessibilityLabel(AppBrand.competition.displayName)
     }
 }
 
@@ -1222,7 +1226,7 @@ struct DashboardHeroBackground: View {
         if let tokenMatch = judgeHeroImages.first(where: { judgeTokens.contains($0.0) }) {
             return tokenMatch.1
         }
-        return "LevitateDancerHero"
+        return AppBrand.competition.heroFallbackAssetName
     }
 
     private var showsHeroImage: Bool {

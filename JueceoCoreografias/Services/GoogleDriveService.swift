@@ -1,6 +1,7 @@
 import AuthenticationServices
 import CryptoKit
 import Foundation
+import JueceoCore
 import Security
 #if canImport(UIKit)
 import UIKit
@@ -500,7 +501,7 @@ struct GoogleDriveConfig: Sendable {
             ?? Bundle.main.object(forInfoDictionaryKey: "GOOGLE_REVERSED_CLIENT_ID") as? String
         let rootFolder = environment["GOOGLE_DRIVE_ROOT_FOLDER"]
             ?? Bundle.main.object(forInfoDictionaryKey: "GOOGLE_DRIVE_ROOT_FOLDER") as? String
-            ?? "FEEDBACK LEVITATE MX"
+            ?? AppBrand.competition.driveRootFolderName
 
         guard
             let clientID = clean(rawClientID),
@@ -511,7 +512,7 @@ struct GoogleDriveConfig: Sendable {
         return GoogleDriveConfig(
             clientID: clientID,
             reversedClientID: reversedClientID,
-            rootFolderName: clean(rootFolder) ?? "FEEDBACK LEVITATE MX"
+            rootFolderName: clean(rootFolder) ?? AppBrand.competition.driveRootFolderName
         )
     }
 

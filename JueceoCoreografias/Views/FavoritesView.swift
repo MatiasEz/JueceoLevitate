@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 
 struct FavoritesView: View {
     @EnvironmentObject private var store: JudgingStore

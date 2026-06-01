@@ -1,4 +1,5 @@
 import SwiftUI
+import JueceoCore
 import UniformTypeIdentifiers
 
 struct PhoneContentView: View {
@@ -594,21 +595,7 @@ private struct PhoneScoreSheet: View {
     }
 
     private var allowedAdminScoringJudgeNames: [String] {
-        isSelectedBlockFour ? ["DANIEL", "ANGELA", "YOLI"] : ["DANIEL", "ALEX", "VLADIMIR"]
-    }
-
-    private var isSelectedBlockFour: Bool {
-        guard let block = store.selectedBlock else { return false }
-        let candidates = [block.id, block.name, block.title].map(\.normalizedKey)
-        return candidates.contains { value in
-            value == "4"
-                || value == "BLOQUE 4"
-                || value == "BLOQUE 04"
-                || value.contains("BLOQUE 4")
-                || value.contains("BLOQUE 04")
-                || value.hasSuffix("-4")
-                || value.hasSuffix("_4")
-        }
+        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
     }
 
     var body: some View {

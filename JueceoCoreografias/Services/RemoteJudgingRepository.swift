@@ -1,4 +1,5 @@
 import Foundation
+import JueceoCore
 
 enum LoadDiagnostics {
     static var isEnabled: Bool {
@@ -19,7 +20,7 @@ enum LoadDiagnostics {
 
     static func log(_ message: String) {
         guard isEnabled else { return }
-        print("[LevitateLoad] \(message)")
+        print("[\(AppBrand.competition.displayName)Load] \(message)")
     }
 
     static func tableName(from path: String) -> String {
@@ -1085,7 +1086,7 @@ private struct JudgeRow: Codable, Sendable {
         JudgeProfile(
             judgeID: judgeID,
             name: name,
-            role: UserRole(rawValue: role ?? "") ?? (judgeID == "ati" ? .admin : .judge),
+            role: UserRole(rawValue: role ?? "") ?? (AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge),
             heroImageName: heroImageName
         )
     }

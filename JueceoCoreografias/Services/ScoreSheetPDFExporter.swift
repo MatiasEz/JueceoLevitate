@@ -1,4 +1,5 @@
 import Foundation
+import JueceoCore
 import UIKit
 
 enum ScoreSheetPDFExporter {
@@ -401,8 +402,8 @@ enum ScoreSheetPDFExporter {
     )
 
     private enum Theme {
-        static let paleYellow = UIColor(red: 0.996, green: 0.949, blue: 0.796, alpha: 1)
-        static let headerFill = UIColor(red: 0.92, green: 0.92, blue: 0.92, alpha: 1)
+        static var paleYellow: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.48) }
+        static var headerFill: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.68) }
         static let grid = UIColor(white: 0.12, alpha: 1)
     }
 
