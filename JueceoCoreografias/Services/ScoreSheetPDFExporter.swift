@@ -135,7 +135,7 @@ enum ScoreSheetPDFExporter {
         )
 
         let meta = [
-            clean(sourceName, fallback: "LEVITATE CDMX 2026"),
+            clean(sourceName, fallback: AppBrand.competition.displayName),
             academyName.map { "ACADEMIA: \(clean($0, fallback: "-"))" } ?? "TODAS LAS ACADEMIAS",
             "PENALIZACIÓN: VER TABLA"
         ]

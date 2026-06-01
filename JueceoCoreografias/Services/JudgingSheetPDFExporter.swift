@@ -136,7 +136,7 @@ enum JudgingSheetPDFExporter {
             in: CGRect(x: margin, y: heroTop - 4, width: 178, height: 52)
         )
         drawText(
-            "CDMX 2026",
+            AppBrand.competition.displayName.uppercased(),
             in: CGRect(x: margin + 214, y: heroTop + 18, width: 156, height: 26),
             size: 21,
             weight: .heavy,

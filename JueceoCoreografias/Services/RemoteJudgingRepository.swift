@@ -4,9 +4,11 @@ import JueceoCore
 enum LoadDiagnostics {
     static var isEnabled: Bool {
         #if DEBUG
-        true
+        return true
         #else
-        ProcessInfo.processInfo.environment["LEVITATE_LOAD_LOGS"] == "1"
+        let environment = ProcessInfo.processInfo.environment
+        let brandLogKey = "\(AppBrand.competition.id.uppercased().replacingOccurrences(of: "-", with: "_"))_LOAD_LOGS"
+        return environment["JUECEO_LOAD_LOGS"] == "1" || environment[brandLogKey] == "1"
         #endif
     }
 
