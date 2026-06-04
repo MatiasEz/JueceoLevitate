@@ -21,6 +21,8 @@ struct AdminView: View {
     @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
+    @State private var mailFolderName = ""
+    @State private var isMailFolderPromptPresented = false
     @State private var isRefreshingData = false
     @State private var isUpdatingRoutineLevel = false
 
@@ -89,6 +91,7 @@ struct AdminView: View {
         .onAppear {
             normalizeSelection()
             prepareDefaultDriveFolderName()
+            prepareDefaultMailFolderName()
         }
         .onChange(of: store.selectedBlock?.id ?? "") { _, _ in
             normalizeSelection()
@@ -129,6 +132,26 @@ struct AdminView: View {
             }
         } message: {
             Text(driveFolderErrorMessage ?? "")
+        }
+        .alert("Enviar links", isPresented: $isMailFolderPromptPresented) {
+            TextField("Nombre de carpeta", text: $mailFolderName)
+                .textInputAutocapitalization(.words)
+                .disableAutocorrection(true)
+
+            Button("Buscar en Drive y enviar") {
+                Task { await sendMailFromDriveFolder() }
+            }
+            .disabled(cleanMailFolderName.isEmpty || store.judgingSheetMailStatus.isSending)
+
+            Button("Enviar últimos links") {
+                isMailFolderPromptPresented = false
+                Task { await store.sendLastDriveLinksByMail() }
+            }
+            .disabled(store.judgingSheetMailStatus.isSending)
+
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
         }
         .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
             SecureField("Clave de importación", text: $deleteRoutineImportSecret)
@@ -216,26 +239,42 @@ struct AdminView: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(LevitTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let mailMessage = store.judgingSheetMailMessage {
+                    Text("Mail: \(mailMessage)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(mailStatusColor)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer()
 
-            Button {
-                presentDriveFolderPrompt()
-            } label: {
-                Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
-                    .font(.callout.weight(.black))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 12)
-                    .foregroundStyle(.white)
-                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14))
-                    .contentShape(RoundedRectangle(cornerRadius: 14))
+            HStack(spacing: 10) {
+                Button {
+                    presentDriveFolderPrompt()
+                } label: {
+                    Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
+                        .font(.callout.weight(.black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(.white)
+                        .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14))
+                        .contentShape(RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
+                .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
+
+                JudgingSheetMailButton(
+                    status: store.judgingSheetMailStatus,
+                    isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder
+                ) {
+                    presentMailFolderPrompt()
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
-            .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
         }
         .padding(18)
         .background(LevitTheme.elevatedSurface, in: RoundedRectangle(cornerRadius: 18))
@@ -524,15 +563,31 @@ struct AdminView: View {
         driveFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var cleanMailFolderName: String {
+        mailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func prepareDefaultDriveFolderName() {
         guard cleanDriveFolderName.isEmpty else { return }
         driveFolderName = store.defaultDriveRootFolderName
+    }
+
+    private func prepareDefaultMailFolderName() {
+        guard cleanMailFolderName.isEmpty else { return }
+        mailFolderName = store.lastDriveExportSummary?.rootFolderName
+            ?? (cleanDriveFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanDriveFolderName)
     }
 
     private func presentDriveFolderPrompt() {
         guard !store.driveExportStatus.isExporting, !isCheckingDriveFolder else { return }
         prepareDefaultDriveFolderName()
         isDriveFolderPromptPresented = true
+    }
+
+    private func presentMailFolderPrompt() {
+        guard !store.judgingSheetMailStatus.isSending else { return }
+        prepareDefaultMailFolderName()
+        isMailFolderPromptPresented = true
     }
 
     @MainActor
@@ -560,6 +615,14 @@ struct AdminView: View {
     private func exportDrive(named folderName: String) async {
         resetPendingDriveOverwrite()
         await store.exportSelectedBlockToDrive(rootFolderName: folderName)
+    }
+
+    @MainActor
+    private func sendMailFromDriveFolder() async {
+        let folderName = cleanMailFolderName
+        guard !folderName.isEmpty else { return }
+        isMailFolderPromptPresented = false
+        await store.sendDriveLinksByMail(rootFolderName: folderName)
     }
 
     private func resetPendingDriveOverwrite() {
@@ -610,6 +673,19 @@ struct AdminView: View {
             .red
         }
     }
+
+    private var mailStatusColor: Color {
+        switch store.judgingSheetMailStatus {
+        case .idle:
+            store.hasJudgingSheetMailConfiguration && store.configuredAcademyMailCount > 0 ? .green : .orange
+        case .sending:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
+        }
+    }
 }
 
 struct ScoreEditorView: View {
@@ -624,6 +700,8 @@ struct ScoreEditorView: View {
     @State private var isDriveOverwriteAlertPresented = false
     @State private var driveFolderErrorMessage: String?
     @State private var isCheckingDriveFolder = false
+    @State private var mailFolderName = ""
+    @State private var isMailFolderPromptPresented = false
     @State private var routineMetadataUpdateKey: String?
 
     private let minimumRoutineColumnWidth: CGFloat = 560
@@ -684,6 +762,7 @@ struct ScoreEditorView: View {
         .foregroundStyle(LevitTheme.ink)
         .onAppear {
             prepareDefaultDriveFolderName()
+            prepareDefaultMailFolderName()
         }
         .task {
             await pollJudgeActivity()
@@ -723,6 +802,26 @@ struct ScoreEditorView: View {
         } message: {
             Text(driveFolderErrorMessage ?? "")
         }
+        .alert("Enviar links", isPresented: $isMailFolderPromptPresented) {
+            TextField("Nombre de carpeta", text: $mailFolderName)
+                .textInputAutocapitalization(.words)
+                .disableAutocorrection(true)
+
+            Button("Buscar en Drive y enviar") {
+                Task { await sendMailFromDriveFolder() }
+            }
+            .disabled(cleanMailFolderName.isEmpty || store.judgingSheetMailStatus.isSending)
+
+            Button("Enviar últimos links") {
+                isMailFolderPromptPresented = false
+                Task { await store.sendLastDriveLinksByMail() }
+            }
+            .disabled(store.judgingSheetMailStatus.isSending)
+
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
+        }
     }
 
     private var driveExportPanel: some View {
@@ -749,26 +848,42 @@ struct ScoreEditorView: View {
                     .font(.callout.weight(.semibold))
                     .foregroundStyle(LevitTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                if let mailMessage = store.judgingSheetMailMessage {
+                    Text("Mail: \(mailMessage)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(mailStatusColor)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Spacer()
 
-            Button {
-                presentDriveFolderPrompt()
-            } label: {
-                Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
-                    .font(.headline.weight(.black))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.74)
-                    .padding(.horizontal, 22)
-                    .padding(.vertical, 16)
-                    .foregroundStyle(.white)
-                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            HStack(spacing: 10) {
+                Button {
+                    presentDriveFolderPrompt()
+                } label: {
+                    Label("Exportar a Drive", systemImage: "icloud.and.arrow.up")
+                        .font(.headline.weight(.black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.74)
+                        .padding(.horizontal, 22)
+                        .padding(.vertical, 16)
+                        .foregroundStyle(.white)
+                        .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
+                .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
+
+                JudgingSheetMailButton(
+                    status: store.judgingSheetMailStatus,
+                    isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder
+                ) {
+                    presentMailFolderPrompt()
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(store.driveExportStatus.isExporting || isCheckingDriveFolder)
-            .opacity(store.driveExportStatus.isExporting || isCheckingDriveFolder ? 0.58 : 1)
         }
         .padding(20)
         .background(
@@ -1065,15 +1180,31 @@ struct ScoreEditorView: View {
         driveFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var cleanMailFolderName: String {
+        mailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func prepareDefaultDriveFolderName() {
         guard cleanDriveFolderName.isEmpty else { return }
         driveFolderName = store.defaultDriveRootFolderName
+    }
+
+    private func prepareDefaultMailFolderName() {
+        guard cleanMailFolderName.isEmpty else { return }
+        mailFolderName = store.lastDriveExportSummary?.rootFolderName
+            ?? (cleanDriveFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanDriveFolderName)
     }
 
     private func presentDriveFolderPrompt() {
         guard !store.driveExportStatus.isExporting, !isCheckingDriveFolder else { return }
         prepareDefaultDriveFolderName()
         isDriveFolderPromptPresented = true
+    }
+
+    private func presentMailFolderPrompt() {
+        guard !store.judgingSheetMailStatus.isSending else { return }
+        prepareDefaultMailFolderName()
+        isMailFolderPromptPresented = true
     }
 
     @MainActor
@@ -1103,6 +1234,14 @@ struct ScoreEditorView: View {
         await store.exportSelectedBlockToDrive(rootFolderName: folderName)
     }
 
+    @MainActor
+    private func sendMailFromDriveFolder() async {
+        let folderName = cleanMailFolderName
+        guard !folderName.isEmpty else { return }
+        isMailFolderPromptPresented = false
+        await store.sendDriveLinksByMail(rootFolderName: folderName)
+    }
+
     private func resetPendingDriveOverwrite() {
         isDriveOverwriteAlertPresented = false
         driveFolderPendingOverwrite = nil
@@ -1119,6 +1258,58 @@ struct ScoreEditorView: View {
         case .failed:
             .red
         }
+    }
+
+    private var mailStatusColor: Color {
+        switch store.judgingSheetMailStatus {
+        case .idle:
+            store.hasJudgingSheetMailConfiguration && store.configuredAcademyMailCount > 0 ? .green : .orange
+        case .sending:
+            .blue
+        case .completed:
+            .green
+        case .failed:
+            .red
+        }
+    }
+}
+
+private struct JudgingSheetMailButton: View {
+    let status: JudgingSheetMailStatus
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            guard !status.isSending else { return }
+            action()
+        } label: {
+            HStack(spacing: 8) {
+                if status.isSending {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(LevitTheme.pink)
+                } else {
+                    Image(systemName: status.systemImage)
+                        .font(.callout.weight(.black))
+                }
+
+                Text(status.isSending ? "Enviando" : "Enviar links")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .font(.callout.weight(.black))
+            .frame(minWidth: 132)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled || status.isSending)
+        .opacity(isDisabled || status.isSending ? 0.58 : 1)
     }
 }
 

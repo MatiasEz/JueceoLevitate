@@ -5,6 +5,7 @@ struct ScoresView: View {
     @EnvironmentObject private var store: JudgingStore
     let results: [RoutineResult]
     let onExportPDF: () -> Void
+    let onExportCompleteRankingPDF: () -> Void
 
     @State private var selectedAcademy = allFilter
     @State private var selectedGenre = allFilter
@@ -68,15 +69,28 @@ struct ScoresView: View {
             .disabled(store.isLoadingBackendData)
             .opacity(store.isLoadingBackendData ? 0.58 : 1)
 
-            Button(action: onExportPDF) {
-                Label("Exportar PDF", systemImage: "doc.richtext")
-                    .font(.callout.weight(.black))
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 13)
-                    .foregroundStyle(.white)
-                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 13))
+            HStack(spacing: 10) {
+                Button(action: onExportCompleteRankingPDF) {
+                    Label("Ranking total", systemImage: "list.number")
+                        .font(.callout.weight(.black))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 13)
+                        .foregroundStyle(LevitTheme.ink)
+                        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
+                }
+                .buttonStyle(.plain)
+
+                Button(action: onExportPDF) {
+                    Label("Exportar PDF", systemImage: "doc.richtext")
+                        .font(.callout.weight(.black))
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 13)
+                        .foregroundStyle(.white)
+                        .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 13))
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
     }
 

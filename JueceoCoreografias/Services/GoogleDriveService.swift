@@ -15,9 +15,33 @@ struct GoogleDriveUploadedFile: Identifiable, Decodable, Sendable {
     let webViewLink: String?
 }
 
+struct GoogleDriveJudgingSheetLink: Identifiable, Sendable {
+    let fileID: String
+    let fileName: String
+    let webViewLink: String?
+    let academy: String
+    let blockName: String
+    let routineID: String
+    let routineName: String
+    let judge: String
+
+    var id: String { fileID }
+}
+
 struct GoogleDriveExportSummary: Sendable {
     let rootFolderName: String
     let uploadedFiles: [GoogleDriveUploadedFile]
+    let judgingSheets: [GoogleDriveJudgingSheetLink]
+
+    init(
+        rootFolderName: String,
+        uploadedFiles: [GoogleDriveUploadedFile],
+        judgingSheets: [GoogleDriveJudgingSheetLink] = []
+    ) {
+        self.rootFolderName = rootFolderName
+        self.uploadedFiles = uploadedFiles
+        self.judgingSheets = judgingSheets
+    }
 }
 
 enum GoogleDriveServiceError: LocalizedError {
@@ -87,6 +111,35 @@ final class GoogleDriveService {
         let accessToken = try await validAccessToken()
         let folderID = try await existingFolderPath(folderPath, accessToken: accessToken)
         return try await replacePDF(fileURL: fileURL, fileName: fileName, parentFolderID: folderID, accessToken: accessToken)
+    }
+
+    func judgingSheetLinks(rootFolderName: String, blockFolderName: String) async throws -> [GoogleDriveJudgingSheetLink] {
+        let accessToken = try await validAccessToken()
+        let blockFolderID = try await existingFolderPath([rootFolderName, blockFolderName], accessToken: accessToken)
+        let academyFolders = try await listFiles(parentID: blockFolderID, mimeType: GoogleDriveMIME.folder, accessToken: accessToken)
+        var links: [GoogleDriveJudgingSheetLink] = []
+
+        for academyFolder in academyFolders {
+            let routineFolders = try await listFiles(parentID: academyFolder.id, mimeType: GoogleDriveMIME.folder, accessToken: accessToken)
+            for routineFolder in routineFolders {
+                let routine = GoogleDriveHelpers.routineMetadata(from: routineFolder.name)
+                let pdfs = try await listFiles(parentID: routineFolder.id, mimeType: GoogleDriveMIME.pdf, accessToken: accessToken)
+                for pdf in pdfs {
+                    links.append(GoogleDriveJudgingSheetLink(
+                        fileID: pdf.id,
+                        fileName: pdf.name,
+                        webViewLink: pdf.webViewLink,
+                        academy: academyFolder.name,
+                        blockName: blockFolderName,
+                        routineID: routine.id,
+                        routineName: routine.name,
+                        judge: GoogleDriveHelpers.judgeName(from: pdf.name)
+                    ))
+                }
+            }
+        }
+
+        return links
     }
 
     private func ensureFolderPath(_ folderPath: [String], accessToken: String) async throws -> String {
@@ -287,6 +340,43 @@ final class GoogleDriveService {
         let data = try await authorizedData(for: request)
         let response = try JSONDecoder().decode(GoogleDriveFilesResponse.self, from: data)
         return response.files.first
+    }
+
+    private func listFiles(parentID: String, mimeType: String, accessToken: String) async throws -> [GoogleDriveUploadedFile] {
+        var files: [GoogleDriveUploadedFile] = []
+        var pageToken: String?
+
+        repeat {
+            var components = URLComponents(string: "https://www.googleapis.com/drive/v3/files")
+            let query = [
+                "'\(GoogleDriveHelpers.queryEscaped(parentID))' in parents",
+                "mimeType = '\(mimeType)'",
+                "trashed = false"
+            ].joined(separator: " and ")
+            var queryItems = [
+                URLQueryItem(name: "q", value: query),
+                URLQueryItem(name: "spaces", value: "drive"),
+                URLQueryItem(name: "fields", value: "nextPageToken,files(id,name,webViewLink)"),
+                URLQueryItem(name: "pageSize", value: "1000")
+            ]
+            if let pageToken {
+                queryItems.append(URLQueryItem(name: "pageToken", value: pageToken))
+            }
+            components?.queryItems = queryItems
+
+            guard let url = components?.url else {
+                throw GoogleDriveServiceError.invalidResponse
+            }
+            var request = URLRequest(url: url)
+            request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+
+            let data = try await authorizedData(for: request)
+            let response = try JSONDecoder().decode(GoogleDriveFilesResponse.self, from: data)
+            files.append(contentsOf: response.files)
+            pageToken = response.nextPageToken
+        } while pageToken != nil
+
+        return files.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     private func createFolder(named name: String, parentID: String, accessToken: String) async throws -> GoogleDriveUploadedFile {
@@ -647,6 +737,7 @@ private struct GoogleDriveMetadata: Encodable {
 
 private struct GoogleDriveFilesResponse: Decodable {
     let files: [GoogleDriveUploadedFile]
+    let nextPageToken: String?
 }
 
 private struct GoogleDriveErrorResponse: Decodable {
@@ -690,6 +781,30 @@ private enum GoogleDriveHelpers {
         body.append(fileData)
         body.append("\r\n--\(boundary)--\r\n")
         return body
+    }
+
+    static func routineMetadata(from folderName: String) -> (id: String, name: String) {
+        let trimmed = folderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("#") else {
+            return ("", trimmed)
+        }
+
+        let remainder = trimmed.dropFirst()
+        let parts = remainder.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard let id = parts.first else {
+            return ("", trimmed)
+        }
+        let name = parts.count > 1 ? String(parts[1]) : trimmed
+        return (String(id), name)
+    }
+
+    static func judgeName(from fileName: String) -> String {
+        let baseName = fileName.replacingOccurrences(of: ".pdf", with: "", options: [.caseInsensitive], range: nil)
+        let parts = baseName.components(separatedBy: " - ")
+        guard let judge = parts.last, parts.count > 1 else {
+            return ""
+        }
+        return judge.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 

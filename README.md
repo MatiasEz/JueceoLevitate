@@ -232,6 +232,20 @@ Para habilitarlo:
 3. Reemplaza `GOOGLE_CLIENT_ID` y `GOOGLE_REVERSED_CLIENT_ID` en el `.xcconfig` del brand.
 4. Si el OAuth consent screen esta en testing, agrega la cuenta que usara la app como test user.
 
+## Enviar links por mail
+
+Despues de exportar a Drive, el panel admin muestra `Enviar links`. Ese boton puede tomar el ultimo resumen exportado o buscar una carpeta existente en Drive por nombre, agrupar las hojas disponibles por academia y llamar a un Web App de Google Apps Script para mandar el mail con asunto `Tu devolución de jueceo ya está disponible`.
+
+Para habilitarlo:
+
+1. Completa `JueceoCoreografias/Resources/academy_emails.json` con el mail de cada academia.
+2. Crea un Google Apps Script con el contenido de `scripts/apps_script_send_judging_links.js`.
+3. Si queres proteger el endpoint, define la script property `JUDGING_MAIL_SHARED_SECRET`.
+4. Despliega el script como Web App, copiá la URL y pegala en `JUDGING_MAIL_SCRIPT_URL` del `.xcconfig` del brand.
+5. Si usaste secreto, pega el mismo valor en `JUDGING_MAIL_SHARED_SECRET`.
+
+El script envia un mail por academia y, con `grantDriveAccess` activo, agrega el email como viewer de cada PDF de Drive antes de enviar. Si faltan links o permisos para alguna hoja, omite esa hoja y sigue con las disponibles.
+
 ## Funciones
 
 - Bloques de coreografías desde Excel.

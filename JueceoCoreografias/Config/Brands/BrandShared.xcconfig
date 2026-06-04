@@ -6,3 +6,6 @@ INFOPLIST_FILE[sdk=macosx*] = JueceoCoreografias/Info-macOS.plist
 
 DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO
 CODE_SIGN_ENTITLEMENTS[sdk=macosx*] = JueceoCoreografias/Levitate-macOS.entitlements
+
+JUDGING_MAIL_SCRIPT_URL = https:/$()/script.google.com/macros/s/AKfycbx4SSvQFOH6VomuKGxwoae-gFeglNHqCuzLY3C122uK8igP1EFBHZiMllrF7CXS7DjK/exec
+JUDGING_MAIL_SHARED_SECRET =

@@ -154,6 +154,97 @@ enum PDFExporter {
         }
     }
 
+    static func exportCompleteBlockRanking(
+        sections: [(block: DanceBlock, results: [RoutineResult])],
+        title: String = "Ranking de puntaje total por bloque"
+    ) -> URL? {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ranking_por_bloque_completo")
+            .appendingPathExtension("pdf")
+
+        let format = UIGraphicsPDFRendererFormat()
+        format.documentInfo = [
+            kCGPDFContextCreator as String: "Jueceo Coreografías",
+            kCGPDFContextTitle as String: title
+        ]
+
+        let page = CGRect(x: 0, y: 0, width: 842, height: 595)
+        let margin: CGFloat = 38
+        let renderer = UIGraphicsPDFRenderer(bounds: page, format: format)
+        let topRows = completeRankingTopRows(from: sections)
+
+        do {
+            try renderer.writePDF(to: url) { context in
+                var pageNumber = 0
+
+                func finishPage() {
+                    guard pageNumber > 0 else { return }
+                    drawCompleteRankingFooter(pageNumber: pageNumber, page: page, margin: margin)
+                }
+
+                func beginRankingPage(sectionTitle: String, detail: String) -> CGFloat {
+                    finishPage()
+                    context.beginPage()
+                    pageNumber += 1
+
+                    var y = margin
+                    y = drawCompleteRankingHeader(title: title, y: y, margin: margin, page: page)
+                    y += 18
+                    y = drawCompleteRankingSectionHeader(title: sectionTitle, detail: detail, y: y, margin: margin, page: page)
+                    y += 10
+                    return drawCompleteRankingTableHeader(y: y, margin: margin)
+                }
+
+                for section in sections {
+                    let blockName = clean(section.block.name, fallback: clean(section.block.title, fallback: "Bloque"))
+                    var y = beginRankingPage(
+                        sectionTitle: blockName,
+                        detail: "\(section.results.filter { $0.aggregateTotal > 0 }.count) coreografías con puntaje"
+                    )
+
+                    for (index, result) in section.results.enumerated() {
+                        if y + CompleteRankingPDFLayout.rowHeight > page.height - margin - CompleteRankingPDFLayout.footerReservedHeight {
+                            y = beginRankingPage(
+                                sectionTitle: "\(blockName) - continuación",
+                                detail: "\(section.results.filter { $0.aggregateTotal > 0 }.count) coreografías con puntaje"
+                            )
+                        }
+
+                        drawCompleteRankingRow(
+                            result: result,
+                            y: y,
+                            margin: margin,
+                            rowIndex: index,
+                            isTopRow: index == 0 && result.aggregateTotal > 0
+                        )
+                        y += CompleteRankingPDFLayout.rowHeight
+                    }
+                }
+
+                var topY = beginRankingPage(sectionTitle: "TOP 15", detail: "15 coreografías con puntaje")
+                topY = drawCompleteRankingTopHeader(y: topY - CompleteRankingPDFLayout.tableHeaderHeight, margin: margin)
+                for (index, row) in topRows.enumerated() {
+                    if topY + CompleteRankingPDFLayout.rowHeight > page.height - margin - CompleteRankingPDFLayout.footerReservedHeight {
+                        topY = beginRankingPage(sectionTitle: "TOP 15 - continuación", detail: "15 coreografías con puntaje")
+                        topY = drawCompleteRankingTopHeader(y: topY - CompleteRankingPDFLayout.tableHeaderHeight, margin: margin)
+                    }
+
+                    drawCompleteRankingTopRow(row, position: index + 1, y: topY, margin: margin, rowIndex: index)
+                    topY += CompleteRankingPDFLayout.rowHeight
+                }
+
+                if sections.isEmpty && topRows.isEmpty {
+                    _ = beginRankingPage(sectionTitle: "Sin resultados", detail: "0 coreografías con puntaje")
+                }
+
+                finishPage()
+            }
+            return url
+        } catch {
+            return nil
+        }
+    }
+
     private static func dictamenPlacements(from results: [RoutineResult]) -> [String: CompetitionPlacement] {
         var placements: [String: CompetitionPlacement] = [:]
         for section in DictamenBuilder.sections(from: results) {
@@ -164,6 +255,213 @@ enum PDFExporter {
             }
         }
         return placements
+    }
+
+    private static func completeRankingTopRows(from sections: [(block: DanceBlock, results: [RoutineResult])]) -> [CompleteRankingRow] {
+        sections
+            .flatMap { section in
+                section.results
+                    .filter { $0.aggregateTotal > 0 }
+                    .map { CompleteRankingRow(blockName: section.block.name, result: $0) }
+            }
+            .sorted(by: completeRankingOrder)
+            .prefix(15)
+            .map { $0 }
+    }
+
+    private static func completeRankingOrder(_ lhs: CompleteRankingRow, _ rhs: CompleteRankingRow) -> Bool {
+        if abs(lhs.result.aggregateTotal - rhs.result.aggregateTotal) < 0.0001 {
+            return completeRankingRoutineOrder(lhs.result.routine, rhs.result.routine)
+        }
+        return lhs.result.aggregateTotal > rhs.result.aggregateTotal
+    }
+
+    private static func completeRankingRoutineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {
+        let lhsNumber = Int(lhs.id) ?? Int.max
+        let rhsNumber = Int(rhs.id) ?? Int.max
+        if lhsNumber == rhsNumber {
+            return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+        }
+        return lhsNumber < rhsNumber
+    }
+
+    private static func drawCompleteRankingHeader(title: String, y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        let logoRect = CGRect(x: margin, y: y, width: 166, height: CompleteRankingPDFLayout.logoHeight)
+        drawCompleteRankingLogo(in: logoRect)
+
+        drawText(
+            title,
+            in: CGRect(x: logoRect.maxX + 12, y: y + 13, width: page.width - logoRect.maxX - margin - 12, height: 30),
+            size: 25,
+            weight: .bold,
+            color: CompleteRankingTheme.ink,
+            alignment: .left
+        )
+        return y + CompleteRankingPDFLayout.logoHeight
+    }
+
+    private static func drawCompleteRankingLogo(in rect: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(CompleteRankingTheme.primary.cgColor)
+        context.fill(rect)
+
+        guard let image = UIImage(named: AppBrand.competition.logoAssetName) else {
+            drawText(
+                AppBrand.competition.displayName,
+                in: rect.insetBy(dx: 14, dy: 17),
+                size: 22,
+                weight: .bold,
+                color: .white,
+                alignment: .center
+            )
+            return
+        }
+
+        let imageRect = aspectFitRect(for: image.size, in: rect.insetBy(dx: 14, dy: 9))
+        image.draw(in: imageRect)
+    }
+
+    private static func drawCompleteRankingSectionHeader(title: String, detail: String, y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
+        let rect = CGRect(x: margin, y: y, width: page.width - margin * 2, height: CompleteRankingPDFLayout.sectionHeight)
+        drawRankingRect(rect, fill: CompleteRankingTheme.palePink, stroke: CompleteRankingTheme.pinkStroke)
+        drawText(
+            title.uppercased(),
+            in: CGRect(x: rect.minX + 12, y: rect.minY + 10, width: rect.width * 0.52, height: 18),
+            size: 18,
+            weight: .bold,
+            color: CompleteRankingTheme.ink,
+            alignment: .left
+        )
+        drawText(
+            detail,
+            in: CGRect(x: rect.midX, y: rect.minY + 13, width: rect.width * 0.42, height: 14),
+            size: 9.5,
+            weight: .bold,
+            color: CompleteRankingTheme.muted,
+            alignment: .center
+        )
+        return rect.maxY
+    }
+
+    private static func drawCompleteRankingTableHeader(y: CGFloat, margin: CGFloat) -> CGFloat {
+        let columns = CompleteRankingPDFLayout.columns(margin: margin)
+        drawCompleteRankingHeaderCell("N° COREO", x: columns.numberX, y: y, width: columns.numberWidth, alignment: .center)
+        drawCompleteRankingHeaderCell("COREO", x: columns.choreographyX, y: y, width: columns.choreographyWidth, alignment: .left)
+        drawCompleteRankingHeaderCell("ACADEMIA", x: columns.academyX, y: y, width: columns.academyWidth, alignment: .left)
+        drawCompleteRankingHeaderCell("PUNTAJE", x: columns.scoreX, y: y, width: columns.scoreWidth, alignment: .right)
+        return y + CompleteRankingPDFLayout.tableHeaderHeight
+    }
+
+    private static func drawCompleteRankingTopHeader(y: CGFloat, margin: CGFloat) -> CGFloat {
+        let columns = CompleteRankingPDFLayout.topColumns(margin: margin)
+        drawCompleteRankingHeaderCell("POS.", x: columns.positionX, y: y, width: columns.positionWidth, alignment: .center)
+        drawCompleteRankingHeaderCell("N° COREO", x: columns.numberX, y: y, width: columns.numberWidth, alignment: .center)
+        drawCompleteRankingHeaderCell("COREO", x: columns.choreographyX, y: y, width: columns.choreographyWidth, alignment: .left)
+        drawCompleteRankingHeaderCell("ACADEMIA", x: columns.academyX, y: y, width: columns.academyWidth, alignment: .left)
+        drawCompleteRankingHeaderCell("BLOQUE", x: columns.blockX, y: y, width: columns.blockWidth, alignment: .left)
+        drawCompleteRankingHeaderCell("PUNTAJE", x: columns.scoreX, y: y, width: columns.scoreWidth, alignment: .right)
+        return y + CompleteRankingPDFLayout.tableHeaderHeight
+    }
+
+    private static func drawCompleteRankingHeaderCell(_ text: String, x: CGFloat, y: CGFloat, width: CGFloat, alignment: NSTextAlignment) {
+        drawRankingCell(
+            rect: CGRect(x: x, y: y, width: width, height: CompleteRankingPDFLayout.tableHeaderHeight),
+            text: text,
+            fill: CompleteRankingTheme.primary,
+            fontSize: 8.6,
+            weight: .bold,
+            color: .white,
+            alignment: alignment,
+            padding: 8
+        )
+    }
+
+    private static func drawCompleteRankingRow(
+        result: RoutineResult,
+        y: CGFloat,
+        margin: CGFloat,
+        rowIndex: Int,
+        isTopRow: Bool
+    ) {
+        let columns = CompleteRankingPDFLayout.columns(margin: margin)
+        let fill = isTopRow ? CompleteRankingTheme.palePink : (rowIndex.isMultiple(of: 2) ? .white : CompleteRankingTheme.alternateRow)
+        let routine = result.routine
+        drawRankingCell(rect: CGRect(x: columns.numberX, y: y, width: columns.numberWidth, height: CompleteRankingPDFLayout.rowHeight), text: routine.id, fill: fill, fontSize: 8.4, color: CompleteRankingTheme.ink)
+        drawRankingCell(rect: CGRect(x: columns.choreographyX, y: y, width: columns.choreographyWidth, height: CompleteRankingPDFLayout.rowHeight), text: titleCase(routine.name), fill: fill, fontSize: 8.2, weight: .bold, color: CompleteRankingTheme.ink, alignment: .left, padding: 8)
+        drawRankingCell(rect: CGRect(x: columns.academyX, y: y, width: columns.academyWidth, height: CompleteRankingPDFLayout.rowHeight), text: routine.academy.uppercased(), fill: fill, fontSize: 8.2, color: CompleteRankingTheme.ink, alignment: .left, padding: 8)
+        drawRankingCell(rect: CGRect(x: columns.scoreX, y: y, width: columns.scoreWidth, height: CompleteRankingPDFLayout.rowHeight), text: completeRankingScoreText(result.aggregateTotal), fill: fill, fontSize: 9.4, weight: .bold, color: CompleteRankingTheme.ink, alignment: .right, padding: 8)
+    }
+
+    private static func drawCompleteRankingTopRow(
+        _ row: CompleteRankingRow,
+        position: Int,
+        y: CGFloat,
+        margin: CGFloat,
+        rowIndex: Int
+    ) {
+        let columns = CompleteRankingPDFLayout.topColumns(margin: margin)
+        let fill = position == 1 ? CompleteRankingTheme.palePink : (rowIndex.isMultiple(of: 2) ? .white : CompleteRankingTheme.alternateRow)
+        let routine = row.result.routine
+        drawRankingCell(rect: CGRect(x: columns.positionX, y: y, width: columns.positionWidth, height: CompleteRankingPDFLayout.rowHeight), text: "\(position)", fill: fill, fontSize: 8.4, weight: .bold, color: position <= 3 ? CompleteRankingTheme.primary : CompleteRankingTheme.ink)
+        drawRankingCell(rect: CGRect(x: columns.numberX, y: y, width: columns.numberWidth, height: CompleteRankingPDFLayout.rowHeight), text: routine.id, fill: fill, fontSize: 8.4, color: CompleteRankingTheme.ink)
+        drawRankingCell(rect: CGRect(x: columns.choreographyX, y: y, width: columns.choreographyWidth, height: CompleteRankingPDFLayout.rowHeight), text: titleCase(routine.name), fill: fill, fontSize: 8.2, weight: .bold, color: CompleteRankingTheme.ink, alignment: .left, padding: 8)
+        drawRankingCell(rect: CGRect(x: columns.academyX, y: y, width: columns.academyWidth, height: CompleteRankingPDFLayout.rowHeight), text: routine.academy.uppercased(), fill: fill, fontSize: 8.2, color: CompleteRankingTheme.ink, alignment: .left, padding: 8)
+        drawRankingCell(rect: CGRect(x: columns.blockX, y: y, width: columns.blockWidth, height: CompleteRankingPDFLayout.rowHeight), text: row.blockName.uppercased(), fill: fill, fontSize: 8.2, color: CompleteRankingTheme.ink, alignment: .left, padding: 8)
+        drawRankingCell(rect: CGRect(x: columns.scoreX, y: y, width: columns.scoreWidth, height: CompleteRankingPDFLayout.rowHeight), text: completeRankingScoreText(row.result.aggregateTotal), fill: fill, fontSize: 9.4, weight: .bold, color: CompleteRankingTheme.ink, alignment: .right, padding: 8)
+    }
+
+    private static func drawCompleteRankingFooter(pageNumber: Int, page: CGRect, margin: CGFloat) {
+        drawText(
+            "\(AppBrand.competition.displayName) · Ranking de puntaje total",
+            in: CGRect(x: margin, y: page.height - 20, width: page.width * 0.42, height: 10),
+            size: 7.5,
+            weight: .bold,
+            color: CompleteRankingTheme.muted,
+            alignment: .left
+        )
+        drawText(
+            "Página \(pageNumber)",
+            in: CGRect(x: page.width - margin - 90, y: page.height - 20, width: 90, height: 10),
+            size: 7.5,
+            weight: .bold,
+            color: CompleteRankingTheme.muted,
+            alignment: .right
+        )
+    }
+
+    private static func drawRankingCell(
+        rect: CGRect,
+        text: String,
+        fill: UIColor,
+        fontSize: CGFloat,
+        weight: UIFont.Weight = .regular,
+        color: UIColor = .black,
+        alignment: NSTextAlignment = .center,
+        padding: CGFloat = 4
+    ) {
+        drawRankingRect(rect, fill: fill, stroke: CompleteRankingTheme.line)
+        drawText(text, in: rect.insetBy(dx: padding, dy: 5), size: fontSize, weight: weight, color: color, alignment: alignment)
+    }
+
+    private static func drawRankingRect(_ rect: CGRect, fill: UIColor, stroke: UIColor) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(fill.cgColor)
+        context.fill(rect)
+        context.setStrokeColor(stroke.cgColor)
+        context.setLineWidth(0.45)
+        context.stroke(rect)
+    }
+
+    private static func completeRankingScoreText(_ value: Double) -> String {
+        value > 0 ? value.formatted(.number.precision(.fractionLength(0))) : "-"
+    }
+
+    private static func aspectFitRect(for imageSize: CGSize, in rect: CGRect) -> CGRect {
+        guard imageSize.width > 0, imageSize.height > 0 else { return rect }
+        let scale = min(rect.width / imageSize.width, rect.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        return CGRect(x: rect.midX - width / 2, y: rect.midY - height / 2, width: width, height: height)
     }
 
     private static func groupedResults(_ results: [RoutineResult]) -> [(title: String, results: [RoutineResult])] {
@@ -766,6 +1064,97 @@ enum PDFExporter {
         time: "",
         duration: ""
     )
+
+    private struct CompleteRankingRow {
+        let blockName: String
+        let result: RoutineResult
+    }
+
+    private enum CompleteRankingTheme {
+        static var primary: UIColor { AppBrand.competition.colorPalette.primary.uiColor }
+        static var palePink: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor }
+        static var ink: UIColor { AppBrand.competition.colorPalette.ink.lightUIColor }
+        static var muted: UIColor { AppBrand.competition.colorPalette.muted.lightUIColor }
+        static let alternateRow = UIColor(white: 0.955, alpha: 1)
+        static let line = UIColor(white: 0.0, alpha: 0.08)
+        static var pinkStroke: UIColor { primary.withAlphaComponent(0.23) }
+    }
+
+    private enum CompleteRankingPDFLayout {
+        static let logoHeight: CGFloat = 60
+        static let sectionHeight: CGFloat = 38
+        static let tableHeaderHeight: CGFloat = 24
+        static let rowHeight: CGFloat = 23
+        static let footerReservedHeight: CGFloat = 24
+
+        static func columns(margin: CGFloat) -> Columns {
+            let x = margin + 8
+            let numberWidth: CGFloat = 62
+            let choreographyWidth: CGFloat = 260
+            let academyWidth: CGFloat = 220
+            let scoreWidth: CGFloat = 86
+            return Columns(
+                numberX: x,
+                numberWidth: numberWidth,
+                choreographyX: x + numberWidth,
+                choreographyWidth: choreographyWidth,
+                academyX: x + numberWidth + choreographyWidth,
+                academyWidth: academyWidth,
+                scoreX: x + numberWidth + choreographyWidth + academyWidth,
+                scoreWidth: scoreWidth
+            )
+        }
+
+        static func topColumns(margin: CGFloat) -> TopColumns {
+            let x = margin + 8
+            let positionWidth: CGFloat = 46
+            let numberWidth: CGFloat = 62
+            let choreographyWidth: CGFloat = 230
+            let academyWidth: CGFloat = 190
+            let blockWidth: CGFloat = 80
+            let scoreWidth: CGFloat = 86
+            return TopColumns(
+                positionX: x,
+                positionWidth: positionWidth,
+                numberX: x + positionWidth,
+                numberWidth: numberWidth,
+                choreographyX: x + positionWidth + numberWidth,
+                choreographyWidth: choreographyWidth,
+                academyX: x + positionWidth + numberWidth + choreographyWidth,
+                academyWidth: academyWidth,
+                blockX: x + positionWidth + numberWidth + choreographyWidth + academyWidth,
+                blockWidth: blockWidth,
+                scoreX: x + positionWidth + numberWidth + choreographyWidth + academyWidth + blockWidth,
+                scoreWidth: scoreWidth
+            )
+        }
+
+        struct Columns {
+            let numberX: CGFloat
+            let numberWidth: CGFloat
+            let choreographyX: CGFloat
+            let choreographyWidth: CGFloat
+            let academyX: CGFloat
+            let academyWidth: CGFloat
+            let scoreX: CGFloat
+            let scoreWidth: CGFloat
+        }
+
+        struct TopColumns {
+            let positionX: CGFloat
+            let positionWidth: CGFloat
+            let numberX: CGFloat
+            let numberWidth: CGFloat
+            let choreographyX: CGFloat
+            let choreographyWidth: CGFloat
+            let academyX: CGFloat
+            let academyWidth: CGFloat
+            let blockX: CGFloat
+            let blockWidth: CGFloat
+            let scoreX: CGFloat
+            let scoreWidth: CGFloat
+        }
+    }
 
     private enum Theme {
         static var paleYellow: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.48) }

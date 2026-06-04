@@ -39,6 +39,10 @@
 	<string>$(GOOGLE_DRIVE_ROOT_FOLDER)</string>
 	<key>GOOGLE_REVERSED_CLIENT_ID</key>
 	<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+	<key>JUDGING_MAIL_SCRIPT_URL</key>
+	<string>$(JUDGING_MAIL_SCRIPT_URL)</string>
+	<key>JUDGING_MAIL_SHARED_SECRET</key>
+	<string>$(JUDGING_MAIL_SHARED_SECRET)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>LSMinimumSystemVersion</key>

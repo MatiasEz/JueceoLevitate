@@ -53,6 +53,8 @@ final class JudgingStore: ObservableObject {
     @Published private(set) var driveExportStatus: DriveExportStatus = .idle
     @Published private(set) var driveExportMessage: String?
     @Published private(set) var lastDriveExportSummary: GoogleDriveExportSummary?
+    @Published private(set) var judgingSheetMailStatus: JudgingSheetMailStatus = .idle
+    @Published private(set) var judgingSheetMailMessage: String?
     @Published private(set) var operationNotice: OperationNotice?
     @Published private(set) var judgeActivities: [JudgeActivitySummary] = []
 
@@ -197,6 +199,13 @@ final class JudgingStore: ObservableObject {
     }
     var hasRemoteConfiguration: Bool { remoteRepository != nil }
     var hasGoogleDriveConfiguration: Bool { GoogleDriveConfig.load() != nil }
+    var hasJudgingSheetMailConfiguration: Bool { JudgingSheetMailConfig.load() != nil }
+    var configuredAcademyMailCount: Int {
+        JudgingSheetMailService.loadRecipients().filter { $0.cleanEmail != nil }.count
+    }
+    var currentEventName: String {
+        availableEvents.first { $0.id == selectedEventID }?.name ?? appData.sourceName
+    }
     var defaultDriveRootFolderName: String {
         GoogleDriveConfig.load()?.rootFolderName ?? AppBrand.competition.driveRootFolderName
     }
@@ -1290,6 +1299,27 @@ final class JudgingStore: ObservableObject {
         )
     }
 
+    func exportCompleteBlockRankingPDF() {
+        let sections = blocks
+            .filter { rankingBlockNumber($0) != 7 }
+            .map { block in
+                let isBlockSix = rankingBlockNumber(block) == 6
+                let blockResults = results(in: block)
+                    .filter { result in
+                        !isBlockSix || result.aggregateTotal > 0
+                    }
+                    .sorted { lhs, rhs in
+                        if abs(lhs.aggregateTotal - rhs.aggregateTotal) < 0.0001 {
+                            return routineOrder(lhs.routine, rhs.routine)
+                        }
+                        return lhs.aggregateTotal > rhs.aggregateTotal
+                    }
+                return (block: block, results: blockResults)
+            }
+
+        lastPDFURL = PDFExporter.exportCompleteBlockRanking(sections: sections)
+    }
+
     func exportDictamenPDF(results exportResults: [RoutineResult]? = nil, title: String = "Dictamen final") {
         let sourceName = selectedBlock?.name ?? appData.sourceName
         lastPDFURL = PDFExporter.exportDictamen(
@@ -1330,6 +1360,7 @@ final class JudgingStore: ObservableObject {
             let blockRoutines = routines(in: block)
             let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
             var uploadedFiles: [GoogleDriveUploadedFile] = []
+            var judgingSheetLinks: [GoogleDriveJudgingSheetLink] = []
             var skippedEmptySheets = 0
 
             for academy in uniqueAcademies(in: blockRoutines) {
@@ -1363,13 +1394,24 @@ final class JudgingStore: ObservableObject {
                             folderPath: [rootFolderName, blockFolderName, academyFolderName, routineFolderName]
                         )
                         uploadedFiles.append(uploaded)
+                        judgingSheetLinks.append(GoogleDriveJudgingSheetLink(
+                            fileID: uploaded.id,
+                            fileName: uploaded.name,
+                            webViewLink: uploaded.webViewLink,
+                            academy: academy,
+                            blockName: block.name,
+                            routineID: routine.id,
+                            routineName: routine.name,
+                            judge: judge
+                        ))
                     }
                 }
             }
 
             lastDriveExportSummary = GoogleDriveExportSummary(
                 rootFolderName: rootFolderName,
-                uploadedFiles: uploadedFiles
+                uploadedFiles: uploadedFiles,
+                judgingSheets: judgingSheetLinks
             )
             driveExportStatus = .completed(uploadedFiles.count)
             if uploadedFiles.isEmpty {
@@ -1440,13 +1482,123 @@ final class JudgingStore: ObservableObject {
 
             lastDriveExportSummary = GoogleDriveExportSummary(
                 rootFolderName: drive.rootFolderName,
-                uploadedFiles: [uploaded]
+                uploadedFiles: [uploaded],
+                judgingSheets: [
+                    GoogleDriveJudgingSheetLink(
+                        fileID: uploaded.id,
+                        fileName: uploaded.name,
+                        webViewLink: uploaded.webViewLink,
+                        academy: driveAcademyName(for: routine),
+                        blockName: block.name,
+                        routineID: routine.id,
+                        routineName: routine.name,
+                        judge: judge
+                    )
+                ]
             )
             driveExportStatus = .completed(1)
             driveExportMessage = "\(fileName) actualizado en Drive."
         } catch {
             driveExportStatus = .failed(error.localizedDescription)
             driveExportMessage = error.localizedDescription
+        }
+    }
+
+    func sendLastDriveLinksByMail() async {
+        guard !judgingSheetMailStatus.isSending else { return }
+
+        guard let summary = lastDriveExportSummary, !summary.judgingSheets.isEmpty else {
+            let message = "Primero exportá las hojas a Drive para generar los links."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("No hay links para enviar", message: message)
+            return
+        }
+
+        await sendDriveSummaryByMail(summary)
+    }
+
+    func sendDriveLinksByMail(rootFolderName customRootFolderName: String) async {
+        guard !judgingSheetMailStatus.isSending else { return }
+        guard let block = selectedBlock else {
+            let message = "No hay bloque seleccionado."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("No se pudo buscar en Drive", message: message)
+            return
+        }
+
+        let cleanFolderName = customRootFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanFolderName.isEmpty else {
+            let message = "Ingresá el nombre de la carpeta de Drive."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Falta carpeta", message: message)
+            return
+        }
+
+        judgingSheetMailStatus = .sending
+        judgingSheetMailMessage = "Buscando PDFs en \(cleanFolderName)..."
+
+        do {
+            let drive = try GoogleDriveService.configured()
+            let rootFolderName = driveSafeName(cleanFolderName, fallback: drive.rootFolderName)
+            let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
+            let links = try await drive.judgingSheetLinks(rootFolderName: rootFolderName, blockFolderName: blockFolderName)
+
+            guard !links.isEmpty else {
+                let message = "No se encontraron PDFs de \(block.name) en \(rootFolderName)."
+                judgingSheetMailStatus = .failed(message)
+                judgingSheetMailMessage = message
+                showOperationFailure("Sin links disponibles", message: message)
+                return
+            }
+
+            let summary = GoogleDriveExportSummary(
+                rootFolderName: rootFolderName,
+                uploadedFiles: [],
+                judgingSheets: links
+            )
+            lastDriveExportSummary = summary
+            await sendDriveSummaryByMail(summary)
+        } catch {
+            judgingSheetMailStatus = .failed(error.localizedDescription)
+            judgingSheetMailMessage = error.localizedDescription
+            showOperationFailure("No se pudo buscar en Drive", message: error.localizedDescription)
+        }
+    }
+
+    private func sendDriveSummaryByMail(_ summary: GoogleDriveExportSummary) async {
+        guard let config = JudgingSheetMailConfig.load() else {
+            let message = "Configurá JUDGING_MAIL_SCRIPT_URL con la URL del Web App de Apps Script."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Falta configurar mail", message: message)
+            return
+        }
+
+        do {
+            let service = JudgingSheetMailService(config: config)
+            let payload = try service.makePayload(
+                eventName: currentEventName,
+                blockName: selectedBlock?.name ?? "Bloque",
+                summary: summary,
+                recipients: JudgingSheetMailService.loadRecipients()
+            )
+
+            judgingSheetMailStatus = .sending
+            judgingSheetMailMessage = "Enviando links a \(payload.academies.count) academias..."
+
+            let response = try await service.send(payload)
+            let sentCount = response.sent ?? payload.academies.count
+            let warningText = response.hasWarnings ? " Hubo avisos del envío." : ""
+            judgingSheetMailStatus = .completed(sentCount)
+            judgingSheetMailMessage = "\(sentCount) mails enviados.\(warningText)"
+            showOperationSuccess("Links enviados", message: "\(sentCount) academias recibieron su devolución de jueceo.\(warningText)")
+        } catch {
+            judgingSheetMailStatus = .failed(error.localizedDescription)
+            judgingSheetMailMessage = error.localizedDescription
+            showOperationFailure("No se pudieron enviar los links", message: error.localizedDescription)
         }
     }
 
@@ -2264,6 +2416,15 @@ final class JudgingStore: ObservableObject {
         return judges.reduce(0) { sum, judge in
             sum + (totalsByJudge[judge] ?? 0)
         }
+    }
+
+    private func rankingBlockNumber(_ block: DanceBlock) -> Int? {
+        [block.id, block.name, block.title]
+            .joined(separator: " ")
+            .stableRemoteID
+            .split(separator: "-")
+            .compactMap { Int($0) }
+            .first
     }
 
     private func routineOrder(_ lhs: Routine, _ rhs: Routine) -> Bool {

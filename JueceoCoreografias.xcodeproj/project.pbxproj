@@ -32,6 +32,8 @@
 		010000000000000000000022 /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
 		010000000000000000000023 /* JudgingSheetPDFExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000023 /* JudgingSheetPDFExporter.swift */; };
 		010000000000000000000024 /* JueceoCore in Frameworks */ = {isa = PBXBuildFile; productRef = 0C0000000000000000000001 /* JueceoCore */; };
+		010000000000000000000026 /* JudgingSheetMailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000026 /* JudgingSheetMailService.swift */; };
+		010000000000000000000027 /* academy_emails.json in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000027 /* academy_emails.json */; };
 		099588A0FC509B83D3DBFAFE /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
 		144FC3AD4EF5762E1AD02EB0 /* AdminView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000017 /* AdminView.swift */; };
 		17A773F34CE38DFAA8954469 /* ScoresView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000007 /* ScoresView.swift */; };
@@ -55,6 +57,10 @@
 		893428710B16C279CE2D3E62 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000010 /* ShareSheet.swift */; };
 		8DAA140C92398650BB95CDB9 /* JudgingStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000003 /* JudgingStore.swift */; };
 		A3171D964CAE9A2DE4BAFE6D /* DictamenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* DictamenView.swift */; };
+		A10000000000000000000026 /* JudgingSheetMailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000026 /* JudgingSheetMailService.swift */; };
+		A10000000000000000000027 /* academy_emails.json in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000027 /* academy_emails.json */; };
+		A20000000000000000000026 /* JudgingSheetMailService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000026 /* JudgingSheetMailService.swift */; };
+		A20000000000000000000027 /* academy_emails.json in Resources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000027 /* academy_emails.json */; };
 		AAF6BF9081E1FA4F76DB05C3 /* JueceoCoreografiasApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000001 /* JueceoCoreografiasApp.swift */; };
 		AB0189ED731D983AF3F628E5 /* DictamenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000008 /* DictamenView.swift */; };
 		B1442A576BE79BD735B7E8BC /* PhoneContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 020000000000000000000022 /* PhoneContentView.swift */; };
@@ -101,6 +107,8 @@
 		020000000000000000000023 /* JudgingSheetPDFExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgingSheetPDFExporter.swift; sourceTree = "<group>"; };
 		020000000000000000000024 /* Info-macOS.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Info-macOS.plist"; sourceTree = "<group>"; };
 		020000000000000000000025 /* Levitate-macOS.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "Levitate-macOS.entitlements"; sourceTree = "<group>"; };
+		020000000000000000000026 /* JudgingSheetMailService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = JudgingSheetMailService.swift; sourceTree = "<group>"; };
+		020000000000000000000027 /* academy_emails.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = academy_emails.json; sourceTree = "<group>"; };
 		338EC6DF15472F5A8566FDDB /* AuroraCircuit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = AuroraCircuit.app; path = AuroraCircuit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		5289D140C90D9813D832530B /* BrandShared.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; path = BrandShared.xcconfig; sourceTree = "<group>"; };
 		7F22C5F4DAB9F4B197E0A328 /* PrismaOpen.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = PrismaOpen.app; path = PrismaOpen.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -209,6 +217,7 @@
 				020000000000000000000010 /* ShareSheet.swift */,
 				020000000000000000000015 /* RemoteJudgingRepository.swift */,
 				020000000000000000000020 /* GoogleDriveService.swift */,
+				020000000000000000000026 /* JudgingSheetMailService.swift */,
 			);
 			path = Services;
 			sourceTree = "<group>";
@@ -218,6 +227,7 @@
 			children = (
 				020000000000000000000011 /* app_data.json */,
 				020000000000000000000012 /* Bloque2.xlsx */,
+				020000000000000000000027 /* academy_emails.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -375,6 +385,7 @@
 				010000000000000000000011 /* app_data.json in Resources */,
 				010000000000000000000012 /* Bloque2.xlsx in Resources */,
 				010000000000000000000018 /* Assets.xcassets in Resources */,
+				010000000000000000000027 /* academy_emails.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -385,6 +396,7 @@
 				D6A5B326BC7C79403A457A56 /* app_data.json in Resources */,
 				E003AC50292386BF971F901E /* Bloque2.xlsx in Resources */,
 				BE589D329EECB39EF1852A0E /* Assets.xcassets in Resources */,
+				A10000000000000000000027 /* academy_emails.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -395,6 +407,7 @@
 				51872B0E628BBB67BA329ECF /* app_data.json in Resources */,
 				BB062D9919ED2B8358413D1A /* Bloque2.xlsx in Resources */,
 				EE45E32A0980048126A7FBC3 /* Assets.xcassets in Resources */,
+				A20000000000000000000027 /* academy_emails.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -423,6 +436,7 @@
 				010000000000000000000010 /* ShareSheet.swift in Sources */,
 				010000000000000000000015 /* RemoteJudgingRepository.swift in Sources */,
 				010000000000000000000020 /* GoogleDriveService.swift in Sources */,
+				010000000000000000000026 /* JudgingSheetMailService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -448,6 +462,7 @@
 				3FFB28DF6B4242DFC112049B /* ShareSheet.swift in Sources */,
 				3A622DDD53434122E91795E2 /* RemoteJudgingRepository.swift in Sources */,
 				DF6706125F4380C273180F1D /* GoogleDriveService.swift in Sources */,
+				A10000000000000000000026 /* JudgingSheetMailService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -473,6 +488,7 @@
 				893428710B16C279CE2D3E62 /* ShareSheet.swift in Sources */,
 				4A77EA15DA8EBC2EC32D5836 /* RemoteJudgingRepository.swift in Sources */,
 				17B9194FA302E3FE84436846 /* GoogleDriveService.swift in Sources */,
+				A20000000000000000000026 /* JudgingSheetMailService.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

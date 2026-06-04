@@ -164,7 +164,11 @@ struct ContentView: View {
                         case .jueceo:
                             EmptyView()
                         case .calificaciones:
-                            ScoresView(results: store.rankings, onExportPDF: exportPDF)
+                            ScoresView(
+                                results: store.rankings,
+                                onExportPDF: exportPDF,
+                                onExportCompleteRankingPDF: exportCompleteRankingPDF
+                            )
                         case .dictamen:
                             DictamenView(results: store.rankings)
                         case .importar:
@@ -237,6 +241,11 @@ struct ContentView: View {
 
     private func exportPDF(results: [RoutineResult]?, title: String) {
         store.exportPDF(results: results, title: title)
+        sharing = store.lastPDFURL != nil
+    }
+
+    private func exportCompleteRankingPDF() {
+        store.exportCompleteBlockRankingPDF()
         sharing = store.lastPDFURL != nil
     }
 
