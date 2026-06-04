@@ -13,7 +13,6 @@ struct AdminView: View {
     @State private var searchText = ""
     @State private var routinePendingDeletion: Routine?
     @State private var isRoutineDeletionAlertPresented = false
-    @State private var deleteRoutineImportSecret = ""
     @State private var isDeletingRoutine = false
     @State private var driveFolderName = ""
     @State private var isDriveFolderPromptPresented = false
@@ -154,16 +153,11 @@ struct AdminView: View {
             Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
         }
         .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
-            SecureField("Clave de importación", text: $deleteRoutineImportSecret)
-                .textInputAutocapitalization(.never)
-                .disableAutocorrection(true)
-
             Button("Borrar", role: .destructive) {
                 guard let routine = routinePendingDeletion else { return }
-                let secret = deleteRoutineImportSecret
-                Task { await deletePendingRoutine(routine, importSecret: secret) }
+                Task { await deletePendingRoutine(routine) }
             }
-            .disabled(deleteRoutineImportSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isDeletingRoutine)
+            .disabled(isDeletingRoutine)
 
             Button("Cancelar", role: .cancel) {
                 resetPendingRoutineDeletion()
@@ -385,7 +379,6 @@ struct AdminView: View {
                                 isSelected: routine.id == selectedRoutineForEdit?.id,
                                 onDelete: {
                                     routinePendingDeletion = routine
-                                    deleteRoutineImportSecret = ""
                                     isRoutineDeletionAlertPresented = true
                                 }
                             ) {
@@ -498,13 +491,13 @@ struct AdminView: View {
     }
 
     @MainActor
-    private func deletePendingRoutine(_ routine: Routine, importSecret: String) async {
+    private func deletePendingRoutine(_ routine: Routine) async {
         let routineTitle = "#\(routine.id) \(routine.name)"
         isDeletingRoutine = true
         defer { isDeletingRoutine = false }
 
         do {
-            try await store.deleteRoutine(routine, importSecret: importSecret)
+            try await store.deleteRoutine(routine)
             resetPendingRoutineDeletion()
             normalizeSelection()
             store.showOperationSuccess("Coreografía borrada", message: "\(routineTitle) se borró del programa actual.")
@@ -517,7 +510,6 @@ struct AdminView: View {
     private func resetPendingRoutineDeletion() {
         isRoutineDeletionAlertPresented = false
         routinePendingDeletion = nil
-        deleteRoutineImportSecret = ""
     }
 
     @MainActor
@@ -703,13 +695,40 @@ struct ScoreEditorView: View {
     @State private var mailFolderName = ""
     @State private var isMailFolderPromptPresented = false
     @State private var routineMetadataUpdateKey: String?
+    @State private var routinePendingDeletion: Routine?
+    @State private var isRoutineDeletionAlertPresented = false
+    @State private var isDeletingRoutine = false
+    @State private var routinePendingMove: Routine?
+    @State private var targetBlockPendingMove: DanceBlock?
+    @State private var isRoutineMoveAlertPresented = false
+    @State private var routineMoveKey: String?
 
-    private let minimumRoutineColumnWidth: CGFloat = 560
-    private let judgeColumnWidth: CGFloat = 178
-    private let totalColumnWidth: CGFloat = 178
+    private let minimumRoutineColumnWidth: CGFloat = 500
+    private let judgeColumnWidth: CGFloat = 170
+    private let totalColumnWidth: CGFloat = 166
+    private let deleteColumnWidth: CGFloat = 72
     private let scoreEditorHeaderHeight: CGFloat = 74
     private let scoreEditorRowHeight: CGFloat = 116
     private let scoreEditorEmptyRowHeight: CGFloat = 96
+
+    private var currentEventTitle: String {
+        store.availableEvents.first { $0.id == store.selectedEventID }?.name
+            ?? store.appData.sourceName
+    }
+
+    private var routineDeletionTitle: String {
+        guard let routinePendingDeletion else { return "esta coreografía" }
+        return "#\(routinePendingDeletion.id) \(routinePendingDeletion.name)"
+    }
+
+    private var routineMoveTitle: String {
+        guard let routinePendingMove else { return "esta coreografía" }
+        return "#\(routinePendingMove.id) \(routinePendingMove.name)"
+    }
+
+    private var targetBlockMoveTitle: String {
+        targetBlockPendingMove?.name ?? "el bloque destino"
+    }
 
     private var sortedRoutines: [Routine] {
         store.visibleRoutines.sorted { lhs, rhs in
@@ -821,6 +840,31 @@ struct ScoreEditorView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
+        }
+        .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
+            Button("Borrar", role: .destructive) {
+                guard let routine = routinePendingDeletion else { return }
+                Task { await deletePendingRoutine(routine) }
+            }
+            .disabled(isDeletingRoutine)
+
+            Button("Cancelar", role: .cancel) {
+                resetPendingRoutineDeletion()
+            }
+        } message: {
+            Text("Se va a borrar \(routineDeletionTitle) de \(currentEventTitle). También se quitarán sus puntajes, devoluciones, penalizaciones y favoritos.")
+        }
+        .alert("Mover coreografía", isPresented: $isRoutineMoveAlertPresented) {
+            Button("Mover") {
+                Task { await movePendingRoutine() }
+            }
+            .disabled(routinePendingMove == nil || targetBlockPendingMove == nil || routineMoveKey != nil)
+
+            Button("Cancelar", role: .cancel) {
+                resetPendingRoutineMove()
+            }
+        } message: {
+            Text("Se va a mover \(routineMoveTitle) a \(targetBlockMoveTitle). Sus puntajes, devoluciones, penalizaciones y favoritos se conservarán.")
         }
     }
 
@@ -969,7 +1013,8 @@ struct ScoreEditorView: View {
                         judges: judges,
                         routineColumnWidth: metrics.routineColumnWidth,
                         judgeColumnWidth: judgeColumnWidth,
-                        totalColumnWidth: totalColumnWidth
+                        totalColumnWidth: totalColumnWidth,
+                        deleteColumnWidth: deleteColumnWidth
                     )
 
                     if filteredRoutines.isEmpty {
@@ -982,15 +1027,22 @@ struct ScoreEditorView: View {
                                 routineColumnWidth: metrics.routineColumnWidth,
                                 judgeColumnWidth: judgeColumnWidth,
                                 totalColumnWidth: totalColumnWidth,
+                                deleteColumnWidth: deleteColumnWidth,
+                                blocks: store.blocks,
+                                currentBlock: block(containing: routine),
                                 judgeScore: { judge in judgeScore(for: routine, judge: judge) },
                                 totalScore: totalScore(for: routine, judges: judges),
                                 totalMaxScore: store.template(for: routine).maxScore * Double(judges.count),
                                 metadataOptions: { field in routineMetadataOptions(for: field, routine: routine) },
                                 isMetadataUpdating: routineMetadataUpdateKey?.hasPrefix("\(routine.id)::") == true,
+                                isBlockMoving: routineMoveKey == routine.id,
+                                isDeleteDisabled: isDeletingRoutine,
                                 updateMetadata: { field, value in
                                     Task { await updateRoutineMetadata(routine, field: field, value: value) }
                                 },
-                                openJudgeSheet: { judge in openJudgeSheet(routine: routine, judge: judge) }
+                                openJudgeSheet: { judge in openJudgeSheet(routine: routine, judge: judge) },
+                                moveRoutineToBlock: { targetBlock in presentMoveRoutineAlert(for: routine, to: targetBlock) },
+                                deleteRoutine: { presentDeleteRoutineAlert(for: routine) }
                             )
                         }
                     }
@@ -1005,7 +1057,7 @@ struct ScoreEditorView: View {
     }
 
     private func scoreTableMetrics(availableWidth: CGFloat, judgeCount: Int) -> (routineColumnWidth: CGFloat, tableWidth: CGFloat) {
-        let fixedWidth = totalColumnWidth + CGFloat(judgeCount) * judgeColumnWidth
+        let fixedWidth = totalColumnWidth + deleteColumnWidth + CGFloat(judgeCount) * judgeColumnWidth
         let routineWidth = max(minimumRoutineColumnWidth, availableWidth - fixedWidth)
         let tableWidth = max(availableWidth, fixedWidth + routineWidth)
         return (routineWidth, tableWidth)
@@ -1041,6 +1093,26 @@ struct ScoreEditorView: View {
         guard !judge.isEmpty else { return }
         store.beginAdminScoring(judge: judge, routine: routine)
         section = .jueceo
+    }
+
+    private func block(containing routine: Routine) -> DanceBlock? {
+        store.blocks.first { block in
+            block.routines.contains { $0.id == routine.id }
+                || routine.blockID == block.id
+                || routine.block == block.name
+        }
+    }
+
+    private func presentDeleteRoutineAlert(for routine: Routine) {
+        routinePendingDeletion = routine
+        isRoutineDeletionAlertPresented = true
+    }
+
+    private func presentMoveRoutineAlert(for routine: Routine, to targetBlock: DanceBlock) {
+        guard block(containing: routine)?.id != targetBlock.id else { return }
+        routinePendingMove = routine
+        targetBlockPendingMove = targetBlock
+        isRoutineMoveAlertPresented = true
     }
 
     private func routineMetadataOptions(for field: RoutineMetadataField, routine: Routine) -> [String] {
@@ -1105,6 +1177,54 @@ struct ScoreEditorView: View {
     private func cleanRoutineMetadataValue(_ value: String) -> String {
         let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed == "-" || trimmed.normalizedKey == "SIN NIVEL" ? "" : trimmed
+    }
+
+    @MainActor
+    private func deletePendingRoutine(_ routine: Routine) async {
+        let routineTitle = "#\(routine.id) \(routine.name)"
+        isDeletingRoutine = true
+        defer { isDeletingRoutine = false }
+
+        do {
+            try await store.deleteRoutine(routine)
+            resetPendingRoutineDeletion()
+            store.showOperationSuccess("Coreografía borrada", message: "\(routineTitle) se borró del programa actual.")
+        } catch {
+            resetPendingRoutineDeletion()
+            store.showOperationFailure("No se pudo borrar coreografía", message: error.localizedDescription)
+        }
+    }
+
+    private func resetPendingRoutineDeletion() {
+        isRoutineDeletionAlertPresented = false
+        routinePendingDeletion = nil
+    }
+
+    @MainActor
+    private func movePendingRoutine() async {
+        guard let routine = routinePendingMove, let targetBlock = targetBlockPendingMove else {
+            resetPendingRoutineMove()
+            return
+        }
+
+        let routineTitle = "#\(routine.id) \(routine.name)"
+        routineMoveKey = routine.id
+        defer { routineMoveKey = nil }
+
+        do {
+            try await store.moveRoutine(routine, to: targetBlock)
+            resetPendingRoutineMove()
+            store.showOperationSuccess("Coreografía movida", message: "\(routineTitle) se movió a \(targetBlock.name).")
+        } catch {
+            resetPendingRoutineMove()
+            store.showOperationFailure("No se pudo mover coreografía", message: error.localizedDescription)
+        }
+    }
+
+    private func resetPendingRoutineMove() {
+        isRoutineMoveAlertPresented = false
+        routinePendingMove = nil
+        targetBlockPendingMove = nil
     }
 
     @MainActor
@@ -1367,6 +1487,7 @@ private struct ScoreEditorHeaderRow: View {
     let routineColumnWidth: CGFloat
     let judgeColumnWidth: CGFloat
     let totalColumnWidth: CGFloat
+    let deleteColumnWidth: CGFloat
 
     var body: some View {
         HStack(spacing: 0) {
@@ -1401,6 +1522,12 @@ private struct ScoreEditorHeaderRow: View {
                         .foregroundStyle(LevitTheme.muted)
                 }
             }
+
+            headerCell(width: deleteColumnWidth, alignment: .center) {
+                Image(systemName: "trash")
+                    .font(.headline.weight(.black))
+                    .foregroundStyle(.red.opacity(0.72))
+            }
         }
         .frame(height: 74)
         .background(LevitTheme.softFill.opacity(0.45))
@@ -1432,13 +1559,20 @@ private struct ScoreEditorRoutineRow: View {
     let routineColumnWidth: CGFloat
     let judgeColumnWidth: CGFloat
     let totalColumnWidth: CGFloat
+    let deleteColumnWidth: CGFloat
+    let blocks: [DanceBlock]
+    let currentBlock: DanceBlock?
     let judgeScore: (String) -> ScoreEditorJudgeScore
     let totalScore: Double
     let totalMaxScore: Double
     let metadataOptions: (RoutineMetadataField) -> [String]
     let isMetadataUpdating: Bool
+    let isBlockMoving: Bool
+    let isDeleteDisabled: Bool
     let updateMetadata: (RoutineMetadataField, String) -> Void
     let openJudgeSheet: (String) -> Void
+    let moveRoutineToBlock: (DanceBlock) -> Void
+    let deleteRoutine: () -> Void
 
     var body: some View {
         HStack(spacing: 0) {
@@ -1454,6 +1588,7 @@ private struct ScoreEditorRoutineRow: View {
             }
 
             totalCell
+            deleteCell
         }
         .frame(height: 116)
         .background(rowBackground)
@@ -1496,21 +1631,7 @@ private struct ScoreEditorRoutineRow: View {
                 }
                 .buttonStyle(.plain)
 
-                HStack(spacing: 7) {
-                    ForEach(RoutineMetadataField.allCases) { field in
-                        let value = displayMetadataValue(field.value(in: routine), field: field)
-                        if !value.isEmpty {
-                            ScoreEditorMetadataPill(
-                                title: field.title,
-                                value: value,
-                                systemImage: field.systemImage,
-                                options: metadataOptions(field),
-                                isEnabled: !isMetadataUpdating,
-                                onSelect: { selectedValue in updateMetadata(field, selectedValue) }
-                            )
-                        }
-                    }
-                }
+                metadataPills
             }
 
             Spacer(minLength: 0)
@@ -1537,6 +1658,44 @@ private struct ScoreEditorRoutineRow: View {
             return ""
         }
         return trimmed
+    }
+
+    private var metadataPills: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 7) {
+                ScoreEditorBlockPill(
+                    value: currentBlock?.name ?? routine.block,
+                    blocks: blocks,
+                    currentBlockID: currentBlock?.id ?? routine.blockID,
+                    isEnabled: !isMetadataUpdating && !isBlockMoving,
+                    isLoading: isBlockMoving,
+                    onSelect: moveRoutineToBlock
+                )
+
+                metadataPill(.division)
+                metadataPill(.level)
+            }
+
+            HStack(spacing: 7) {
+                metadataPill(.category)
+                metadataPill(.genre)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func metadataPill(_ field: RoutineMetadataField) -> some View {
+        let value = displayMetadataValue(field.value(in: routine), field: field)
+        if !value.isEmpty {
+            ScoreEditorMetadataPill(
+                title: field.title,
+                value: value,
+                systemImage: field.systemImage,
+                options: metadataOptions(field),
+                isEnabled: !isMetadataUpdating,
+                onSelect: { selectedValue in updateMetadata(field, selectedValue) }
+            )
+        }
     }
 
     private func judgeCell(_ score: ScoreEditorJudgeScore) -> some View {
@@ -1588,6 +1747,29 @@ private struct ScoreEditorRoutineRow: View {
                 .frame(width: 104)
         }
         .frame(width: totalColumnWidth, height: 116)
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(LevitTheme.line)
+                .frame(width: 1)
+        }
+    }
+
+    private var deleteCell: some View {
+        Button(role: .destructive) {
+            deleteRoutine()
+        } label: {
+            Image(systemName: "trash")
+                .font(.headline.weight(.black))
+                .foregroundStyle(.red)
+                .frame(width: 42, height: 42)
+                .background(Color.red.opacity(0.10), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .disabled(isDeleteDisabled)
+        .opacity(isDeleteDisabled ? 0.45 : 1)
+        .frame(width: deleteColumnWidth, height: 116)
+        .contentShape(Rectangle())
+        .accessibilityLabel("Borrar coreografía \(routine.name)")
     }
 
     private var rowBackground: some ShapeStyle {
@@ -1629,6 +1811,71 @@ private struct ScoreEditorRoutineRow: View {
     }
 }
 
+private struct ScoreEditorBlockPill: View {
+    let value: String
+    let blocks: [DanceBlock]
+    let currentBlockID: String?
+    let isEnabled: Bool
+    let isLoading: Bool
+    let onSelect: (DanceBlock) -> Void
+
+    var body: some View {
+        Menu {
+            if blocks.isEmpty {
+                Text("Sin bloques")
+            } else {
+                ForEach(blocks) { block in
+                    Button {
+                        onSelect(block)
+                    } label: {
+                        Label(
+                            block.name,
+                            systemImage: block.id == currentBlockID ? "checkmark.circle.fill" : "arrow.right.circle"
+                        )
+                    }
+                    .disabled(block.id == currentBlockID)
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                if isLoading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(LevitTheme.pink)
+                } else {
+                    Image(systemName: "square.stack.3d.up.fill")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.pink)
+                }
+
+                Text(displayValue)
+                    .font(.caption.weight(.black))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+
+                Image(systemName: "chevron.down")
+                    .font(.caption2.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.softFill, in: Capsule())
+            .overlay(Capsule().stroke(LevitTheme.line))
+        }
+        .buttonStyle(.plain)
+        .disabled(!isEnabled || blocks.isEmpty)
+        .opacity(isEnabled ? 1 : 0.56)
+        .fixedSize(horizontal: true, vertical: false)
+        .accessibilityLabel("Bloque \(displayValue)")
+    }
+
+    private var displayValue: String {
+        let cleanValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return cleanValue.isEmpty ? "Bloque" : cleanValue
+    }
+}
+
 private struct ScoreEditorMetadataPill: View {
     let title: String
     let value: String
@@ -1663,6 +1910,7 @@ private struct ScoreEditorMetadataPill: View {
         .buttonStyle(.plain)
         .disabled(!isEnabled || options.isEmpty)
         .opacity(isEnabled ? 1 : 0.58)
+        .fixedSize(horizontal: true, vertical: false)
         .popover(isPresented: $isPresented, arrowEdge: .bottom) {
             dropdownContent
         }

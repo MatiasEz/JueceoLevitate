@@ -359,8 +359,14 @@ final class JudgingStore: ObservableObject {
 
     func template(for routine: Routine) -> JudgingTemplate {
         appData.templates.first { $0.genre.normalizedKey == routine.genre.normalizedKey }
+            ?? aerialTemplateFallback(for: routine)
             ?? appData.templates.first
             ?? JudgingTemplate(genre: "General", title: "Hoja de jueceo", maxScore: 0, criteria: [])
+    }
+
+    private func aerialTemplateFallback(for routine: Routine) -> JudgingTemplate? {
+        guard ObligatoryChecklist.isAerialApparatusGenre(routine.genre) else { return nil }
+        return appData.templates.first { $0.genre.normalizedKey == "DANZA AEREA" }
     }
 
     @discardableResult
@@ -844,7 +850,7 @@ final class JudgingStore: ObservableObject {
         }
     }
 
-    func deleteRoutine(_ routine: Routine, importSecret: String) async throws {
+    func deleteRoutine(_ routine: Routine) async throws {
         guard let remoteRepository else {
             throw RoutineDeletionError.missingRemoteConfiguration
         }
@@ -854,18 +860,13 @@ final class JudgingStore: ObservableObject {
         guard let eventID = selectedEventID else {
             throw RoutineDeletionError.missingSelectedEvent
         }
-        let cleanImportSecret = importSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleanImportSecret.isEmpty else {
-            throw RoutineDeletionError.missingImportSecret
-        }
 
         let label = "#\(routine.id) \(routine.name)"
         syncStatus = .syncing
         syncMessage = "Borrando \(label)..."
         _ = try await remoteRepository.deleteRoutine(
             eventID: eventID,
-            routineID: routine.id,
-            importSecret: cleanImportSecret
+            routineID: routine.id
         )
 
         purgeLocalState(forRoutineID: routine.id)
@@ -932,6 +933,49 @@ final class JudgingStore: ObservableObject {
         await syncPending()
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(label) actualizado."
+    }
+
+    func moveRoutine(_ routine: Routine, to targetBlock: DanceBlock) async throws {
+        guard let remoteRepository else {
+            throw RoutineMoveError.missingRemoteConfiguration
+        }
+        guard isAdmin else {
+            throw RoutineMoveError.notAllowed
+        }
+        guard let eventID = selectedEventID else {
+            throw RoutineMoveError.missingSelectedEvent
+        }
+
+        let targetBlockID = targetBlock.id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !targetBlockID.isEmpty else {
+            throw RoutineMoveError.missingTargetBlock
+        }
+
+        if let currentBlock = block(containing: routine), currentBlock.id == targetBlock.id {
+            return
+        }
+
+        let label = "#\(routine.id) \(routine.name)"
+        syncStatus = .syncing
+        syncMessage = "Moviendo \(label) a \(targetBlock.name)..."
+
+        _ = try await remoteRepository.moveRoutine(
+            eventID: eventID,
+            routineID: routine.id,
+            targetBlockID: targetBlockID
+        )
+
+        let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+        let expectedBlockID = targetBlock.id
+        guard let updatedRoutine = bundle.appData.routines.first(where: { $0.id == routine.id }),
+              (updatedRoutine.blockID ?? "") == expectedBlockID || updatedRoutine.block == targetBlock.name else {
+            throw RoutineMoveError.moveNotApplied
+        }
+
+        applyRemoteBundle(bundle)
+        await syncPending()
+        syncStatus = pendingSyncCount > 0 ? .pending : .online
+        syncMessage = "\(label) movido a \(targetBlock.name)."
     }
 
     func setSpecialAward(_ category: SpecialAwardCategory, routine: Routine?) async throws {

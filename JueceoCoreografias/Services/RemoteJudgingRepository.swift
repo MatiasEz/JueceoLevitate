@@ -450,6 +450,40 @@ struct RoutineUpdateResponse: Decodable, Sendable {
     }
 }
 
+struct RoutineMoveRequest: Encodable, Sendable {
+    let eventID: String
+    let routineID: String
+    let targetBlockID: String
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+        case targetBlockID = "target_block_id"
+    }
+}
+
+struct RoutineMoveResponse: Decodable, Sendable {
+    let eventID: String
+    let routineID: String
+    let routineName: String
+    let previousBlockID: String
+    let previousBlockName: String
+    let targetBlockID: String
+    let targetBlockName: String
+    let moved: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case routineID = "routine_id"
+        case routineName = "routine_name"
+        case previousBlockID = "previous_block_id"
+        case previousBlockName = "previous_block_name"
+        case targetBlockID = "target_block_id"
+        case targetBlockName = "target_block_name"
+        case moved
+    }
+}
+
 struct JudgeUpsertRequest: Encodable, Sendable {
     let eventID: String
     let judgeID: String
@@ -736,9 +770,9 @@ actor RemoteJudgingRepository {
         return try decoder.decode(EventArchiveResponse.self, from: response)
     }
 
-    func deleteRoutine(eventID: String, routineID: String, importSecret: String) async throws -> RoutineDeleteResponse {
+    func deleteRoutine(eventID: String, routineID: String) async throws -> RoutineDeleteResponse {
         let data = try encoder.encode(RoutineDeleteRequest(eventID: eventID, routineID: routineID))
-        let response = try await functionRequest(name: "delete-routine", body: data, importSecret: importSecret)
+        let response = try await functionRequest(name: "delete-routine", body: data)
         return try decoder.decode(RoutineDeleteResponse.self, from: response)
     }
 
@@ -777,6 +811,18 @@ actor RemoteJudgingRepository {
         )
         let response = try await functionRequest(name: "update-routine", body: data)
         return try decoder.decode(RoutineUpdateResponse.self, from: response)
+    }
+
+    func moveRoutine(eventID: String, routineID: String, targetBlockID: String) async throws -> RoutineMoveResponse {
+        let data = try encoder.encode(
+            RoutineMoveRequest(
+                eventID: eventID,
+                routineID: routineID,
+                targetBlockID: targetBlockID
+            )
+        )
+        let response = try await functionRequest(name: "move-routine", body: data)
+        return try decoder.decode(RoutineMoveResponse.self, from: response)
     }
 
     func upsertJudge(eventID: String, judgeID: String, name: String, role: UserRole, heroImageName: String = "") async throws -> JudgeUpsertResponse {

@@ -8,6 +8,7 @@ struct LimitedScoreTextField: UIViewRepresentable {
     let criterionID: Int
     var focusedCriterionID: FocusState<Int?>.Binding
     let fontSize: CGFloat
+    var isLocked = false
 
     func makeUIView(context: Context) -> UITextField {
         let textField = UITextField()
@@ -34,7 +35,11 @@ struct LimitedScoreTextField: UIViewRepresentable {
         }
         textField.font = UIFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .black)
         textField.textColor = Self.inkColor
-        if focusedCriterionID.wrappedValue == criterionID, !textField.isFirstResponder {
+        textField.isUserInteractionEnabled = !isLocked
+        if isLocked, textField.isFirstResponder {
+            textField.resignFirstResponder()
+        }
+        if focusedCriterionID.wrappedValue == criterionID, !isLocked, !textField.isFirstResponder {
             textField.becomeFirstResponder()
         }
     }
@@ -232,6 +237,7 @@ private struct ScoreSheet: View {
     let onFinishedBlock: () -> Void
 
     @State private var draftScores: [Int: String] = [:]
+    @State private var obligatorySelections: [Int: Set<String>] = [:]
     @State private var penalty = "0"
     @State private var customPenalty = ""
     @State private var didSubmit = false
@@ -311,21 +317,54 @@ private struct ScoreSheet: View {
 
                                     VStack(spacing: 0) {
                                         ForEach(group.criteria) { criterion in
-                                            DarkCriterionRow(
-                                                criterion: criterion,
-                                                value: Binding(
-                                                    get: { draftScores[criterion.id] ?? "" },
-                                                    set: {
-                                                        draftScores[criterion.id] = sanitizedScoreText($0, maxScore: criterion.maxScore)
-                                                        didSubmit = false
-                                                        errorMessage = nil
+                                            if let checklist = obligatoryChecklist(for: criterion), checklist.isAutoCompleted {
+                                                DarkCriterionRow(
+                                                    criterion: criterion,
+                                                    value: Binding(
+                                                        get: {
+                                                            draftScores[criterion.id] ?? criterion.maxScore.formatted(.number.precision(.fractionLength(0...1)))
+                                                        },
+                                                        set: { _ in }
+                                                    ),
+                                                    onDecrement: {},
+                                                    onIncrement: {},
+                                                    focusedCriterionID: $focusedCriterionID,
+                                                    labelOverride: checklist.title,
+                                                    isLocked: true
+                                                )
+                                                .id(criterionRowID(criterion.id))
+                                            } else if let checklist = obligatoryChecklist(for: criterion) {
+                                                ObligatoryChecklistRow(
+                                                    criterion: criterion,
+                                                    checklist: checklist,
+                                                    checkedIDs: obligatorySelections[criterion.id] ?? [],
+                                                    score: scoreValue(for: criterion),
+                                                    onToggle: { requirement in
+                                                        toggleObligatoryRequirement(
+                                                            requirement,
+                                                            criterion: criterion,
+                                                            checklist: checklist
+                                                        )
                                                     }
-                                                ),
-                                                onDecrement: { adjust(criterion, delta: -1) },
-                                                onIncrement: { adjust(criterion, delta: 1) },
-                                                focusedCriterionID: $focusedCriterionID
-                                            )
-                                            .id(criterionRowID(criterion.id))
+                                                )
+                                                .id(criterionRowID(criterion.id))
+                                            } else {
+                                                DarkCriterionRow(
+                                                    criterion: criterion,
+                                                    value: Binding(
+                                                        get: { draftScores[criterion.id] ?? "" },
+                                                        set: {
+                                                            draftScores[criterion.id] = sanitizedScoreText($0, maxScore: criterion.maxScore)
+                                                            didSubmit = false
+                                                            errorMessage = nil
+                                                        }
+                                                    ),
+                                                    onDecrement: { adjust(criterion, delta: -1) },
+                                                    onIncrement: { adjust(criterion, delta: 1) },
+                                                    focusedCriterionID: $focusedCriterionID
+                                                )
+                                                .id(criterionRowID(criterion.id))
+                                            }
                                         }
                                     }
                                     .clipShape(RoundedRectangle(cornerRadius: 14))
@@ -741,10 +780,21 @@ private struct ScoreSheet: View {
     }
 
     private func loadDraft() {
+        var loadedSelections: [Int: Set<String>] = [:]
         draftScores = Dictionary(uniqueKeysWithValues: template.criteria.map { criterion in
             let saved = store.score(for: routine, judge: scoringJudge, criterion: criterion)
+            if let checklist = obligatoryChecklist(for: criterion) {
+                let checkedIDs = checklist.initialCheckedIDs(
+                    forSavedScore: saved,
+                    maxScore: criterion.maxScore
+                )
+                loadedSelections[criterion.id] = checkedIDs
+                let score = checklist.score(checkedCount: checkedIDs.count, maxScore: criterion.maxScore)
+                return (criterion.id, score.formatted(.number.precision(.fractionLength(0...1))))
+            }
             return (criterion.id, saved.formatted(.number.precision(.fractionLength(0...1))))
         })
+        obligatorySelections = loadedSelections
         loadPenalty(store.penalty(for: routine, judge: scoringJudge))
         didSubmit = false
         errorMessage = nil
@@ -787,12 +837,25 @@ private struct ScoreSheet: View {
     }
 
     private func validateScoresBeforeSaving() -> Bool {
-        guard let missingOrInvalid = template.criteria.first(where: { !isValidScoreText(draftScores[$0.id] ?? "", maxScore: $0.maxScore) }) else {
+        if let missingChecklist = template.criteria.first(where: { criterion in
+            guard let checklist = obligatoryChecklist(for: criterion), !checklist.isAutoCompleted else {
+                return false
+            }
+            return (obligatorySelections[criterion.id] ?? []).isEmpty
+        }) {
+            didSubmit = false
+            errorMessage = "Marca al menos un obligatorio."
+            requestFocus(for: missingChecklist.id)
+            return false
+        }
+
+        guard let missingOrInvalid = template.criteria.first(where: { !isValidScoreText(draftScores[$0.id] ?? "", criterion: $0) }) else {
             return true
         }
 
         didSubmit = false
-        errorMessage = "Completa todas las notas entre 1 y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
+        let minimum = minimumScore(for: missingOrInvalid)
+        errorMessage = "Completa todas las notas entre \(minimum.formatted(.number.precision(.fractionLength(0...1)))) y \(missingOrInvalid.maxScore.formatted(.number.precision(.fractionLength(0...1))))."
         requestFocus(for: missingOrInvalid.id)
         return false
     }
@@ -820,14 +883,22 @@ private struct ScoreSheet: View {
         }
     }
 
-    private func isValidScoreText(_ text: String, maxScore: Double) -> Bool {
+    private func isValidScoreText(_ text: String, criterion: Criterion) -> Bool {
         let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: ",", with: ".")
         guard !cleanText.isEmpty, let value = Double(cleanText) else { return false }
-        return value >= 1 && value <= maxScore
+        return value >= minimumScore(for: criterion) && value <= criterion.maxScore
     }
 
     private func scoreValue(for criterion: Criterion) -> Double {
         Double((draftScores[criterion.id] ?? "").replacingOccurrences(of: ",", with: ".")) ?? 0
+    }
+
+    private func minimumScore(for criterion: Criterion) -> Double {
+        1
+    }
+
+    private func obligatoryChecklist(for criterion: Criterion) -> ObligatoryChecklist? {
+        ObligatoryChecklist.forRoutine(routine, criterion: criterion)
     }
 
     private func loadPenalty(_ value: Double) {
@@ -883,6 +954,126 @@ private struct ScoreSheet: View {
         didSubmit = false
         errorMessage = nil
     }
+
+    private func toggleObligatoryRequirement(
+        _ requirement: ObligatoryRequirement,
+        criterion: Criterion,
+        checklist: ObligatoryChecklist
+    ) {
+        guard !checklist.isAutoCompleted else { return }
+        var checked = obligatorySelections[criterion.id] ?? []
+        if checked.contains(requirement.id) {
+            checked.remove(requirement.id)
+        } else {
+            checked.insert(requirement.id)
+        }
+
+        obligatorySelections[criterion.id] = checked
+        let nextScore = checklist.score(checkedCount: checked.count, maxScore: criterion.maxScore)
+        draftScores[criterion.id] = nextScore.formatted(.number.precision(.fractionLength(0...1)))
+        didSubmit = false
+        errorMessage = nil
+    }
+}
+
+private struct ObligatoryChecklistRow: View {
+    let criterion: Criterion
+    let checklist: ObligatoryChecklist
+    let checkedIDs: Set<String>
+    let score: Double
+    let onToggle: (ObligatoryRequirement) -> Void
+
+    private var checkedCount: Int {
+        checklist.items.filter { checkedIDs.contains($0.id) }.count
+    }
+
+    private var detailText: String {
+        if checklist.isAutoCompleted {
+            return "\(checklist.level) · \(criterion.maxScore.formatted(.number.precision(.fractionLength(0)))) puntos"
+        }
+        return "\(checklist.level) · \(checkedCount) de \(checklist.items.count) cumplidos"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 14) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("\(criterion.id). \(checklist.title)")
+                        .font(.callout.weight(.black))
+                        .foregroundStyle(LevitTheme.ink)
+                    Text(detailText)
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
+
+                Spacer()
+
+                Text(score.formatted(.number.precision(.fractionLength(0...1))))
+                    .font(.system(size: 26, weight: .black, design: .monospaced))
+                    .foregroundStyle(LevitTheme.ink)
+                    .frame(width: 54, height: 42, alignment: .trailing)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                if checklist.isAutoCompleted {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "lock.fill")
+                            .font(.headline.weight(.black))
+                            .foregroundStyle(LevitTheme.muted)
+                            .frame(width: 24, alignment: .leading)
+
+                        Text("\(criterion.maxScore.formatted(.number.precision(.fractionLength(0)))) puntos")
+                            .font(.callout.weight(.bold))
+                            .foregroundStyle(LevitTheme.muted)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(LevitTheme.line))
+                } else {
+                    ForEach(checklist.items) { item in
+                        Button {
+                            onToggle(item)
+                        } label: {
+                            HStack(alignment: .top, spacing: 10) {
+                                Image(systemName: checkedIDs.contains(item.id) ? "checkmark.square.fill" : "square")
+                                    .font(.headline.weight(.black))
+                                    .foregroundStyle(checkedIDs.contains(item.id) ? LevitTheme.pink : LevitTheme.muted)
+                                    .frame(width: 24, alignment: .leading)
+
+                                Text(item.title)
+                                    .font(.callout.weight(.bold))
+                                    .foregroundStyle(LevitTheme.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 10)
+                            .background(
+                                checkedIDs.contains(item.id) ? LevitTheme.palePink : LevitTheme.softFill,
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(checkedIDs.contains(item.id) ? LevitTheme.pink.opacity(0.38) : LevitTheme.line)
+                            )
+                            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 15)
+        .background(LevitTheme.elevatedSurface)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(LevitTheme.line).frame(height: 1)
+        }
+    }
 }
 
 private struct DarkCriterionRow: View {
@@ -891,11 +1082,13 @@ private struct DarkCriterionRow: View {
     let onDecrement: () -> Void
     let onIncrement: () -> Void
     var focusedCriterionID: FocusState<Int?>.Binding
+    var labelOverride: String? = nil
+    var isLocked = false
 
     var body: some View {
         HStack(spacing: 16) {
             VStack(alignment: .leading, spacing: 5) {
-                Text("\(criterion.id). \(criterion.label)")
+                Text("\(criterion.id). \(labelOverride ?? criterion.label)")
                     .font(.callout.weight(.black))
                     .foregroundStyle(LevitTheme.ink)
                     .lineLimit(1)
@@ -910,17 +1103,20 @@ private struct DarkCriterionRow: View {
                 Image(systemName: "minus")
                     .font(.headline.weight(.black))
                     .frame(width: 40, height: 40)
-                    .foregroundStyle(LevitTheme.ink)
+                    .foregroundStyle(isLocked ? LevitTheme.muted : LevitTheme.ink)
                     .background(LevitTheme.softFill, in: Circle())
             }
             .buttonStyle(.plain)
+            .disabled(isLocked)
+            .opacity(isLocked ? 0.58 : 1)
 
             LimitedScoreTextField(
                 text: $value,
                 maxScore: criterion.maxScore,
                 criterionID: criterion.id,
                 focusedCriterionID: focusedCriterionID,
-                fontSize: 26
+                fontSize: 26,
+                isLocked: isLocked
             )
                 .frame(width: 54, height: 42)
 
@@ -928,10 +1124,12 @@ private struct DarkCriterionRow: View {
                 Image(systemName: "plus")
                     .font(.headline.weight(.black))
                     .frame(width: 40, height: 40)
-                    .foregroundStyle(LevitTheme.ink)
+                    .foregroundStyle(isLocked ? LevitTheme.muted : LevitTheme.ink)
                     .background(LevitTheme.softFill, in: Circle())
             }
             .buttonStyle(.plain)
+            .disabled(isLocked)
+            .opacity(isLocked ? 0.58 : 1)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

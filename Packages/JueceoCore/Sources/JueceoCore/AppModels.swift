@@ -255,6 +255,217 @@ public extension Routine {
     }
 }
 
+public struct ObligatoryRequirement: Identifiable, Hashable, Sendable {
+    public let id: String
+    public let title: String
+
+    public init(id: String, title: String) {
+        self.id = id
+        self.title = title
+    }
+}
+
+public struct ObligatoryChecklist: Identifiable, Hashable, Sendable {
+    public let apparatus: String
+    public let level: String
+    public let items: [ObligatoryRequirement]
+    public let isAutoCompleted: Bool
+
+    public var id: String {
+        "\(apparatus.normalizedKey)::\(level.normalizedKey)"
+    }
+
+    public var title: String {
+        "Obligatorios \(apparatus)"
+    }
+
+    public init(apparatus: String, level: String, items: [ObligatoryRequirement], isAutoCompleted: Bool = false) {
+        self.apparatus = apparatus
+        self.level = level
+        self.items = items
+        self.isAutoCompleted = isAutoCompleted
+    }
+
+    public func score(checkedCount: Int, maxScore: Double) -> Double {
+        guard maxScore > 0 else { return 0 }
+        if isAutoCompleted {
+            return maxScore.rounded()
+        }
+        guard !items.isEmpty else { return 0 }
+        let clampedCount = min(max(checkedCount, 0), items.count)
+        guard clampedCount > 0 else { return 0 }
+        guard clampedCount < items.count else { return maxScore.rounded() }
+
+        let halfOrMore = clampedCount * 2 >= items.count
+        let tier = halfOrMore ? 2 : 1
+        return min(Double(tier), maxScore.rounded())
+    }
+
+    public func initialCheckedIDs(forSavedScore score: Double, maxScore: Double) -> Set<String> {
+        if isAutoCompleted {
+            return Set(items.map(\.id))
+        }
+        guard !items.isEmpty, maxScore > 0, score > 0 else { return [] }
+        let roundedScore = Int(score.rounded())
+        let maxTier = Int(maxScore.rounded())
+        let halfThreshold = max(1, (items.count + 1) / 2)
+        let count: Int
+        if roundedScore >= maxTier {
+            count = items.count
+        } else if roundedScore >= 2 {
+            count = halfThreshold
+        } else {
+            count = max(1, halfThreshold - 1)
+        }
+        return Set(items.prefix(count).map(\.id))
+    }
+
+    public static func isObligatoryCriterion(_ criterion: Criterion) -> Bool {
+        criterion.label.normalizedKey.contains("OBLIGATORIO")
+    }
+
+    public static func forRoutine(_ routine: Routine, criterion: Criterion) -> ObligatoryChecklist? {
+        guard isObligatoryCriterion(criterion) else { return nil }
+        return forRoutine(routine)
+    }
+
+    public static func forRoutine(_ routine: Routine) -> ObligatoryChecklist? {
+        guard let apparatus = apparatus(forGenre: routine.genre) else { return nil }
+        let divisionKey = routine.division.normalizedKey
+        if autoCompletedDivisions.contains(divisionKey) {
+            return autoCompletedChecklist(apparatus: apparatus, divisionKey: divisionKey)
+        }
+        guard eligibleDivisions.contains(divisionKey) else { return nil }
+        let levelKey = routine.level.normalizedKey
+
+        switch apparatus {
+        case "TELA":
+            return telaChecklist(levelKey: levelKey)
+        case "ARO":
+            return aroChecklist(levelKey: levelKey)
+        default:
+            return nil
+        }
+    }
+
+    public static func isAerialApparatusGenre(_ genre: String) -> Bool {
+        apparatus(forGenre: genre) != nil
+    }
+
+    private static let eligibleDivisions: Set<String> = [
+        "PETITE",
+        "JUNIOR",
+        "TEEN",
+        "SENIOR"
+    ]
+
+    private static let autoCompletedDivisions: Set<String> = [
+        "BABY",
+        "LEGACY"
+    ]
+
+    private static func autoCompletedChecklist(apparatus: String, divisionKey: String) -> ObligatoryChecklist {
+        let division = divisionKey == "LEGACY" ? "Legacy" : "Baby"
+        return ObligatoryChecklist(
+            apparatus: apparatus,
+            level: division,
+            items: [],
+            isAutoCompleted: true
+        )
+    }
+
+    private static func apparatus(forGenre genre: String) -> String? {
+        let genreKey = genre.normalizedKey
+        if genreKey.contains("TELA") {
+            return "TELA"
+        }
+        if genreKey.contains("ARO") {
+            return "ARO"
+        }
+        return nil
+    }
+
+    private static func telaChecklist(levelKey: String) -> ObligatoryChecklist? {
+        switch levelKey {
+        case "NUDO":
+            ObligatoryChecklist(apparatus: "TELA", level: "Nudo", items: [
+                item("tela-nudo-espalda", "Figura de flex de espalda"),
+                item("tela-nudo-pierna", "Figura de flex de pierna"),
+                item("tela-nudo-caida-simple", "1 caída simple")
+            ])
+        case "PRINCIPIANTE":
+            ObligatoryChecklist(apparatus: "TELA", level: "Principiante", items: [
+                item("tela-principiante-subida", "Subida básica sin inversiones"),
+                item("tela-principiante-zapato", "Figuras en zapato o doble zapato"),
+                item("tela-principiante-inversion-lumbar", "1 caída por inversión central con amarre de lumbar"),
+                item("tela-principiante-caida-seguro", "1 caída sencilla/simple con seguro")
+            ])
+        case "INTERMEDIO":
+            ObligatoryChecklist(apparatus: "TELA", level: "Intermedio", items: [
+                item("tela-intermedio-subida", "Subida libre con o sin inversiones"),
+                item("tela-intermedio-flexibilidad", "Al menos 1 figura de flexibilidad"),
+                item("tela-intermedio-fuerza", "Al menos 1 figura de fuerza"),
+                item("tela-intermedio-tijera", "Uso de tijera"),
+                item("tela-intermedio-caidas", "2 caídas simples o 1 caída compuesta")
+            ])
+        case "AVANZADO":
+            ObligatoryChecklist(apparatus: "TELA", level: "Avanzado", items: [
+                item("tela-avanzado-subida", "Subida de fuerza o que implique inversiones"),
+                item("tela-avanzado-flexibilidad", "1 figura de flexibilidad"),
+                item("tela-avanzado-fuerza", "1 figura de fuerza o suspensión únicamente en manos"),
+                item("tela-avanzado-inversion", "Al menos 1 inversión con piernas y brazos estirados"),
+                item("tela-avanzado-caida", "1 caída compuesta")
+            ])
+        case "ELITE":
+            ObligatoryChecklist(apparatus: "TELA", level: "Elite", items: [
+                item("tela-elite-subida", "Subida de fuerza o que implique inversiones"),
+                item("tela-elite-flexibilidad", "1 figura de flexibilidad"),
+                item("tela-elite-fuerza", "1 figura de fuerza o suspensión únicamente en manos"),
+                item("tela-elite-inversion", "Al menos 1 inversión con piernas y brazos estirados"),
+                item("tela-elite-caida", "1 caída compuesta o caída sin seguro"),
+                item("tela-elite-equilibrio", "1 equilibrio: estómago, lumbares, split o squat"),
+                item("tela-elite-dinamico", "Dinámico compuesto: unión de 2 dinámicos o más")
+            ])
+        default:
+            nil
+        }
+    }
+
+    private static func aroChecklist(levelKey: String) -> ObligatoryChecklist? {
+        switch levelKey {
+        case "PRINCIPIANTE":
+            ObligatoryChecklist(apparatus: "ARO", level: "Principiante", items: [
+                item("aro-principiante-inversiones", "Inversiones con piernas y codos flexionados o desde balanceos/puntos de apoyo"),
+                item("aro-principiante-figuras", "Figuras y transiciones simples"),
+                item("aro-principiante-equilibrio", "1 equilibrio de lumbares o abdomen")
+            ])
+        case "INTERMEDIO":
+            ObligatoryChecklist(apparatus: "ARO", level: "Intermedio", items: [
+                item("aro-intermedio-subida", "Subida libre con brazos o piernas estiradas"),
+                item("aro-intermedio-flexibilidad", "Al menos 1 figura de flexibilidad"),
+                item("aro-intermedio-fuerza", "Al menos 1 figura de fuerza"),
+                item("aro-intermedio-caidas", "2 caídas simples o 1 caída compuesta")
+            ])
+        case "AVANZADO":
+            ObligatoryChecklist(apparatus: "ARO", level: "Avanzado", items: [
+                item("aro-avanzado-subida", "Subida de fuerza o inversiones a brazos y piernas estiradas o de estómago"),
+                item("aro-avanzado-flexibilidad", "2 figuras de flexibilidad"),
+                item("aro-avanzado-fuerza", "2 figuras de fuerza"),
+                item("aro-avanzado-equilibrios", "2 equilibrios"),
+                item("aro-avanzado-caidas", "1 o más caídas compuestas y una simple"),
+                item("aro-avanzado-balanceos", "Al menos 1 secuencia con balanceos en manos o corvas"),
+                item("aro-avanzado-dinamico", "Mínimo 1 dinámico")
+            ])
+        default:
+            nil
+        }
+    }
+
+    private static func item(_ id: String, _ title: String) -> ObligatoryRequirement {
+        ObligatoryRequirement(id: id, title: title)
+    }
+}
+
 public enum RoutineMetadataField: String, CaseIterable, Identifiable, Sendable {
     case division
     case level
@@ -616,7 +827,6 @@ public enum EventDeletionError: LocalizedError {
 public enum RoutineDeletionError: LocalizedError {
     case missingRemoteConfiguration
     case missingSelectedEvent
-    case missingImportSecret
     case notAllowed
 
     public var errorDescription: String? {
@@ -625,8 +835,6 @@ public enum RoutineDeletionError: LocalizedError {
             "Supabase no está configurado."
         case .missingSelectedEvent:
             "Elegí un programa online antes de borrar una coreografía."
-        case .missingImportSecret:
-            "Ingresá la clave de importación para borrar la coreografía."
         case .notAllowed:
             "Solo un admin puede borrar coreografías."
         }
@@ -649,6 +857,29 @@ public enum RoutineUpdateError: LocalizedError {
             "Solo un admin puede editar coreografías."
         case .updateNotApplied(let field):
             "No se pudo aplicar el cambio de \(field). Puede que falte desplegar la función update-routine en Supabase."
+        }
+    }
+}
+
+public enum RoutineMoveError: LocalizedError {
+    case missingRemoteConfiguration
+    case missingSelectedEvent
+    case missingTargetBlock
+    case notAllowed
+    case moveNotApplied
+
+    public var errorDescription: String? {
+        switch self {
+        case .missingRemoteConfiguration:
+            "Supabase no está configurado."
+        case .missingSelectedEvent:
+            "Elegí un programa online antes de mover una coreografía."
+        case .missingTargetBlock:
+            "Elegí el bloque destino antes de mover la coreografía."
+        case .notAllowed:
+            "Solo un admin puede mover coreografías."
+        case .moveNotApplied:
+            "No se pudo mover la coreografía. Puede que falte desplegar la función move-routine en Supabase."
         }
     }
 }

@@ -7,11 +7,9 @@ type DeleteRoutinePayload = {
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-import-secret",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-
-const IMPORT_SECRET_HEADER = "x-import-secret";
 
 class HTTPError extends Error {
   status: number;
@@ -32,7 +30,6 @@ Deno.serve(async (request) => {
   }
 
   try {
-    authorizeImport(request);
     const payload = await request.json() as DeleteRoutinePayload;
     const eventID = cleanText(payload.event_id);
     const routineID = cleanText(payload.routine_id);
@@ -83,27 +80,6 @@ Deno.serve(async (request) => {
     return jsonResponse({ error: message }, status);
   }
 });
-
-function authorizeImport(request: Request): void {
-  const expected = cleanText(Deno.env.get("IMPORT_SECRET") || Deno.env.get("JUECEO_IMPORT_SECRET"));
-  if (!expected) {
-    throw new HTTPError(500, "Falta IMPORT_SECRET en la Edge Function.");
-  }
-
-  const provided = cleanText(request.headers.get(IMPORT_SECRET_HEADER));
-  if (!safeEqual(provided, expected)) {
-    throw new HTTPError(403, "No tenes permiso para borrar coreografias.");
-  }
-}
-
-function safeEqual(left: string, right: string): boolean {
-  const maxLength = Math.max(left.length, right.length);
-  let diff = left.length ^ right.length;
-  for (let index = 0; index < maxLength; index += 1) {
-    diff |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
-  }
-  return diff === 0;
-}
 
 async function supabaseRequest(method: string, path: string, payload?: unknown, prefer?: string): Promise<unknown> {
   const baseURL = cleanText(Deno.env.get("SUPABASE_URL")).replace(/\/+$/, "");
