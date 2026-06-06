@@ -6,6 +6,8 @@ type UpsertJudgePayload = {
   name?: string;
   role?: string;
   hero_image_name?: string;
+  photo_data?: string;
+  assigned_block_ids?: string[];
 };
 
 const CORS_HEADERS = {
@@ -39,6 +41,10 @@ Deno.serve(async (request) => {
     const judgeID = stableID(payload.judge_id || name);
     const requestedRole = cleanText(payload.role).toLowerCase() === "admin" ? "admin" : "judge";
     const heroImageName = cleanText(payload.hero_image_name);
+    const photoData = cleanText(payload.photo_data);
+    const assignedBlockIDs = Array.isArray(payload.assigned_block_ids)
+      ? Array.from(new Set(payload.assigned_block_ids.map(cleanText).filter(Boolean)))
+      : [];
 
     if (!eventID) {
       throw new HTTPError(400, "Falta event_id.");
@@ -61,7 +67,7 @@ Deno.serve(async (request) => {
 
     const existingRows = await supabaseRequest(
       "GET",
-      `judges?select=event_id,judge_id,name,role,sort_order,hero_image_name&event_id=eq.${encodeURIComponent(eventID)}&judge_id=eq.${encodeURIComponent(judgeID)}&limit=1`,
+      `judges?select=event_id,judge_id,name,role,sort_order,hero_image_name,photo_data,assigned_block_ids&event_id=eq.${encodeURIComponent(eventID)}&judge_id=eq.${encodeURIComponent(judgeID)}&limit=1`,
     ) as AnyRow[];
     const existing = existingRows[0];
     const role = cleanText(existing?.role) === "admin" || judgeID === "ati" ? "admin" : requestedRole;
@@ -77,6 +83,8 @@ Deno.serve(async (request) => {
         role,
         sort_order: sortOrder,
         hero_image_name: heroImageName,
+        photo_data: photoData,
+        assigned_block_ids: assignedBlockIDs,
       }],
       "resolution=merge-duplicates,return=representation",
     ) as AnyRow[];

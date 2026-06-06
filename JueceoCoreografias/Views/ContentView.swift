@@ -10,6 +10,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     case admin = "Panel admin"
     case editarCalificaciones = "Editar calificaciones"
     case actividad = "Actividad"
+    case jueces = "Jueces"
     case favoritos = "Favoritos"
     case bloques = "Rutinas"
     case jueceo = "Jueceo"
@@ -25,6 +26,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         case .admin: "gearshape.fill"
         case .editarCalificaciones: "tablecells.fill"
         case .actividad: "dot.radiowaves.left.and.right"
+        case .jueces: "person.crop.circle.badge.plus"
         case .favoritos: "star.fill"
         case .bloques: "list.bullet"
         case .jueceo: "checklist"
@@ -38,7 +40,7 @@ enum AppSection: String, CaseIterable, Identifiable {
         switch self {
         case .inicio, .bloques, .jueceo:
             false
-        case .admin, .editarCalificaciones, .actividad, .favoritos, .calificaciones, .dictamen, .importar:
+        case .admin, .editarCalificaciones, .actividad, .jueces, .favoritos, .calificaciones, .dictamen, .importar:
             true
         }
     }
@@ -46,6 +48,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     static let adminNavigation: [AppSection] = [
         .inicio,
         .editarCalificaciones,
+        .jueces,
         .dictamen,
         .favoritos,
         .importar
@@ -152,6 +155,8 @@ struct ContentView: View {
                             ScoreEditorView(section: $section)
                         case .actividad:
                             JudgeActivityView()
+                        case .jueces:
+                            JudgeManagementView()
                         case .favoritos:
                             FavoritesView()
                         case .bloques:
@@ -1238,6 +1243,13 @@ struct DashboardHeroBackground: View {
         return AppBrand.competition.heroFallbackAssetName
     }
 
+    private var heroPhotoImage: UIImage? {
+        guard let photoData = store.judgeProfile(for: store.scoringJudge)?.photoData,
+              let data = Data(base64Encoded: photoData)
+        else { return nil }
+        return UIImage(data: data)
+    }
+
     private var showsHeroImage: Bool {
         store.role(for: store.scoringJudge) != .admin
     }
@@ -1250,12 +1262,27 @@ struct DashboardHeroBackground: View {
                 Color.clear
 
                 if showsHeroImage {
-                    Image(heroImageName)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: imageWidth, height: proxy.size.height, alignment: .trailing)
-                        .clipped()
-                        .id(heroImageName)
+                    if let heroPhotoImage {
+                        Image(uiImage: heroPhotoImage)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(
+                                width: imageWidth * 0.70,
+                                height: proxy.size.height * 0.88,
+                                alignment: .bottomTrailing
+                            )
+                            .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.18), radius: 24, x: 0, y: 12)
+                            .frame(width: imageWidth, height: proxy.size.height, alignment: .bottomTrailing)
+                            .clipped()
+                            .id(store.scoringJudge)
+                    } else {
+                        Image(heroImageName)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: imageWidth, height: proxy.size.height, alignment: .trailing)
+                            .clipped()
+                            .id(heroImageName)
+                    }
 
                     LinearGradient(
                         colors: [

@@ -490,6 +490,8 @@ struct JudgeUpsertRequest: Encodable, Sendable {
     let name: String
     let role: String
     let heroImageName: String
+    let photoData: String
+    let assignedBlockIDs: [String]
 
     enum CodingKeys: String, CodingKey {
         case eventID = "event_id"
@@ -497,6 +499,8 @@ struct JudgeUpsertRequest: Encodable, Sendable {
         case name
         case role
         case heroImageName = "hero_image_name"
+        case photoData = "photo_data"
+        case assignedBlockIDs = "assigned_block_ids"
     }
 }
 
@@ -825,14 +829,24 @@ actor RemoteJudgingRepository {
         return try decoder.decode(RoutineMoveResponse.self, from: response)
     }
 
-    func upsertJudge(eventID: String, judgeID: String, name: String, role: UserRole, heroImageName: String = "") async throws -> JudgeUpsertResponse {
+    func upsertJudge(
+        eventID: String,
+        judgeID: String,
+        name: String,
+        role: UserRole,
+        heroImageName: String = "",
+        photoData: String = "",
+        assignedBlockIDs: [String] = []
+    ) async throws -> JudgeUpsertResponse {
         let data = try encoder.encode(
             JudgeUpsertRequest(
                 eventID: eventID,
                 judgeID: judgeID,
                 name: name,
                 role: role.rawValue,
-                heroImageName: heroImageName
+                heroImageName: heroImageName,
+                photoData: photoData,
+                assignedBlockIDs: assignedBlockIDs
             )
         )
         let response = try await functionRequest(name: "upsert-judge", body: data)
@@ -1129,13 +1143,17 @@ private struct JudgeRow: Codable, Sendable {
     let name: String
     let role: String?
     let heroImageName: String?
+    let photoData: String?
+    let assignedBlockIDs: [String]?
 
     var profile: JudgeProfile {
         JudgeProfile(
             judgeID: judgeID,
             name: name,
             role: UserRole(rawValue: role ?? "") ?? (AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge),
-            heroImageName: heroImageName
+            heroImageName: heroImageName,
+            photoData: photoData,
+            assignedBlockIDs: assignedBlockIDs
         )
     }
 
@@ -1144,6 +1162,8 @@ private struct JudgeRow: Codable, Sendable {
         case name
         case role
         case heroImageName = "hero_image_name"
+        case photoData = "photo_data"
+        case assignedBlockIDs = "assigned_block_ids"
     }
 }
 

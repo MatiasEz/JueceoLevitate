@@ -170,12 +170,23 @@ public struct JudgeProfile: Codable, Identifiable, Hashable, Sendable {
     public let name: String
     public let role: UserRole
     public let heroImageName: String?
+    public let photoData: String?
+    public let assignedBlockIDs: [String]?
 
-    public init(judgeID: String, name: String, role: UserRole, heroImageName: String? = nil) {
+    public init(
+        judgeID: String,
+        name: String,
+        role: UserRole,
+        heroImageName: String? = nil,
+        photoData: String? = nil,
+        assignedBlockIDs: [String]? = nil
+    ) {
         self.judgeID = judgeID
         self.name = name
         self.role = role
         self.heroImageName = heroImageName
+        self.photoData = photoData
+        self.assignedBlockIDs = assignedBlockIDs
     }
 }
 
@@ -925,9 +936,9 @@ public enum JudgeSaveError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .missingSelectedEvent:
-            "Elegí un programa online antes de agregar un juez."
+            "Elegí un programa online antes de guardar un juez."
         case .notAllowed:
-            "Solo un admin puede agregar jueces."
+            "Solo un admin puede guardar jueces."
         }
     }
 }

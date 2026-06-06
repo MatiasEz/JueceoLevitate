@@ -585,18 +585,11 @@ private struct PhoneScoreSheet: View {
     }
 
     private var adminScoringJudgeOptions: [String] {
-        let judgesByKey = Dictionary(
-            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
-        )
-        var judges = allowedAdminScoringJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
+        var judges = store.assignedEditableJudges(for: store.selectedBlock)
         if !judges.contains(scoringJudge), store.orderedEditableJudges.contains(scoringJudge) {
             judges.insert(scoringJudge, at: 0)
         }
         return judges
-    }
-
-    private var allowedAdminScoringJudgeNames: [String] {
-        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
     }
 
     var body: some View {
@@ -1883,6 +1876,7 @@ private struct PhoneAdminView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     driveExport
+                    judgeManagementLink
                     editAsJudge
                     specialAwards
                     deleteRoutineMenu
@@ -1961,6 +1955,26 @@ private struct PhoneAdminView: View {
         }
     }
 
+    private var judgeManagementLink: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Jueces")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            NavigationLink {
+                JudgeManagementView()
+            } label: {
+                PhoneActionRow(
+                    title: "Administrar jueces",
+                    detail: "\(store.orderedEditableJudges.count) jueces",
+                    icon: "person.crop.circle.badge.plus",
+                    color: LevitTheme.pink
+                )
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var editAsJudge: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(editAsJudgeTitle)
@@ -1968,7 +1982,7 @@ private struct PhoneAdminView: View {
                 .foregroundStyle(LevitTheme.muted)
 
             Menu {
-                ForEach(store.orderedEditableJudges, id: \.self) { judge in
+                ForEach(store.assignedEditableJudges(for: store.selectedBlock), id: \.self) { judge in
                     Button {
                         if let routine = store.selectedRoutine ?? store.visibleRoutines.first {
                             store.beginAdminScoring(judge: judge, routine: routine)

@@ -1,5 +1,9 @@
 import SwiftUI
 import JueceoCore
+import CoreTransferable
+import PhotosUI
+import UIKit
+import UniformTypeIdentifiers
 
 private let judgeActivityPollingIntervalNanoseconds: UInt64 = 10_000_000_000
 
@@ -680,6 +684,485 @@ struct AdminView: View {
     }
 }
 
+private struct JudgePhotoDropItem: Transferable {
+    let data: Data
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(importedContentType: .image) { receivedFile in
+            let url = receivedFile.file
+            let hasAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if hasAccess {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            return JudgePhotoDropItem(data: try Data(contentsOf: url))
+        }
+        DataRepresentation(importedContentType: .image) { data in
+            JudgePhotoDropItem(data: data)
+        }
+    }
+}
+
+struct JudgeManagementView: View {
+    @EnvironmentObject private var store: JudgingStore
+    @State private var selectedJudge: String?
+    @State private var draftName = ""
+    @State private var draftPhotoData: String?
+    @State private var draftAssignedBlockIDs = Set<String>()
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @State private var isSaving = false
+    @State private var isLoadingPhoto = false
+    @State private var isPhotoDropTargeted = false
+
+    private var selectedProfile: JudgeProfile? {
+        selectedJudge.flatMap { store.judgeProfile(for: $0) }
+    }
+
+    private var canSave: Bool {
+        !draftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !isSaving && !isLoadingPhoto
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                header
+
+                HStack(alignment: .top, spacing: 18) {
+                    judgeList
+                        .frame(width: 330)
+
+                    editor
+                        .frame(maxWidth: 760, alignment: .topLeading)
+                }
+            }
+            .padding(.horizontal, 34)
+            .padding(.vertical, 28)
+            .frame(maxWidth: 1200, alignment: .leading)
+        }
+        .background(LevitTheme.paper.ignoresSafeArea())
+        .foregroundStyle(LevitTheme.ink)
+        .onAppear {
+            if selectedJudge == nil {
+                selectedJudge = store.orderedEditableJudges.first
+                loadDraft()
+            }
+        }
+        .onChange(of: selectedJudge) { _, _ in
+            loadDraft()
+        }
+        .onChange(of: selectedPhotoItem) { _, newItem in
+            guard let newItem else { return }
+            Task { await loadPhoto(from: newItem) }
+        }
+    }
+
+    private var header: some View {
+        HStack(alignment: .center, spacing: 18) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Jueces")
+                    .font(.system(size: 34, weight: .black, design: .rounded))
+                Text("Administra nombres, fotos y bloques asignados para la tabla de edición.")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+            }
+
+            Spacer()
+
+            Button {
+                selectedJudge = nil
+                loadDraft()
+            } label: {
+                Label("Nuevo juez", systemImage: "plus")
+                    .font(.callout.weight(.black))
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .foregroundStyle(.white)
+                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var judgeList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Listado")
+                .font(.caption.weight(.black))
+                .foregroundStyle(LevitTheme.muted)
+
+            if store.orderedEditableJudges.isEmpty {
+                Text("Todavía no hay jueces.")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .frame(maxWidth: .infinity, minHeight: 90)
+                    .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+                    .overlay(RoundedRectangle(cornerRadius: 16).stroke(LevitTheme.line))
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(store.orderedEditableJudges, id: \.self) { judge in
+                        let profile = store.judgeProfile(for: judge)
+                        Button {
+                            selectedJudge = judge
+                        } label: {
+                            HStack(spacing: 12) {
+                                JudgeAvatarView(
+                                    name: judge,
+                                    profile: profile,
+                                    photoData: profile?.photoData,
+                                    size: 46
+                                )
+
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(judge)
+                                        .font(.headline.weight(.black))
+                                        .lineLimit(1)
+                                    Text(assignmentSummary(for: profile))
+                                        .font(.caption.weight(.bold))
+                                        .foregroundStyle(LevitTheme.muted)
+                                        .lineLimit(1)
+                                }
+
+                                Spacer()
+
+                                if selectedJudge == judge {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundStyle(LevitTheme.pink)
+                                        .font(.headline.weight(.black))
+                                }
+                            }
+                            .padding(12)
+                            .foregroundStyle(LevitTheme.ink)
+                            .background(selectedJudge == judge ? LevitTheme.palePink.opacity(0.78) : LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(selectedJudge == judge ? LevitTheme.pink.opacity(0.42) : LevitTheme.line))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private var editor: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .center, spacing: 18) {
+                photoDropTarget
+
+                VStack(alignment: .leading, spacing: 10) {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images) {
+                        Label("Elegir foto", systemImage: "photo.on.rectangle")
+                            .font(.callout.weight(.black))
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                            .foregroundStyle(LevitTheme.ink)
+                            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12))
+                            .overlay(RoundedRectangle(cornerRadius: 12).stroke(LevitTheme.line))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isLoadingPhoto)
+
+                    Button {
+                        draftPhotoData = nil
+                        selectedPhotoItem = nil
+                    } label: {
+                        Label("Quitar foto", systemImage: "xmark.circle")
+                            .font(.callout.weight(.black))
+                            .foregroundStyle(LevitTheme.muted)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled((draftPhotoData ?? "").isEmpty)
+                    .opacity((draftPhotoData ?? "").isEmpty ? 0.45 : 1)
+                }
+
+                Spacer()
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text("Nombre")
+                    .font(.caption.weight(.black))
+                    .foregroundStyle(LevitTheme.muted)
+                TextField("Nombre del juez", text: $draftName)
+                    .textInputAutocapitalization(.characters)
+                    .disableAutocorrection(true)
+                    .font(.title3.weight(.black))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 13)
+                    .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                    .overlay(RoundedRectangle(cornerRadius: 13).stroke(LevitTheme.line))
+            }
+
+            blockAssignments
+
+            HStack {
+                Spacer()
+                Button {
+                    Task { await saveJudge() }
+                } label: {
+                    HStack(spacing: 9) {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        } else {
+                            Image(systemName: "checkmark")
+                        }
+                        Text(isSaving ? "Guardando" : "Guardar juez")
+                    }
+                    .font(.headline.weight(.black))
+                    .padding(.horizontal, 22)
+                    .padding(.vertical, 14)
+                    .foregroundStyle(.white)
+                    .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.55)
+            }
+        }
+        .padding(20)
+        .background(LevitTheme.solidSurface, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(LevitTheme.line))
+    }
+
+    private var photoDropTarget: some View {
+        VStack(spacing: 9) {
+            JudgeAvatarView(
+                name: draftName,
+                profile: selectedProfile,
+                photoData: draftPhotoData,
+                size: 112
+            )
+
+            Label(isPhotoDropTargeted ? "Soltar foto" : "Arrastrar foto", systemImage: isPhotoDropTargeted ? "arrow.down.circle.fill" : "photo.badge.plus")
+                .font(.caption.weight(.black))
+                .foregroundStyle(isPhotoDropTargeted ? LevitTheme.pink : LevitTheme.muted)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+        }
+        .frame(width: 148)
+        .padding(.vertical, 11)
+        .background(isPhotoDropTargeted ? LevitTheme.palePink.opacity(0.78) : LevitTheme.softFill.opacity(0.55), in: RoundedRectangle(cornerRadius: 20))
+        .overlay(
+            RoundedRectangle(cornerRadius: 20)
+                .stroke(
+                    isPhotoDropTargeted ? LevitTheme.pink.opacity(0.62) : LevitTheme.line,
+                    style: StrokeStyle(lineWidth: isPhotoDropTargeted ? 2 : 1, dash: [6, 5])
+                )
+        )
+        .contentShape(RoundedRectangle(cornerRadius: 20))
+        .dropDestination(for: JudgePhotoDropItem.self) { items, _ in
+            guard let item = items.first else { return false }
+            return applyPhotoData(item.data, failureMessage: "Arrastrá otra imagen e intentá de nuevo.")
+        } isTargeted: { targeted in
+            isPhotoDropTargeted = targeted
+        }
+        .opacity(isLoadingPhoto ? 0.62 : 1)
+    }
+
+    private var blockAssignments: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Bloques")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+                    Text("Los bloques marcados definen las columnas visibles en Editar calificaciones.")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(LevitTheme.muted)
+                }
+                Spacer()
+                Button("Todos") {
+                    draftAssignedBlockIDs = Set(store.blocks.map(\.id))
+                }
+                .font(.caption.weight(.black))
+                .buttonStyle(.plain)
+                Button("Ninguno") {
+                    draftAssignedBlockIDs.removeAll()
+                }
+                .font(.caption.weight(.black))
+                .buttonStyle(.plain)
+            }
+
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 10)], spacing: 10) {
+                ForEach(store.blocks) { block in
+                    Button {
+                        toggleBlock(block)
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: draftAssignedBlockIDs.contains(block.id) ? "checkmark.square.fill" : "square")
+                                .font(.headline.weight(.black))
+                                .foregroundStyle(draftAssignedBlockIDs.contains(block.id) ? LevitTheme.pink : LevitTheme.muted)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(block.name)
+                                    .font(.callout.weight(.black))
+                                    .lineLimit(1)
+                                if !block.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                                    Text(block.title)
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(LevitTheme.muted)
+                                        .lineLimit(1)
+                                }
+                            }
+                            Spacer()
+                        }
+                        .padding(12)
+                        .foregroundStyle(LevitTheme.ink)
+                        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 13))
+                        .overlay(RoundedRectangle(cornerRadius: 13).stroke(draftAssignedBlockIDs.contains(block.id) ? LevitTheme.pink.opacity(0.35) : LevitTheme.line))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func loadDraft() {
+        if let selectedJudge {
+            let profile = store.judgeProfile(for: selectedJudge)
+            draftName = profile?.name ?? selectedJudge
+            draftPhotoData = profile?.photoData
+            if let assignedBlockIDs = profile?.assignedBlockIDs, !assignedBlockIDs.isEmpty {
+                draftAssignedBlockIDs = Set(assignedBlockIDs)
+            } else {
+                draftAssignedBlockIDs = Set(store.blocks.filter { block in
+                    store.assignedEditableJudges(for: block).contains(selectedJudge)
+                }.map(\.id))
+            }
+        } else {
+            draftName = ""
+            draftPhotoData = nil
+            draftAssignedBlockIDs = Set(store.selectedBlock.map { [$0.id] } ?? store.blocks.map(\.id))
+        }
+        selectedPhotoItem = nil
+    }
+
+    private func toggleBlock(_ block: DanceBlock) {
+        if draftAssignedBlockIDs.contains(block.id) {
+            draftAssignedBlockIDs.remove(block.id)
+        } else {
+            draftAssignedBlockIDs.insert(block.id)
+        }
+    }
+
+    @MainActor
+    private func loadPhoto(from item: PhotosPickerItem) async {
+        isLoadingPhoto = true
+        defer { isLoadingPhoto = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self) else {
+                store.showOperationFailure("No se pudo leer la foto", message: "Elegí otra imagen e intentá de nuevo.")
+                return
+            }
+            _ = applyPhotoData(data, failureMessage: "Elegí otra imagen e intentá de nuevo.")
+        } catch {
+            store.showOperationFailure("No se pudo leer la foto", message: error.localizedDescription)
+        }
+    }
+
+    private func applyPhotoData(_ data: Data, failureMessage: String) -> Bool {
+        guard let encoded = Self.encodedPhotoData(from: data) else {
+            store.showOperationFailure("No se pudo leer la foto", message: failureMessage)
+            return false
+        }
+        draftPhotoData = encoded
+        selectedPhotoItem = nil
+        return true
+    }
+
+    @MainActor
+    private func saveJudge() async {
+        guard canSave else { return }
+        isSaving = true
+        defer { isSaving = false }
+        do {
+            guard let savedName = try await store.saveJudgeProfile(
+                originalJudge: selectedJudge,
+                name: draftName,
+                photoData: draftPhotoData,
+                assignedBlockIDs: Array(draftAssignedBlockIDs)
+            ) else {
+                store.showOperationFailure("No se pudo guardar", message: "Revisá que el nombre no esté vacío ni repetido.")
+                return
+            }
+            selectedJudge = savedName
+            store.showOperationSuccess("Juez guardado", message: "\(savedName) quedó actualizado.")
+        } catch {
+            store.showOperationFailure("No se pudo guardar", message: error.localizedDescription)
+        }
+    }
+
+    private func assignmentSummary(for profile: JudgeProfile?) -> String {
+        let count = profile?.assignedBlockIDs?.count ?? 0
+        if count == 0 {
+            return store.hasCustomJudgeBlockAssignments ? "Sin bloques asignados" : "Usa configuración base"
+        }
+        return count == 1 ? "1 bloque" : "\(count) bloques"
+    }
+
+    private static func encodedPhotoData(from data: Data) -> String? {
+        #if canImport(UIKit)
+        guard let image = UIImage(data: data) else { return nil }
+        let longestSide = max(image.size.width, image.size.height)
+        let scale = min(1, 640 / max(longestSide, 1))
+        let targetSize = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let scaledImage = renderer.image { _ in
+            image.draw(in: CGRect(origin: .zero, size: targetSize))
+        }
+        return scaledImage.jpegData(compressionQuality: 0.78)?.base64EncodedString()
+        #else
+        return data.base64EncodedString()
+        #endif
+    }
+}
+
+private struct JudgeAvatarView: View {
+    let name: String
+    let profile: JudgeProfile?
+    let photoData: String?
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            if let image = decodedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if let heroImageName = cleanHeroImageName {
+                Image(heroImageName)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                LevitTheme.palePink
+                Text(initials)
+                    .font(.system(size: max(13, size * 0.32), weight: .black, design: .rounded))
+                    .foregroundStyle(LevitTheme.pink)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(Circle())
+        .overlay(Circle().stroke(LevitTheme.line, lineWidth: 1))
+        .shadow(color: LevitTheme.pink.opacity(0.12), radius: 10, x: 0, y: 4)
+    }
+
+    private var decodedImage: UIImage? {
+        guard let photoData,
+              let data = Data(base64Encoded: photoData)
+        else { return nil }
+        return UIImage(data: data)
+    }
+
+    private var cleanHeroImageName: String? {
+        let cleaned = profile?.heroImageName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
+    private var initials: String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "J" }
+        return String(trimmed.prefix(2)).uppercased()
+    }
+}
+
 struct ScoreEditorView: View {
     @EnvironmentObject private var store: JudgingStore
     @Binding var section: AppSection
@@ -757,14 +1240,7 @@ struct ScoreEditorView: View {
     }
 
     private var editableJudges: [String] {
-        let judgesByKey = Dictionary(
-            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
-        )
-        return allowedJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
-    }
-
-    private var allowedJudgeNames: [String] {
-        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
+        store.assignedEditableJudges(for: store.selectedBlock)
     }
 
     var body: some View {

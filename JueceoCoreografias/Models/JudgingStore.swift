@@ -32,6 +32,8 @@ private enum DataRefreshError: LocalizedError {
 
 @MainActor
 final class JudgingStore: ObservableObject {
+    private static let localAppDataStorageKey = "jueceo.localAppData.v1"
+
     @Published private(set) var appData: AppData
     @Published private(set) var availableEvents: [EventSummary] = []
     @Published private(set) var selectedEventID: String?
@@ -86,8 +88,8 @@ final class JudgingStore: ObservableObject {
 
     init() {
         let initStart = LoadDiagnostics.start()
-        let data = Self.loadBundledData()
         let repository = SupabaseConfig.load().map { RemoteJudgingRepository(config: $0) }
+        let data = repository == nil ? (Self.loadAppDataCache(Self.localAppDataStorageKey) ?? Self.loadBundledData()) : Self.loadBundledData()
         remoteRepository = repository
         appData = data
         selectedRoutineID = data.routines.first?.id ?? ""
@@ -148,10 +150,10 @@ final class JudgingStore: ObservableObject {
         }
     }
     var judgeProfiles: [JudgeProfile] {
-        let profilesByID = Dictionary(uniqueKeysWithValues: (appData.judgeProfiles ?? []).map { ($0.judgeID, $0) })
+        let profiles = appData.judgeProfiles ?? []
         return appData.judges.map { judge in
             let judgeID = judge.stableRemoteID
-            return profilesByID[judgeID] ?? JudgeProfile(
+            return Self.storedJudgeProfile(in: profiles, for: judge) ?? JudgeProfile(
                 judgeID: judgeID,
                 name: judge,
                 role: AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge
@@ -175,6 +177,42 @@ final class JudgingStore: ObservableObject {
     var deletableJudges: [String] {
         orderedJudges.filter(canDeleteJudge)
     }
+    var hasCustomJudgeBlockAssignments: Bool {
+        (appData.judgeProfiles ?? []).contains { profile in
+            !(profile.assignedBlockIDs ?? []).isEmpty
+        }
+    }
+
+    func judgeProfile(for judge: String) -> JudgeProfile? {
+        let judgeID = judge.stableRemoteID
+        return Self.storedJudgeProfile(in: appData.judgeProfiles ?? [], for: judge) ?? JudgeProfile(
+            judgeID: judgeID,
+            name: judge,
+            role: AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge
+        )
+    }
+
+    func judgeRemoteID(for judge: String) -> String {
+        judgeProfile(for: judge)?.judgeID ?? judge.stableRemoteID
+    }
+
+    func assignedEditableJudges(for block: DanceBlock?) -> [String] {
+        guard let block else { return fallbackEditableJudges(for: nil) }
+        guard hasCustomJudgeBlockAssignments else { return fallbackEditableJudges(for: block) }
+
+        let blockKeys = assignmentKeys(for: block)
+        let assigned = orderedEditableJudges.filter { judge in
+            guard let assignedBlockIDs = judgeProfile(for: judge)?.assignedBlockIDs,
+                  !assignedBlockIDs.isEmpty
+            else {
+                return false
+            }
+            return assignedBlockIDs.contains { blockKeys.contains($0.normalizedKey) || blockKeys.contains($0.stableRemoteID) }
+        }
+
+        return assigned
+    }
+
     var blocks: [DanceBlock] { appData.blocks }
     var selectedBlock: DanceBlock? {
         if let selectedBlockID,
@@ -222,7 +260,7 @@ final class JudgingStore: ObservableObject {
                 activities.max { lhs, rhs in lhs.updatedAt < rhs.updatedAt }
             }
         return orderedEditableJudges.compactMap { judge in
-            latestByJudge[judge.stableRemoteID]
+            latestByJudge[judgeRemoteID(for: judge)] ?? latestByJudge[judge.stableRemoteID]
         }
     }
 
@@ -402,8 +440,114 @@ final class JudgingStore: ObservableObject {
         }
 
         appData.judges.append(cleanName)
-        appendOrUpdateJudgeProfile(name: cleanName, role: role)
+        appendOrUpdateJudgeProfile(
+            judgeID: cleanName.stableRemoteID,
+            name: cleanName,
+            role: role,
+            heroImageName: nil,
+            photoData: nil,
+            assignedBlockIDs: nil
+        )
+        persistLocalAppDataIfNeeded()
         selectJudge(cleanName)
+        return cleanName
+    }
+
+    @discardableResult
+    func saveJudgeProfile(
+        originalJudge: String?,
+        name: String,
+        photoData: String?,
+        assignedBlockIDs: [String]
+    ) async throws -> String? {
+        guard isAdmin else {
+            throw JudgeSaveError.notAllowed
+        }
+
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard !cleanName.isEmpty else { return nil }
+        if appData.judges.contains(where: { judge in
+            judge.normalizedKey == cleanName.normalizedKey && judge.normalizedKey != originalJudge?.normalizedKey
+        }) {
+            return nil
+        }
+
+        let existingProfile = originalJudge.flatMap { judgeProfile(for: $0) }
+        let judgeID = existingProfile?.judgeID ?? cleanName.stableRemoteID
+        let role = existingProfile?.role
+            ?? (AppBrand.competition.adminJudgeIDs.contains(judgeID) ? .admin : .judge)
+        let heroImageName = existingProfile?.heroImageName
+        let cleanPhotoData = photoData?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let blockIDs = normalizedAssignedBlockIDs(assignedBlockIDs)
+
+        if let remoteRepository {
+            guard let eventID = selectedEventID else {
+                throw JudgeSaveError.missingSelectedEvent
+            }
+            let previousProfiles = appData.judgeProfiles ?? []
+            syncStatus = .syncing
+            syncMessage = "Guardando juez \(cleanName)..."
+            let response = try await remoteRepository.upsertJudge(
+                eventID: eventID,
+                judgeID: judgeID,
+                name: cleanName,
+                role: role,
+                heroImageName: heroImageName ?? "",
+                photoData: cleanPhotoData ?? "",
+                assignedBlockIDs: blockIDs
+            )
+            if let originalJudge, originalJudge.normalizedKey != cleanName.normalizedKey {
+                migrateLocalJudgeReferences(from: originalJudge, to: cleanName)
+            }
+            let savedName = response.judgeName.isEmpty ? cleanName : response.judgeName
+            let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
+            applyRemoteBundle(bundle)
+            restoreMissingLocalJudgeProfileFields(
+                from: previousProfiles,
+                excludingJudgeID: judgeID,
+                excludingNames: [originalJudge, cleanName, savedName].compactMap { $0 }
+            )
+            await syncPending()
+            syncStatus = pendingSyncCount > 0 ? .pending : .online
+            let refreshedPhotoData = judgeProfile(for: savedName)?.photoData?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let refreshedBlockIDs = normalizedAssignedBlockIDs(judgeProfile(for: savedName)?.assignedBlockIDs ?? [])
+            if refreshedPhotoData != (cleanPhotoData ?? "") || Set(refreshedBlockIDs) != Set(blockIDs) {
+                appendOrUpdateJudgeProfile(
+                    judgeID: judgeID,
+                    name: savedName,
+                    role: role,
+                    heroImageName: heroImageName,
+                    photoData: cleanPhotoData,
+                    assignedBlockIDs: blockIDs
+                )
+            }
+            syncMessage = "Juez \(savedName) guardado."
+            if originalJudge == selectedJudge || selectedJudge.normalizedKey == savedName.normalizedKey {
+                selectJudge(savedName)
+            }
+            return savedName
+        }
+
+        if let originalJudge,
+           let index = appData.judges.firstIndex(where: { $0.normalizedKey == originalJudge.normalizedKey }) {
+            appData.judges[index] = cleanName
+            migrateLocalJudgeReferences(from: originalJudge, to: cleanName)
+        } else {
+            appData.judges.append(cleanName)
+        }
+
+        appendOrUpdateJudgeProfile(
+            judgeID: judgeID,
+            name: cleanName,
+            role: role,
+            heroImageName: heroImageName,
+            photoData: cleanPhotoData,
+            assignedBlockIDs: blockIDs
+        )
+        persistLocalAppDataIfNeeded()
+        if originalJudge == selectedJudge {
+            selectedJudge = cleanName
+        }
         return cleanName
     }
 
@@ -428,7 +572,7 @@ final class JudgingStore: ObservableObject {
             do {
                 response = try await remoteRepository.deleteJudge(
                     eventID: eventID,
-                    judgeID: judge.stableRemoteID
+                    judgeID: judgeRemoteID(for: judge)
                 )
             } catch RemoteJudgingError.http(let status, let detail)
                 where status == 404 && detail.localizedCaseInsensitiveContains("No se encontro el juez") {
@@ -508,6 +652,7 @@ final class JudgingStore: ObservableObject {
         if matchesJudgeKey(selectedJudge, judge: judge) {
             selectedJudge = orderedJudges.first ?? "JUEZ"
         }
+        persistLocalAppDataIfNeeded()
     }
 
     func selectJudge(_ judge: String) {
@@ -534,7 +679,7 @@ final class JudgingStore: ObservableObject {
     }
 
     func role(for judge: String) -> UserRole {
-        let judgeID = judge.stableRemoteID
+        let judgeID = judgeRemoteID(for: judge)
         if AppBrand.competition.adminJudgeIDs.contains(judgeID) {
             return .admin
         }
@@ -1138,7 +1283,7 @@ final class JudgingStore: ObservableObject {
                 return (key, ScoreUpsertRow(
                     eventID: eventID,
                     routineID: parsed.routineID,
-                    judgeID: judgeName.stableRemoteID,
+                    judgeID: judgeRemoteID(for: judgeName),
                     criterionID: parsed.criterionID,
                     value: value,
                     deviceID: deviceID
@@ -1165,7 +1310,7 @@ final class JudgingStore: ObservableObject {
                 return (key, FeedbackUpsertRow(
                     eventID: eventID,
                     routineID: parsed.routineID,
-                    judgeID: judgeName.stableRemoteID,
+                    judgeID: judgeRemoteID(for: judgeName),
                     body: feedback[key] ?? "",
                     deviceID: deviceID
                 ))
@@ -1192,7 +1337,7 @@ final class JudgingStore: ObservableObject {
                     eventID: eventID,
                     blockID: blockID(forRoutineID: parsed.routineID),
                     routineID: parsed.routineID,
-                    judgeID: judgeName.stableRemoteID,
+                    judgeID: judgeRemoteID(for: judgeName),
                     value: penalties[key] ?? 0,
                     deviceID: deviceID
                 ))
@@ -1225,7 +1370,7 @@ final class JudgingStore: ObservableObject {
                     eventID: eventID,
                     blockID: parsed.blockID,
                     routineID: routineID,
-                    judgeID: judgeName.stableRemoteID,
+                    judgeID: judgeRemoteID(for: judgeName),
                     category: parsed.category.rawValue,
                     deviceID: deviceID
                 )
@@ -1241,7 +1386,7 @@ final class JudgingStore: ObservableObject {
                 return FavoriteDeleteRow(
                     eventID: eventID,
                     blockID: parsed.blockID,
-                    judgeID: judgeName.stableRemoteID,
+                    judgeID: judgeRemoteID(for: judgeName),
                     category: parsed.category.rawValue,
                     routineID: parsed.routineID
                 )
@@ -1748,7 +1893,7 @@ final class JudgingStore: ObservableObject {
         }
         LoadDiagnostics.log("applyRemoteBundle metadata/selection elapsed=\(LoadDiagnostics.elapsed(since: metadataStart)) selectedBlockID=\(selectedBlockID ?? "nil") selectedRoutineID=\(selectedRoutineID) selectedJudge=\(selectedJudge)")
 
-        let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
+        let judgeNamesByID = judgeNamesByRemoteID()
         let cleanupStart = LoadDiagnostics.start()
         removeSyncedCacheForCurrentEvent()
         LoadDiagnostics.log("applyRemoteBundle cache cleanup elapsed=\(LoadDiagnostics.elapsed(since: cleanupStart)) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count)")
@@ -1902,7 +2047,7 @@ final class JudgingStore: ObservableObject {
             try await remoteRepository.upsertJudgeActivity(
                 JudgeActivityUpsertRow(
                     eventID: eventID,
-                    judgeID: selectedJudge.stableRemoteID,
+                    judgeID: judgeRemoteID(for: selectedJudge),
                     deviceID: deviceID,
                     state: state.rawValue,
                     blockID: activityBlock?.id,
@@ -1916,7 +2061,7 @@ final class JudgingStore: ObservableObject {
     }
 
     private func applyJudgeActivityRows(_ rows: [RemoteJudgeActivityRow]) {
-        let judgeNamesByID = Dictionary(uniqueKeysWithValues: appData.judges.map { ($0.stableRemoteID, $0) })
+        let judgeNamesByID = judgeNamesByRemoteID()
         let routinesByID = Dictionary(uniqueKeysWithValues: routines.map { ($0.id, $0) })
         let blocksByID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0) })
 
@@ -2310,12 +2455,18 @@ final class JudgingStore: ObservableObject {
     }
 
     private func judgeName(forNormalizedKey judgeKey: String) -> String? {
-        appData.judges.first { $0.normalizedKey == judgeKey || $0.stableRemoteID == judgeKey }
+        appData.judges.first {
+            $0.normalizedKey == judgeKey
+                || $0.stableRemoteID == judgeKey
+                || judgeRemoteID(for: $0) == judgeKey
+                || judgeRemoteID(for: $0).normalizedKey == judgeKey.normalizedKey
+        }
     }
 
     private func judgeName(forRemoteID judgeID: String, fallback: String) -> String {
         appData.judges.first {
-            $0.stableRemoteID == judgeID
+            judgeRemoteID(for: $0) == judgeID
+                || $0.stableRemoteID == judgeID
                 || $0.normalizedKey == fallback.normalizedKey
                 || $0.stableRemoteID == fallback.stableRemoteID
         } ?? fallback
@@ -2330,11 +2481,15 @@ final class JudgingStore: ObservableObject {
     }
 
     private func matchesJudgeKey(_ judgeKey: String, judge: String) -> Bool {
-        judgeKey == judge
+        let remoteID = judgeRemoteID(for: judge)
+        return judgeKey == judge
             || judgeKey == judge.normalizedKey
             || judgeKey == judge.stableRemoteID
+            || judgeKey == remoteID
             || judgeKey.normalizedKey == judge.normalizedKey
             || judgeKey.stableRemoteID == judge.stableRemoteID
+            || judgeKey.normalizedKey == remoteID.normalizedKey
+            || judgeKey.stableRemoteID == remoteID
     }
 
     private func favoriteKey(category: FavoriteCategory, judge: String, routineID: String? = nil) -> String {
@@ -2502,15 +2657,179 @@ final class JudgingStore: ObservableObject {
         }
     }
 
-    private func appendOrUpdateJudgeProfile(name: String, role: UserRole) {
-        let profile = JudgeProfile(judgeID: name.stableRemoteID, name: name, role: role)
+    private func appendOrUpdateJudgeProfile(
+        judgeID: String,
+        name: String,
+        role: UserRole,
+        heroImageName: String?,
+        photoData: String?,
+        assignedBlockIDs: [String]?
+    ) {
+        let profile = JudgeProfile(
+            judgeID: judgeID,
+            name: name,
+            role: role,
+            heroImageName: heroImageName,
+            photoData: photoData,
+            assignedBlockIDs: assignedBlockIDs
+        )
         var profiles = appData.judgeProfiles ?? []
-        if let index = profiles.firstIndex(where: { $0.judgeID == profile.judgeID }) {
+        if let index = profiles.firstIndex(where: { $0.judgeID == profile.judgeID || $0.name.normalizedKey == name.normalizedKey }) {
             profiles[index] = profile
         } else {
             profiles.append(profile)
         }
         appData.judgeProfiles = profiles
+    }
+
+    private func restoreMissingLocalJudgeProfileFields(
+        from previousProfiles: [JudgeProfile],
+        excludingJudgeID: String,
+        excludingNames: [String]
+    ) {
+        let excludedNameKeys = Set(excludingNames.map(\.normalizedKey))
+
+        for previousProfile in previousProfiles {
+            let previousPhotoData = previousProfile.photoData?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let previousBlockIDs = previousProfile.assignedBlockIDs ?? []
+            guard !previousPhotoData.isEmpty || !previousBlockIDs.isEmpty else { continue }
+            guard previousProfile.judgeID != excludingJudgeID,
+                  !excludedNameKeys.contains(previousProfile.name.normalizedKey)
+            else {
+                continue
+            }
+            guard let judgeName = appData.judges.first(where: { judge in
+                judge.stableRemoteID == previousProfile.judgeID
+                    || judge.normalizedKey == previousProfile.name.normalizedKey
+                    || Self.storedJudgeProfile(in: appData.judgeProfiles ?? [], for: judge)?.judgeID == previousProfile.judgeID
+            }) else {
+                continue
+            }
+
+            let currentProfile = Self.storedJudgeProfile(in: appData.judgeProfiles ?? [], for: judgeName)
+            let currentPhotoData = currentProfile?.photoData?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let currentBlockIDs = currentProfile?.assignedBlockIDs ?? []
+            let restoredPhotoData = currentPhotoData.isEmpty ? previousPhotoData : currentPhotoData
+            let restoredBlockIDs = currentBlockIDs.isEmpty ? previousBlockIDs : currentBlockIDs
+            guard restoredPhotoData != currentPhotoData || Set(restoredBlockIDs) != Set(currentBlockIDs) else { continue }
+
+            appendOrUpdateJudgeProfile(
+                judgeID: currentProfile?.judgeID ?? previousProfile.judgeID,
+                name: currentProfile?.name ?? judgeName,
+                role: currentProfile?.role ?? previousProfile.role,
+                heroImageName: currentProfile?.heroImageName ?? previousProfile.heroImageName,
+                photoData: restoredPhotoData.isEmpty ? nil : restoredPhotoData,
+                assignedBlockIDs: restoredBlockIDs.isEmpty ? currentProfile?.assignedBlockIDs : restoredBlockIDs
+            )
+        }
+    }
+
+    private static func storedJudgeProfile(in profiles: [JudgeProfile], for judge: String) -> JudgeProfile? {
+        let judgeID = judge.stableRemoteID
+        if let profile = profiles.first(where: { $0.judgeID == judgeID }) {
+            return profile
+        }
+        return profiles.first { $0.name.normalizedKey == judge.normalizedKey }
+    }
+
+    private func fallbackEditableJudges(for block: DanceBlock?) -> [String] {
+        let judgesByKey = Dictionary(uniqueKeysWithValues: orderedEditableJudges.map { ($0.normalizedKey, $0) })
+        let configuredNames = AppBrand.competition.adminScoringJudgeNames(for: block)
+        let configuredJudges = configuredNames.compactMap { judgesByKey[$0.normalizedKey] }
+        return configuredJudges.isEmpty ? orderedEditableJudges : configuredJudges
+    }
+
+    private func assignmentKeys(for block: DanceBlock) -> Set<String> {
+        let rawValues = [block.id, block.blockID ?? "", block.name, block.title]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        return Set(rawValues.flatMap { [$0.normalizedKey, $0.stableRemoteID] })
+    }
+
+    private func normalizedAssignedBlockIDs(_ blockIDs: [String]) -> [String] {
+        let availableByID = Dictionary(uniqueKeysWithValues: blocks.map { ($0.id, $0.id) })
+        let availableByName = Dictionary(uniqueKeysWithValues: blocks.map { ($0.name.normalizedKey, $0.id) })
+        var seen = Set<String>()
+        var result: [String] = []
+        for blockID in blockIDs {
+            let clean = blockID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let resolved = availableByID[clean]
+                ?? availableByName[clean.normalizedKey]
+                ?? (blocks.contains { assignmentKeys(for: $0).contains(clean.normalizedKey) || assignmentKeys(for: $0).contains(clean.stableRemoteID) } ? clean : nil)
+            guard let resolved, seen.insert(resolved).inserted else { continue }
+            result.append(resolved)
+        }
+        return result
+    }
+
+    private func judgeNamesByRemoteID() -> [String: String] {
+        var namesByID: [String: String] = [:]
+        for judge in appData.judges {
+            namesByID[judge.stableRemoteID] = judge
+            namesByID[judgeRemoteID(for: judge)] = judge
+        }
+        return namesByID
+    }
+
+    private func migrateLocalJudgeReferences(from oldJudge: String, to newJudge: String) {
+        guard oldJudge.normalizedKey != newJudge.normalizedKey else { return }
+
+        scores = migrateDictionaryKeys(scores) { key in
+            guard let parsed = parseScoreKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)::\(parsed.criterionID)"
+        }
+        feedback = migrateDictionaryKeys(feedback) { key in
+            guard let parsed = parseFeedbackKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)"
+        }
+        penalties = migrateDictionaryKeys(penalties) { key in
+            guard let parsed = parsePenaltyKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)"
+        }
+        favoriteSelections = migrateDictionaryKeys(favoriteSelections) { key in
+            guard let parsed = parseFavoriteKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            let routineSuffix = parsed.routineID.map { "::\($0)" } ?? ""
+            return "\(parsed.eventID)::\(parsed.blockID)::\(newJudge.normalizedKey)::\(parsed.category.rawValue)\(routineSuffix)"
+        }
+
+        pendingScoreKeys = migrateKeys(pendingScoreKeys) { key in
+            guard let parsed = parseScoreKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)::\(parsed.criterionID)"
+        }
+        pendingFeedbackKeys = migrateKeys(pendingFeedbackKeys) { key in
+            guard let parsed = parseFeedbackKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)"
+        }
+        pendingPenaltyKeys = migrateKeys(pendingPenaltyKeys) { key in
+            guard let parsed = parsePenaltyKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            return "\(parsed.eventID ?? currentDataScopeKey)::\(parsed.routineID)::\(newJudge.normalizedKey)"
+        }
+        pendingFavoriteKeys = migrateKeys(pendingFavoriteKeys) { key in
+            guard let parsed = parseFavoriteKey(key), matchesJudgeKey(parsed.judgeKey, judge: oldJudge) else { return key }
+            let routineSuffix = parsed.routineID.map { "::\($0)" } ?? ""
+            return "\(parsed.eventID)::\(parsed.blockID)::\(newJudge.normalizedKey)::\(parsed.category.rawValue)\(routineSuffix)"
+        }
+
+        persistPendingScoreKeys()
+        persistPendingFeedbackKeys()
+        persistPendingPenaltyKeys()
+        persistPendingFavoriteKeys()
+        persistLocalCaches()
+    }
+
+    private func migrateDictionaryKeys<Value>(_ dictionary: [String: Value], transform: (String) -> String) -> [String: Value] {
+        dictionary.reduce(into: [String: Value]()) { result, item in
+            result[transform(item.key)] = item.value
+        }
+    }
+
+    private func migrateKeys(_ keys: Set<String>, transform: (String) -> String) -> Set<String> {
+        Set(keys.map(transform))
+    }
+
+    private func persistLocalAppDataIfNeeded() {
+        guard remoteRepository == nil else { return }
+        Self.saveAppDataCache(appData, key: Self.localAppDataStorageKey)
     }
 
     private func showOperationNotice(kind: OperationNoticeKind, title: String, message: String) {
@@ -2547,6 +2866,32 @@ final class JudgingStore: ObservableObject {
             return AppData(sourceName: "Sin datos", blocks: [], routines: [], templates: [], judges: ["JUEZ"], judgeProfiles: nil)
         }
         return decoded
+    }
+
+    private static func loadAppDataCache(_ key: String) -> AppData? {
+        let start = LoadDiagnostics.start()
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            LoadDiagnostics.log("UserDefaults load key=\(key) missing elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return nil
+        }
+        do {
+            let decoded = try JSONDecoder().decode(AppData.self, from: data)
+            LoadDiagnostics.log("UserDefaults load key=\(key) appData routines=\(decoded.routines.count) judges=\(decoded.judges.count) bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return decoded
+        } catch {
+            LoadDiagnostics.log("UserDefaults load key=\(key) failed bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start)) error=\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private static func saveAppDataCache(_ appData: AppData, key: String) {
+        let start = LoadDiagnostics.start()
+        guard let data = try? JSONEncoder().encode(appData) else {
+            LoadDiagnostics.log("UserDefaults save key=\(key) failed encode elapsed=\(LoadDiagnostics.elapsed(since: start))")
+            return
+        }
+        UserDefaults.standard.set(data, forKey: key)
+        LoadDiagnostics.log("UserDefaults save key=\(key) bytes=\(data.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
     }
 
     private static func loadDictionary<T: Decodable>(_ key: String) -> [String: T]? {

@@ -285,18 +285,11 @@ private struct ScoreSheet: View {
     }
 
     private var adminScoringJudgeOptions: [String] {
-        let judgesByKey = Dictionary(
-            uniqueKeysWithValues: store.orderedEditableJudges.map { ($0.normalizedKey, $0) }
-        )
-        var judges = allowedAdminScoringJudgeNames.compactMap { judgesByKey[$0.normalizedKey] }
+        var judges = store.assignedEditableJudges(for: store.selectedBlock)
         if !judges.contains(scoringJudge), store.orderedEditableJudges.contains(scoringJudge) {
             judges.insert(scoringJudge, at: 0)
         }
         return judges
-    }
-
-    private var allowedAdminScoringJudgeNames: [String] {
-        AppBrand.competition.adminScoringJudgeNames(for: store.selectedBlock)
     }
 
     var body: some View {
