@@ -102,7 +102,7 @@ enum JudgingSheetMailServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingRecipientsFile:
-            "Completá academy_emails.json con los mails de cada academia."
+            "Cargá los mails de academias en Supabase o academy_emails.json."
         case .missingLinks:
             "No hay links válidos de Drive para enviar."
         case let .missingEmails(academies):
@@ -214,14 +214,17 @@ final class JudgingSheetMailService {
         let sheetsByAcademy = Dictionary(grouping: linkedSheets) { $0.academy.normalizedKey }
         let recipientsByAcademy = Dictionary(grouping: recipients) { $0.normalizedAcademyKey }
         var academyPayloads: [AcademyJudgingSheetMail] = []
+        var missingAcademies: [String] = []
 
         for academyKey in sheetsByAcademy.keys.sorted(by: academyNameSort(sheetsByAcademy: sheetsByAcademy)) {
             guard let sheets = sheetsByAcademy[academyKey], let academyName = sheets.first?.academy else {
                 continue
             }
 
-            let email = recipientsByAcademy[academyKey]?.first(where: { $0.cleanEmail != nil })?.cleanEmail
-                ?? Self.defaultRecipientEmail
+            guard let email = recipientsByAcademy[academyKey]?.first(where: { $0.cleanEmail != nil })?.cleanEmail else {
+                missingAcademies.append(academyName)
+                continue
+            }
 
             let links = sheets
                 .sorted(by: judgingSheetSort)
@@ -241,6 +244,12 @@ final class JudgingSheetMailService {
 
             guard !links.isEmpty else { continue }
             academyPayloads.append(AcademyJudgingSheetMail(academy: academyName, email: email, links: links))
+        }
+
+        if !missingAcademies.isEmpty {
+            throw JudgingSheetMailServiceError.missingEmails(
+                missingAcademies.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+            )
         }
 
         guard !academyPayloads.isEmpty else {

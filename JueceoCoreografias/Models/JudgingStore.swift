@@ -1768,11 +1768,12 @@ final class JudgingStore: ObservableObject {
 
         do {
             let service = JudgingSheetMailService(config: config)
+            let recipients = await academyMailRecipientsForSelectedEvent()
             let payload = try service.makePayload(
                 eventName: currentEventName,
                 blockName: selectedBlock?.name ?? "Bloque",
                 summary: summary,
-                recipients: JudgingSheetMailService.loadRecipients()
+                recipients: recipients
             )
 
             judgingSheetMailStatus = .sending
@@ -1789,6 +1790,24 @@ final class JudgingStore: ObservableObject {
             judgingSheetMailMessage = error.localizedDescription
             showOperationFailure("No se pudieron enviar los links", message: error.localizedDescription)
         }
+    }
+
+    private func academyMailRecipientsForSelectedEvent() async -> [AcademyMailRecipient] {
+        let localRecipients = JudgingSheetMailService.loadRecipients()
+        guard let remoteRepository, let selectedEventID else {
+            return localRecipients
+        }
+
+        do {
+            let remoteRecipients = try await remoteRepository.fetchAcademyMailRecipients(eventID: selectedEventID)
+            if remoteRecipients.contains(where: { $0.cleanEmail != nil }) {
+                return remoteRecipients
+            }
+        } catch {
+            LoadDiagnostics.log("academy contacts fetch failed eventID=\(selectedEventID) error=\(error.localizedDescription)")
+        }
+
+        return localRecipients
     }
 
     func uploadExcelImport(fileURL: URL, eventName: String, eventSlug: String, importSecret: String) async throws -> ExcelImportSummary {

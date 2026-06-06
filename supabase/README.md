@@ -19,7 +19,8 @@
 15. Run `supabase/migrations/0013_special_awards_all_manual.sql` so all special awards are stored as manual text.
 16. Run `supabase/migrations/0014_routine_favorite_votes.sql` to allow multiple favorite votes per category and routine.
 17. Run `supabase/migrations/0015_judge_profiles_assignments.sql` to persist judge photos and assigned blocks.
-18. Copy `.env.example` to `.env` at the repo root and fill:
+18. Run `supabase/migrations/0016_academy_contacts.sql` to persist academy contact emails for judging-sheet delivery.
+19. Copy `.env.example` to `.env` at the repo root and fill:
 
 ```bash
 SUPABASE_URL=https://bozkbpirrwjtpmjqcexx.supabase.co

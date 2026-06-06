@@ -171,6 +171,26 @@ struct RemoteJudgeActivityRow: Codable, Hashable, Sendable {
     }
 }
 
+struct RemoteAcademyContactRow: Codable, Hashable, Sendable {
+    let eventID: String
+    let academyKey: String
+    let academyName: String
+    let email: String
+    let state: String?
+
+    enum CodingKeys: String, CodingKey {
+        case eventID = "event_id"
+        case academyKey = "academy_key"
+        case academyName = "academy_name"
+        case email
+        case state
+    }
+
+    var recipient: AcademyMailRecipient {
+        AcademyMailRecipient(academy: academyName, email: email)
+    }
+}
+
 struct ScoreUpsertRow: Encodable, Sendable {
     let eventID: String
     let routineID: String
@@ -752,6 +772,14 @@ actor RemoteJudgingRepository {
         return try await getAll(
             "judge_activity?select=*&event_id=eq.\(encodedEventID)&order=updated_at.desc"
         )
+    }
+
+    func fetchAcademyMailRecipients(eventID: String) async throws -> [AcademyMailRecipient] {
+        let encodedEventID = Self.queryValue(eventID)
+        let rows: [RemoteAcademyContactRow] = try await getAll(
+            "academy_contacts?select=event_id,academy_key,academy_name,email,state&event_id=eq.\(encodedEventID)&order=academy_name.asc"
+        )
+        return rows.map(\.recipient)
     }
 
     func upsertJudgeActivity(_ row: JudgeActivityUpsertRow) async throws {
