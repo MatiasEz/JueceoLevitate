@@ -1407,6 +1407,7 @@ private struct PhoneFavoriteRankingRow: View {
 private struct PhoneDictamenView: View {
     @EnvironmentObject private var store: JudgingStore
     @State private var isRefreshingData = false
+    @State private var sharingPDF = false
 
     private var sections: [DictamenGenreSection] {
         DictamenBuilder.sections(from: store.rankings)
@@ -1440,7 +1441,14 @@ private struct PhoneDictamenView: View {
             .background(LevitTheme.paper)
             .navigationTitle("Dictamen final")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
+                ToolbarItemGroup(placement: .topBarLeading) {
+                    Button {
+                        exportDictamenPDF()
+                    } label: {
+                        Image(systemName: "square.and.arrow.down")
+                    }
+                    .accessibilityLabel("Descargar dictamen final en PDF")
+
                     RefreshDataButton(isRefreshing: isRefreshingData, isCompact: true) {
                         Task { await refreshAdminData() }
                     }
@@ -1448,6 +1456,11 @@ private struct PhoneDictamenView: View {
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     BlockPill(isCompact: true)
+                }
+            }
+            .sheet(isPresented: $sharingPDF) {
+                if let url = store.lastPDFURL {
+                    ShareSheet(items: [url])
                 }
             }
         }
@@ -1464,6 +1477,14 @@ private struct PhoneDictamenView: View {
             store.showOperationSuccess("Datos actualizados", message: "El dictamen final se actualizó con los puntajes del programa actual.")
         } catch {
             store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
+        }
+    }
+
+    private func exportDictamenPDF() {
+        store.exportDictamenPDF(results: store.rankings, title: "Dictamen final")
+        sharingPDF = store.lastPDFURL != nil
+        if !sharingPDF {
+            store.showOperationFailure("No se pudo exportar", message: "Intentá actualizar los datos y volver a generar el PDF.")
         }
     }
 }

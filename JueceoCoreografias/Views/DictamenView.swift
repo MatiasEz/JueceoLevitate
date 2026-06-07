@@ -5,6 +5,7 @@ struct DictamenView: View {
     @EnvironmentObject private var store: JudgingStore
     let results: [RoutineResult]
     @State private var isRefreshingData = false
+    @State private var sharingPDF = false
 
     private var sections: [DictamenGenreSection] {
         DictamenBuilder.sections(from: results)
@@ -48,6 +49,11 @@ struct DictamenView: View {
         .foregroundStyle(LevitTheme.ink)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(LevitTheme.paper.ignoresSafeArea())
+        .sheet(isPresented: $sharingPDF) {
+            if let url = store.lastPDFURL {
+                ShareSheet(items: [url])
+            }
+        }
     }
 
     private var header: some View {
@@ -63,12 +69,28 @@ struct DictamenView: View {
 
             Spacer()
 
-            RefreshDataButton(isRefreshing: isRefreshingData) {
-                Task { await refreshAdminData() }
+            HStack(spacing: 12) {
+                Button(action: exportDictamenPDF) {
+                    Label("Descargar PDF", systemImage: "square.and.arrow.down")
+                        .font(.callout.weight(.black))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(.white)
+                        .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 12))
+                        .contentShape(RoundedRectangle(cornerRadius: 12))
+                }
+                .buttonStyle(.plain)
+
+                RefreshDataButton(isRefreshing: isRefreshingData) {
+                    Task { await refreshAdminData() }
+                }
+                .disabled(store.isLoadingBackendData)
+                .opacity(store.isLoadingBackendData ? 0.58 : 1)
+
+                BlockPill()
             }
-            .disabled(store.isLoadingBackendData)
-            .opacity(store.isLoadingBackendData ? 0.58 : 1)
-            BlockPill()
         }
     }
 
@@ -124,6 +146,14 @@ struct DictamenView: View {
             store.showOperationFailure("No se pudo actualizar", message: error.localizedDescription)
         }
     }
+
+    private func exportDictamenPDF() {
+        store.exportDictamenPDF(results: results, title: "Dictamen final")
+        sharingPDF = store.lastPDFURL != nil
+        if !sharingPDF {
+            store.showOperationFailure("No se pudo exportar", message: "Intentá actualizar los datos y volver a generar el PDF.")
+        }
+    }
 }
 
 enum DictamenBuilder {
@@ -131,7 +161,7 @@ enum DictamenBuilder {
         let usesCustomGenreOrder = !isBlockFour(results)
 
         return Dictionary(grouping: results) { result in
-            clean(result.routine.genre, fallback: "SIN GÉNERO")
+            dictamenGenre(for: result.routine.genre)
         }
         .map { genre, items in
             let categories = Dictionary(grouping: items) { result in
@@ -228,6 +258,22 @@ enum DictamenBuilder {
 
     private static func categoryID(genre: String, division: String, level: String, category: String) -> String {
         [genre, division, level, category].map(\.normalizedKey).joined(separator: "|")
+    }
+
+    private static func dictamenGenre(for genre: String) -> String {
+        let cleaned = clean(genre, fallback: "SIN GÉNERO")
+        let key = cleaned.normalizedKey.replacingOccurrences(
+            of: #"\s*:\s*"#,
+            with: ":",
+            options: .regularExpression
+        )
+        if key == "OPEN" {
+            return "OPEN AÉREO"
+        }
+        if key.hasPrefix("OPEN:") {
+            return "OPEN NO AÉREO"
+        }
+        return cleaned
     }
 
     private static func compareGenres(_ lhs: String, _ rhs: String, usesCustomOrder: Bool) -> Bool {

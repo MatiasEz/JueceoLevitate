@@ -109,6 +109,7 @@ enum PDFExporter {
                 for section in sections {
                     y = margin
                     context.beginPage()
+                    drawDictamenPageBackground(page)
                     didStartPage = true
                     y = drawDictamenTitle(sectionTitle: section.genre, y: y, margin: margin, page: page)
                     y += 14
@@ -117,6 +118,7 @@ enum PDFExporter {
                         let neededHeight = DictamenPDFLayout.categoryCardHeight(rowCount: category.rows.count)
                         if y + neededHeight > page.height - margin {
                             context.beginPage()
+                            drawDictamenPageBackground(page)
                             y = margin
                             y = drawDictamenTitle(sectionTitle: section.genre, y: y, margin: margin, page: page)
                             y += 14
@@ -129,6 +131,7 @@ enum PDFExporter {
                 if !specialAwards.isEmpty {
                     if !didStartPage {
                         context.beginPage()
+                        drawDictamenPageBackground(page)
                         didStartPage = true
                         y = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
                         y += 14
@@ -137,6 +140,7 @@ enum PDFExporter {
                     let neededHeight = DictamenPDFLayout.specialAwardsHeight(rowCount: specialAwards.count)
                     if y + neededHeight > page.height - margin {
                         context.beginPage()
+                        drawDictamenPageBackground(page)
                         y = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
                         y += 14
                     }
@@ -145,6 +149,7 @@ enum PDFExporter {
 
                 if !didStartPage {
                     context.beginPage()
+                    drawDictamenPageBackground(page)
                     _ = drawDictamenTitle(sectionTitle: clean(sourceName, fallback: "SIN DICTAMEN"), y: margin, margin: margin, page: page)
                 }
             }
@@ -658,18 +663,29 @@ enum PDFExporter {
     }
 
     private static func drawDictamenTitle(sectionTitle: String, y: CGFloat, margin: CGFloat, page: CGRect) -> CGFloat {
-        drawDictamenCell(
-            rect: CGRect(x: margin, y: y, width: page.width - margin * 2, height: DictamenPDFLayout.titleHeight),
-            text: "GENERO \(sectionTitle.uppercased())",
-            fill: Theme.dictamenTitleFill,
-            fontSize: 22,
-            weight: .bold,
-            color: .white
+        let rect = CGRect(x: margin, y: y, width: page.width - margin * 2, height: DictamenPDFLayout.titleHeight)
+        drawRoundedRect(
+            rect,
+            radius: 14,
+            fill: Theme.dictamenAccent,
+            stroke: Theme.dictamenAccent.withAlphaComponent(0.88)
         )
-        if let context = UIGraphicsGetCurrentContext() {
-            context.setFillColor(Theme.dictamenAccent.cgColor)
-            context.fill(CGRect(x: margin, y: y, width: 6, height: DictamenPDFLayout.titleHeight))
-        }
+        drawText(
+            "GÉNERO",
+            in: CGRect(x: rect.minX + 18, y: rect.minY + 8, width: 86, height: 11),
+            size: 7.8,
+            weight: .bold,
+            color: UIColor.white.withAlphaComponent(0.70),
+            alignment: .left
+        )
+        drawText(
+            sectionTitle.uppercased(),
+            in: CGRect(x: rect.minX + 18, y: rect.minY + 19, width: rect.width - 36, height: 19),
+            size: 18.5,
+            weight: .bold,
+            color: .white,
+            alignment: .left
+        )
         return y + DictamenPDFLayout.titleHeight
     }
 
@@ -679,7 +695,7 @@ enum PDFExporter {
         let cardWidth = page.width - margin * 2
         let cardHeight = DictamenPDFLayout.categoryCardHeight(rowCount: category.rows.count) - DictamenPDFLayout.categorySpacing
         let cardRect = CGRect(x: margin, y: y, width: cardWidth, height: cardHeight)
-        drawRoundedRect(cardRect, radius: 10, fill: .white, stroke: Theme.dictamenSoftStroke)
+        drawRoundedRect(cardRect, radius: 15, fill: Theme.dictamenSurface, stroke: Theme.dictamenSoftStroke)
 
         let contentX = cardRect.minX + DictamenPDFLayout.cardInset
         let contentWidth = cardRect.width - DictamenPDFLayout.cardInset * 2
@@ -690,96 +706,116 @@ enum PDFExporter {
             in: CGRect(x: contentX, y: currentY + 2, width: contentWidth * 0.72, height: 20),
             size: 13.5,
             weight: .bold,
-            color: .black,
+            color: Theme.dictamenInk,
             alignment: .left
         )
 
         let countRect = CGRect(x: cardRect.maxX - DictamenPDFLayout.cardInset - 74, y: currentY, width: 74, height: 22)
-        drawRoundedRect(countRect, radius: 11, fill: Theme.dictamenHeaderFill, stroke: Theme.dictamenSoftStroke)
+        drawRoundedRect(countRect, radius: 11, fill: Theme.dictamenSoftFill, stroke: Theme.dictamenSoftStroke)
         drawText(
             "\(category.rows.count) rutinas",
             in: countRect.insetBy(dx: 6, dy: 4),
             size: 8.5,
             weight: .bold,
-            color: .darkGray
+            color: Theme.dictamenMuted
         )
 
         currentY += DictamenPDFLayout.cardHeaderHeight
 
         for (index, row) in category.rows.enumerated() {
             let rowRect = CGRect(x: contentX, y: currentY, width: contentWidth, height: DictamenPDFLayout.cardRowHeight)
-            let fill = row.placement.isFirstPlace ? Theme.dictamenPink.withAlphaComponent(0.70) : Theme.dictamenAltFill
-            drawRoundedRect(rowRect, radius: 9, fill: fill, stroke: Theme.dictamenSoftStroke)
+            let fill = row.placement.isFirstPlace ? Theme.dictamenFirstPlaceFill : Theme.dictamenSoftFill
+            drawRoundedRect(rowRect, radius: 14, fill: fill, stroke: Theme.dictamenSoftStroke)
 
-            let badgeSize: CGFloat = 28
-            let badgeWidth = row.placement.isParticipation ? CGFloat(38) : badgeSize
-            let badgeRect = CGRect(x: rowRect.minX + 9, y: rowRect.midY - badgeSize / 2, width: badgeWidth, height: badgeSize)
-            drawRoundedRect(
-                badgeRect,
-                radius: badgeSize / 2,
-                fill: row.placement.isFirstPlace ? Theme.dictamenAccent : Theme.dictamenHeaderFill,
-                stroke: Theme.dictamenSoftStroke
-            )
-            drawText(
-                row.placement.shortLabel,
-                in: badgeRect.insetBy(dx: 2, dy: 7),
-                size: row.placement.isParticipation ? 7.4 : 9.5,
-                weight: .bold,
-                color: row.placement.isFirstPlace ? .white : Theme.dictamenAccent
-            )
-
-            let scoreWidth: CGFloat = 58
-            let participationRect = CGRect(x: badgeRect.maxX + 8, y: rowRect.midY - 12, width: 44, height: 24)
+            let participationRect = CGRect(x: rowRect.minX + 10, y: rowRect.midY - 15, width: 58, height: 30)
             drawRoundedRect(
                 participationRect,
-                radius: 8,
-                fill: Theme.dictamenHeaderFill,
+                radius: 12,
+                fill: Theme.dictamenPillFill,
                 stroke: Theme.dictamenSoftStroke
             )
             drawText(
                 "#\(clean(row.result.routine.id, fallback: "-"))",
-                in: participationRect.insetBy(dx: 3, dy: 6),
-                size: 8.8,
+                in: participationRect.insetBy(dx: 4, dy: 8),
+                size: 10.5,
                 weight: .bold,
                 color: Theme.dictamenAccent
             )
 
-            let textX = participationRect.maxX + 10
-            let textWidth = rowRect.width - (textX - rowRect.minX) - scoreWidth - 18
+            let rankWidth: CGFloat = row.placement.isParticipation ? 64 : 46
+            let scoreWidth: CGFloat = 68
+            let rightInset: CGFloat = 12
+            let scoreRankSpacing: CGFloat = 16
+            let rankRect = CGRect(
+                x: rowRect.maxX - rightInset - rankWidth,
+                y: rowRect.midY - 19,
+                width: rankWidth,
+                height: 38
+            )
+            let scoreRect = CGRect(
+                x: rankRect.minX - scoreRankSpacing - scoreWidth,
+                y: rowRect.minY + 7,
+                width: scoreWidth,
+                height: 34
+            )
+            let textX = participationRect.maxX + 12
+            let textWidth = scoreRect.minX - textX - 18
             drawText(
                 clean(row.result.routine.name, fallback: "SIN DATO"),
                 in: CGRect(x: textX, y: rowRect.minY + 7, width: textWidth, height: 16),
                 size: 11.5,
                 weight: .bold,
-                color: .black,
-                alignment: .left
-            )
-            let metaText = "\(clean(row.result.routine.academy, fallback: "SIN DATO").uppercased())   \(clean(row.result.routine.state, fallback: "SIN DATO").uppercased())"
-            drawText(
-                metaText,
-                in: CGRect(x: textX, y: rowRect.minY + 24, width: textWidth, height: 12),
-                size: 7.5,
-                weight: .bold,
-                color: .darkGray,
+                color: Theme.dictamenInk,
                 alignment: .left
             )
 
-            let scoreRect = CGRect(x: rowRect.maxX - scoreWidth - 10, y: rowRect.minY + 7, width: scoreWidth, height: 30)
+            let academy = clean(row.result.routine.academy, fallback: "SIN DATO").uppercased()
+            let state = clean(row.result.routine.state, fallback: "SIN DATO").uppercased()
+            let academyWidth = min(max(academy.pdfTextWidth(size: 7.4, weight: .bold) + 18, 72), max(88, textWidth * 0.64))
+            let stateWidth = min(max(state.pdfTextWidth(size: 7.4, weight: .bold) + 18, 52), max(52, textWidth - academyWidth - 7))
+            let pillY = rowRect.minY + 25
+            drawDictamenPill(
+                text: academy,
+                rect: CGRect(x: textX, y: pillY, width: academyWidth, height: 14),
+                fontSize: 7.4
+            )
+            if textWidth > academyWidth + stateWidth + 12 {
+                drawDictamenPill(
+                    text: state,
+                    rect: CGRect(x: textX + academyWidth + 7, y: pillY, width: stateWidth, height: 14),
+                    fontSize: 7.4
+                )
+            }
+
             drawText(
                 row.result.aggregateTotal.formatted(.number.precision(.fractionLength(0...1))),
-                in: CGRect(x: scoreRect.minX, y: scoreRect.minY, width: scoreRect.width, height: 18),
-                size: 14,
+                in: CGRect(x: scoreRect.minX, y: scoreRect.minY, width: scoreRect.width, height: 19),
+                size: 16,
                 weight: .bold,
-                color: .black,
-                alignment: .right
+                color: Theme.dictamenInk,
+                alignment: .center
             )
             drawText(
                 "pts",
-                in: CGRect(x: scoreRect.minX, y: scoreRect.minY + 17, width: scoreRect.width, height: 10),
-                size: 7,
+                in: CGRect(x: scoreRect.minX, y: scoreRect.minY + 19, width: scoreRect.width, height: 10),
+                size: 7.2,
                 weight: .bold,
-                color: .darkGray,
-                alignment: .right
+                color: Theme.dictamenMuted,
+                alignment: .center
+            )
+
+            drawRoundedRect(
+                rankRect,
+                radius: rankRect.height / 2,
+                fill: Theme.dictamenAccent,
+                stroke: UIColor.white.withAlphaComponent(0.24)
+            )
+            drawText(
+                row.placement.shortLabel,
+                in: rankRect.insetBy(dx: 5, dy: row.placement.isParticipation ? 12 : 10),
+                size: row.placement.isParticipation ? 8.2 : 13,
+                weight: .bold,
+                color: .white
             )
 
             currentY += DictamenPDFLayout.cardRowHeight + (index == category.rows.count - 1 ? 0 : DictamenPDFLayout.cardRowSpacing)
@@ -794,7 +830,7 @@ enum PDFExporter {
         let cardWidth = page.width - margin * 2
         let cardHeight = DictamenPDFLayout.specialAwardsHeight(rowCount: awards.count) - DictamenPDFLayout.categorySpacing
         let cardRect = CGRect(x: margin, y: y, width: cardWidth, height: cardHeight)
-        drawRoundedRect(cardRect, radius: 10, fill: .white, stroke: Theme.dictamenSoftStroke)
+        drawRoundedRect(cardRect, radius: 15, fill: Theme.dictamenSurface, stroke: Theme.dictamenSoftStroke)
 
         let contentX = cardRect.minX + DictamenPDFLayout.cardInset
         let contentWidth = cardRect.width - DictamenPDFLayout.cardInset * 2
@@ -802,8 +838,8 @@ enum PDFExporter {
 
         drawRoundedRect(
             CGRect(x: contentX, y: currentY, width: contentWidth, height: 32),
-            radius: 9,
-            fill: Theme.dictamenTitleFill,
+            radius: 14,
+            fill: Theme.dictamenAccent,
             stroke: Theme.dictamenSoftStroke
         )
         drawText(
@@ -819,7 +855,7 @@ enum PDFExporter {
 
         for (index, award) in awards.enumerated() {
             let rowRect = CGRect(x: contentX, y: currentY, width: contentWidth, height: DictamenPDFLayout.specialAwardRowHeight)
-            drawRoundedRect(rowRect, radius: 9, fill: Theme.dictamenAltFill, stroke: Theme.dictamenSoftStroke)
+            drawRoundedRect(rowRect, radius: 14, fill: Theme.dictamenSoftFill, stroke: Theme.dictamenSoftStroke)
 
             let labelWidth: CGFloat = 190
             drawText(
@@ -845,7 +881,7 @@ enum PDFExporter {
                 in: CGRect(x: routineX, y: rowRect.minY + 7, width: routineWidth, height: 16),
                 size: 11.5,
                 weight: .bold,
-                color: award.isAssigned ? .black : .darkGray,
+                color: award.isAssigned ? Theme.dictamenInk : Theme.dictamenMuted,
                 alignment: .left
             )
             if !routineMeta.isEmpty {
@@ -854,7 +890,7 @@ enum PDFExporter {
                     in: CGRect(x: routineX, y: rowRect.minY + 24, width: routineWidth, height: 11),
                     size: 7.4,
                     weight: .bold,
-                    color: .darkGray,
+                    color: Theme.dictamenMuted,
                     alignment: .left
                 )
             }
@@ -956,6 +992,24 @@ enum PDFExporter {
             height: drawHeight
         )
         attributedText.draw(with: drawRect, options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine], context: nil)
+    }
+
+    private static func drawDictamenPageBackground(_ page: CGRect) {
+        guard let context = UIGraphicsGetCurrentContext() else { return }
+        context.setFillColor(Theme.dictamenPageFill.cgColor)
+        context.fill(page)
+    }
+
+    private static func drawDictamenPill(text: String, rect: CGRect, fontSize: CGFloat) {
+        drawRoundedRect(rect, radius: rect.height / 2, fill: Theme.dictamenPillFill, stroke: Theme.dictamenSoftStroke)
+        drawText(
+            text,
+            in: rect.insetBy(dx: 7, dy: 3),
+            size: fontSize,
+            weight: .bold,
+            color: Theme.dictamenMuted,
+            alignment: .left
+        )
     }
 
     private static func drawRoundedRect(_ rect: CGRect, radius: CGFloat, fill: UIColor, stroke: UIColor) {
@@ -1157,16 +1211,25 @@ enum PDFExporter {
     }
 
     private enum Theme {
+        private static var palette: CompetitionColorPalette { AppBrand.competition.colorPalette }
+
         static var paleYellow: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.48) }
         static var headerFill: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor.withAlphaComponent(0.68) }
         static let grid = UIColor(white: 0.12, alpha: 1)
-        static var dictamenAccent: UIColor { AppBrand.competition.colorPalette.primary.uiColor }
-        static var dictamenTitleFill: UIColor { AppBrand.competition.colorPalette.ink.lightUIColor }
-        static var dictamenHeaderFill: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor }
-        static let dictamenSoftStroke = UIColor(white: 0.0, alpha: 0.10)
-        static var dictamenPink: UIColor { AppBrand.competition.colorPalette.accentTint.lightUIColor }
-        static let dictamenRowFill = UIColor(white: 0.84, alpha: 1)
-        static let dictamenAltFill = UIColor(white: 0.93, alpha: 1)
+        static var dictamenPageFill: UIColor { palette.paper.dark.uiColor }
+        static var dictamenSurface: UIColor { palette.solidSurface.dark.uiColor }
+        static var dictamenSoftFill: UIColor { palette.softFill.dark.uiColor }
+        static var dictamenPillFill: UIColor { palette.accentTint.dark.uiColor }
+        static var dictamenFirstPlaceFill: UIColor { palette.primary.uiColor.withAlphaComponent(0.24) }
+        static var dictamenInk: UIColor { palette.ink.dark.uiColor }
+        static var dictamenMuted: UIColor { palette.muted.dark.uiColor }
+        static var dictamenAccent: UIColor { palette.primary.uiColor }
+        static var dictamenTitleFill: UIColor { palette.ink.dark.uiColor }
+        static var dictamenHeaderFill: UIColor { palette.accentTint.dark.uiColor }
+        static var dictamenSoftStroke: UIColor { palette.line.dark.uiColor }
+        static var dictamenPink: UIColor { palette.accentTint.dark.uiColor }
+        static var dictamenRowFill: UIColor { palette.softFill.dark.uiColor }
+        static var dictamenAltFill: UIColor { palette.elevatedSurface.dark.uiColor }
     }
 
     private enum DictamenPDFLayout {
@@ -1264,5 +1327,13 @@ enum PDFExporter {
             let averageWidth: CGFloat
             let placeWidth: CGFloat
         }
+    }
+}
+
+private extension String {
+    func pdfTextWidth(size: CGFloat, weight: UIFont.Weight) -> CGFloat {
+        (self as NSString).size(withAttributes: [
+            .font: UIFont.systemFont(ofSize: size, weight: weight)
+        ]).width
     }
 }
