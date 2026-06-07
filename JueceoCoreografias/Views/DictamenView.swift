@@ -57,41 +57,66 @@ struct DictamenView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Dictamen final")
-                    .font(.system(size: 31, weight: .black, design: .rounded))
-                    .foregroundStyle(LevitTheme.ink)
-                Text("Resultados oficiales de la hoja de jueceo")
-                    .font(.callout.weight(.semibold))
-                    .foregroundStyle(LevitTheme.muted)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                headerTitle
+                    .frame(minWidth: 260, alignment: .leading)
+
+                Spacer(minLength: 16)
+
+                headerActions
+                    .fixedSize(horizontal: true, vertical: false)
             }
 
-            Spacer()
+            VStack(alignment: .leading, spacing: 14) {
+                headerTitle
 
-            HStack(spacing: 12) {
-                Button(action: exportDictamenPDF) {
-                    Label("Descargar PDF", systemImage: "square.and.arrow.down")
-                        .font(.callout.weight(.black))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .foregroundStyle(.white)
-                        .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 12))
-                        .contentShape(RoundedRectangle(cornerRadius: 12))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    headerActions
+                        .padding(.bottom, 1)
                 }
-                .buttonStyle(.plain)
-
-                RefreshDataButton(isRefreshing: isRefreshingData) {
-                    Task { await refreshAdminData() }
-                }
-                .disabled(store.isLoadingBackendData)
-                .opacity(store.isLoadingBackendData ? 0.58 : 1)
-
-                BlockPill()
             }
         }
+    }
+
+    private var headerTitle: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text("Dictamen final")
+                .font(.system(size: 31, weight: .black, design: .rounded))
+                .foregroundStyle(LevitTheme.ink)
+            Text("Resultados oficiales de la hoja de jueceo")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(LevitTheme.muted)
+        }
+    }
+
+    private var headerActions: some View {
+        HStack(spacing: 12) {
+            downloadPDFButton
+
+            RefreshDataButton(isRefreshing: isRefreshingData) {
+                Task { await refreshAdminData() }
+            }
+            .disabled(store.isLoadingBackendData)
+            .opacity(store.isLoadingBackendData ? 0.58 : 1)
+
+            BlockPill()
+        }
+    }
+
+    private var downloadPDFButton: some View {
+        Button(action: exportDictamenPDF) {
+            Label("Descargar PDF", systemImage: "square.and.arrow.down")
+                .font(.callout.weight(.black))
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .foregroundStyle(.white)
+                .background(LevitTheme.pinkGradient, in: RoundedRectangle(cornerRadius: 12))
+                .contentShape(RoundedRectangle(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
     }
 
     private var toolbar: some View {
@@ -268,10 +293,10 @@ enum DictamenBuilder {
             options: .regularExpression
         )
         if key == "OPEN" {
-            return "OPEN AÉREO"
+            return "OPEN NO AÉREO"
         }
         if key.hasPrefix("OPEN:") {
-            return "OPEN NO AÉREO"
+            return "OPEN AÉREO"
         }
         return cleaned
     }

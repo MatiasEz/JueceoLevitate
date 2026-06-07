@@ -875,9 +875,13 @@ final class JudgingStore: ObservableObject {
             let events = try await remoteRepository.fetchEvents()
             availableEvents = events
             LoadDiagnostics.log("refreshEvents received events=\(events.count) elapsed=\(LoadDiagnostics.elapsed(since: start))")
-            guard let event = events.first(where: { $0.id == selectedEventID })
-                ?? events.first(where: \.isActive)
-                ?? events.first
+            let savedEvent = selectedEventID.flatMap { selectedID in
+                events.first { $0.id == selectedID }
+            }
+            let event = savedEvent?.isActive == true
+                ? savedEvent
+                : (events.first(where: \.isActive) ?? savedEvent ?? events.first)
+            guard let event
             else {
                 syncStatus = .offline("No hay eventos en Supabase.")
                 syncMessage = "No hay eventos cargados en Supabase."
@@ -894,7 +898,7 @@ final class JudgingStore: ObservableObject {
         }
     }
 
-    func selectEvent(_ event: EventSummary) async {
+    func selectEvent(_ event: EventSummary, resetBlockSelection: Bool = true) async {
         let start = LoadDiagnostics.start()
         guard let remoteRepository else { return }
         syncStatus = .connecting
@@ -906,7 +910,7 @@ final class JudgingStore: ObservableObject {
             selectedEventID = bundle.event.id
             UserDefaults.standard.set(bundle.event.id, forKey: selectedEventKey)
             let applyStart = LoadDiagnostics.start()
-            applyRemoteBundle(bundle)
+            applyRemoteBundle(bundle, resetBlockSelection: resetBlockSelection)
             LoadDiagnostics.log("selectEvent applied bundle elapsed=\(LoadDiagnostics.elapsed(since: applyStart)) total=\(LoadDiagnostics.elapsed(since: start))")
             let syncStart = LoadDiagnostics.start()
             await syncPending()
@@ -950,7 +954,7 @@ final class JudgingStore: ObservableObject {
             selectedEventID = bundle.event.id
             UserDefaults.standard.set(bundle.event.id, forKey: selectedEventKey)
             let applyStart = LoadDiagnostics.start()
-            applyRemoteBundle(bundle)
+            applyRemoteBundle(bundle, resetBlockSelection: false)
             LoadDiagnostics.log("refreshCurrentEvent applied bundle elapsed=\(LoadDiagnostics.elapsed(since: applyStart)) total=\(LoadDiagnostics.elapsed(since: start))")
             let syncStart = LoadDiagnostics.start()
             await syncPending()
@@ -1016,7 +1020,7 @@ final class JudgingStore: ObservableObject {
 
         purgeLocalState(forRoutineID: routine.id)
         let bundle = try await remoteRepository.fetchEventBundle(eventID: eventID)
-        applyRemoteBundle(bundle)
+        applyRemoteBundle(bundle, resetBlockSelection: false)
         await syncPending()
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(label) borrada."
@@ -1074,7 +1078,7 @@ final class JudgingStore: ObservableObject {
             throw RoutineUpdateError.updateNotApplied(field.title)
         }
 
-        applyRemoteBundle(bundle)
+        applyRemoteBundle(bundle, resetBlockSelection: false)
         await syncPending()
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(label) actualizado."
@@ -1117,7 +1121,7 @@ final class JudgingStore: ObservableObject {
             throw RoutineMoveError.moveNotApplied
         }
 
-        applyRemoteBundle(bundle)
+        applyRemoteBundle(bundle, resetBlockSelection: false)
         await syncPending()
         syncStatus = pendingSyncCount > 0 ? .pending : .online
         syncMessage = "\(label) movido a \(targetBlock.name)."
@@ -1882,15 +1886,23 @@ final class JudgingStore: ObservableObject {
         return importedSummary
     }
 
-    private func applyRemoteBundle(_ bundle: RemoteEventBundle) {
+    private func applyRemoteBundle(_ bundle: RemoteEventBundle, resetBlockSelection: Bool = false) {
         let start = LoadDiagnostics.start()
         LoadDiagnostics.log(
             "applyRemoteBundle started event=\"\(bundle.event.name)\" routines=\(bundle.appData.routines.count) blocks=\(bundle.appData.blocks.count) judges=\(bundle.appData.judges.count) incomingScores=\(bundle.scores.count) incomingFeedback=\(bundle.feedback.count) incomingPenalties=\(bundle.penalties.count) incomingFavorites=\(bundle.favorites.count) incomingSpecialAwards=\(bundle.specialAwards.count) localScores=\(scores.count) localFeedback=\(feedback.count) localPenalties=\(penalties.count) pending=\(pendingSyncCount)"
         )
         let metadataStart = LoadDiagnostics.start()
         appData = bundle.appData
-        if let selectedBlockID,
-           !appData.blocks.contains(where: { $0.id == selectedBlockID || $0.name == selectedBlockID }) {
+        if resetBlockSelection {
+            if let defaultBlock = appData.blocks.first(where: { $0.isActive == true }) ?? appData.blocks.first {
+                selectedBlockID = defaultBlock.id
+                UserDefaults.standard.set(defaultBlock.id, forKey: selectedBlockKey)
+            } else {
+                selectedBlockID = nil
+                UserDefaults.standard.removeObject(forKey: selectedBlockKey)
+            }
+        } else if let selectedBlockID,
+                  !appData.blocks.contains(where: { $0.id == selectedBlockID || $0.name == selectedBlockID }) {
             self.selectedBlockID = nil
             UserDefaults.standard.removeObject(forKey: selectedBlockKey)
         }
