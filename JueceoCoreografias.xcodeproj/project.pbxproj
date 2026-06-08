@@ -614,7 +614,7 @@
 			baseConfigurationReference = EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -642,7 +642,7 @@
 			baseConfigurationReference = EC137CB9690ED1DC29676AFE /* Levitate.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -670,7 +670,7 @@
 			baseConfigurationReference = C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -698,7 +698,7 @@
 			baseConfigurationReference = C88C57F641FB04832AD32EB5 /* PrismaOpen.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -726,7 +726,7 @@
 			baseConfigurationReference = ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -754,7 +754,7 @@
 			baseConfigurationReference = ADD82B5DCBDDEEB0DC38AD9C /* AuroraCircuit.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = F2VBZV9LC6;
 				"ENABLE_HARDENED_RUNTIME[sdk=macosx*]" = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

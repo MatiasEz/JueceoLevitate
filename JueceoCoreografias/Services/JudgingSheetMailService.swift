@@ -162,7 +162,6 @@ struct JudgingSheetMailResponse: Decodable, Sendable {
 }
 
 final class JudgingSheetMailService {
-    static let defaultRecipientEmail = "matialeezcurra@gmail.com"
     static let subject = "Tu devolución de jueceo ya está disponible"
 
     static let bodyIntro = """

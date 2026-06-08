@@ -28,7 +28,7 @@ struct AdminView: View {
     @State private var isMailFolderPromptPresented = false
     @State private var testMailFolderName = ""
     @State private var testMailRoutineID = ""
-    @State private var testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+    @State private var testMailRecipient = ""
     @State private var isTestMailPromptPresented = false
     @State private var isRefreshingData = false
     @State private var isUpdatingRoutineLevel = false
@@ -623,9 +623,6 @@ struct AdminView: View {
         }
         if cleanTestMailRoutineID.isEmpty || !sortedRoutines.contains(where: { $0.id == cleanTestMailRoutineID }) {
             testMailRoutineID = selectedRoutineForEdit?.id ?? sortedRoutines.first?.id ?? ""
-        }
-        if cleanTestMailRecipient.isEmpty {
-            testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
         }
     }
 
@@ -1253,7 +1250,7 @@ struct ScoreEditorView: View {
     @State private var isMailFolderPromptPresented = false
     @State private var testMailFolderName = ""
     @State private var testMailRoutineID = ""
-    @State private var testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+    @State private var testMailRecipient = ""
     @State private var isTestMailPromptPresented = false
     @State private var routineMetadataUpdateKey: String?
     @State private var routinePendingDeletion: Routine?
@@ -1914,9 +1911,6 @@ struct ScoreEditorView: View {
         if cleanTestMailRoutineID.isEmpty || !sortedRoutines.contains(where: { $0.id == cleanTestMailRoutineID }) {
             testMailRoutineID = filteredRoutines.first?.id ?? sortedRoutines.first?.id ?? ""
         }
-        if cleanTestMailRecipient.isEmpty {
-            testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
-        }
     }
 
     private func presentDriveFolderPrompt() {
@@ -2139,7 +2133,14 @@ private struct JudgingSheetTestMailSheet: View {
             .navigationTitle("Enviar prueba")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancelar") { dismiss() }
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark")
+                            .font(.headline.weight(.bold))
+                            .frame(width: 36, height: 36)
+                    }
+                    .accessibilityLabel("Cancelar")
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
@@ -2149,6 +2150,8 @@ private struct JudgingSheetTestMailSheet: View {
                             ProgressView()
                         } else {
                             Text("Enviar")
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
                         }
                     }
                     .disabled(!canSend)
