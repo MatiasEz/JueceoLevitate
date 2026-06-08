@@ -26,6 +26,10 @@ struct AdminView: View {
     @State private var isCheckingDriveFolder = false
     @State private var mailFolderName = ""
     @State private var isMailFolderPromptPresented = false
+    @State private var testMailFolderName = ""
+    @State private var testMailRoutineID = ""
+    @State private var testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+    @State private var isTestMailPromptPresented = false
     @State private var isRefreshingData = false
     @State private var isUpdatingRoutineLevel = false
 
@@ -95,9 +99,11 @@ struct AdminView: View {
             normalizeSelection()
             prepareDefaultDriveFolderName()
             prepareDefaultMailFolderName()
+            prepareDefaultTestMailValues()
         }
         .onChange(of: store.selectedBlock?.id ?? "") { _, _ in
             normalizeSelection()
+            prepareDefaultTestMailValues()
         }
         .onChange(of: store.judges) { _, _ in normalizeSelection() }
         .onChange(of: store.visibleRoutines) { _, _ in normalizeSelection() }
@@ -155,6 +161,17 @@ struct AdminView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
+        }
+        .sheet(isPresented: $isTestMailPromptPresented) {
+            JudgingSheetTestMailSheet(
+                routines: sortedRoutines,
+                folderName: $testMailFolderName,
+                routineID: $testMailRoutineID,
+                recipient: $testMailRecipient,
+                isSending: store.judgingSheetMailStatus.isSending
+            ) {
+                Task { await sendTestMail() }
+            }
         }
         .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
             Button("Borrar", role: .destructive) {
@@ -271,6 +288,12 @@ struct AdminView: View {
                     isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder
                 ) {
                     presentMailFolderPrompt()
+                }
+
+                JudgingSheetTestMailButton(
+                    isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder || store.judgingSheetMailStatus.isSending
+                ) {
+                    presentTestMailPrompt()
                 }
             }
         }
@@ -563,6 +586,25 @@ struct AdminView: View {
         mailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var cleanTestMailFolderName: String {
+        testMailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanTestMailRoutineID: String {
+        testMailRoutineID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanTestMailRecipient: String {
+        testMailRecipient.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSendTestMail: Bool {
+        !cleanTestMailFolderName.isEmpty
+            && !cleanTestMailRoutineID.isEmpty
+            && cleanTestMailRecipient.contains("@")
+            && !store.judgingSheetMailStatus.isSending
+    }
+
     private func prepareDefaultDriveFolderName() {
         guard cleanDriveFolderName.isEmpty else { return }
         driveFolderName = store.defaultDriveRootFolderName
@@ -572,6 +614,19 @@ struct AdminView: View {
         guard cleanMailFolderName.isEmpty else { return }
         mailFolderName = store.lastDriveExportSummary?.rootFolderName
             ?? (cleanDriveFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanDriveFolderName)
+    }
+
+    private func prepareDefaultTestMailValues() {
+        if cleanTestMailFolderName.isEmpty {
+            testMailFolderName = store.lastDriveExportSummary?.rootFolderName
+                ?? (cleanMailFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanMailFolderName)
+        }
+        if cleanTestMailRoutineID.isEmpty || !sortedRoutines.contains(where: { $0.id == cleanTestMailRoutineID }) {
+            testMailRoutineID = selectedRoutineForEdit?.id ?? sortedRoutines.first?.id ?? ""
+        }
+        if cleanTestMailRecipient.isEmpty {
+            testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+        }
     }
 
     private func presentDriveFolderPrompt() {
@@ -584,6 +639,15 @@ struct AdminView: View {
         guard !store.judgingSheetMailStatus.isSending else { return }
         prepareDefaultMailFolderName()
         isMailFolderPromptPresented = true
+    }
+
+    private func presentTestMailPrompt() {
+        guard !store.judgingSheetMailStatus.isSending else { return }
+        if let selectedRoutineForEdit {
+            testMailRoutineID = selectedRoutineForEdit.id
+        }
+        prepareDefaultTestMailValues()
+        isTestMailPromptPresented = true
     }
 
     @MainActor
@@ -619,6 +683,16 @@ struct AdminView: View {
         guard !folderName.isEmpty else { return }
         isMailFolderPromptPresented = false
         await store.sendDriveLinksByMail(rootFolderName: folderName)
+    }
+
+    @MainActor
+    private func sendTestMail() async {
+        guard canSendTestMail else { return }
+        let folderName = cleanTestMailFolderName
+        let routineID = cleanTestMailRoutineID
+        let recipient = cleanTestMailRecipient
+        isTestMailPromptPresented = false
+        await store.sendRoutineDriveLinksTestMail(rootFolderName: folderName, routineID: routineID, recipientEmail: recipient)
     }
 
     private func resetPendingDriveOverwrite() {
@@ -1177,6 +1251,10 @@ struct ScoreEditorView: View {
     @State private var isCheckingDriveFolder = false
     @State private var mailFolderName = ""
     @State private var isMailFolderPromptPresented = false
+    @State private var testMailFolderName = ""
+    @State private var testMailRoutineID = ""
+    @State private var testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+    @State private var isTestMailPromptPresented = false
     @State private var routineMetadataUpdateKey: String?
     @State private var routinePendingDeletion: Routine?
     @State private var isRoutineDeletionAlertPresented = false
@@ -1258,6 +1336,7 @@ struct ScoreEditorView: View {
         .onAppear {
             prepareDefaultDriveFolderName()
             prepareDefaultMailFolderName()
+            prepareDefaultTestMailValues()
         }
         .task {
             await pollJudgeActivity()
@@ -1316,6 +1395,17 @@ struct ScoreEditorView: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Usá una carpeta ya exportada para mandar los mails sin volver a generar PDFs.")
+        }
+        .sheet(isPresented: $isTestMailPromptPresented) {
+            JudgingSheetTestMailSheet(
+                routines: sortedRoutines,
+                folderName: $testMailFolderName,
+                routineID: $testMailRoutineID,
+                recipient: $testMailRecipient,
+                isSending: store.judgingSheetMailStatus.isSending
+            ) {
+                Task { await sendTestMail() }
+            }
         }
         .alert("Borrar coreografía", isPresented: $isRoutineDeletionAlertPresented) {
             Button("Borrar", role: .destructive) {
@@ -1402,6 +1492,12 @@ struct ScoreEditorView: View {
                     isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder
                 ) {
                     presentMailFolderPrompt()
+                }
+
+                JudgingSheetTestMailButton(
+                    isDisabled: store.driveExportStatus.isExporting || isCheckingDriveFolder || store.judgingSheetMailStatus.isSending
+                ) {
+                    presentTestMailPrompt()
                 }
             }
         }
@@ -1780,6 +1876,25 @@ struct ScoreEditorView: View {
         mailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    private var cleanTestMailFolderName: String {
+        testMailFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanTestMailRoutineID: String {
+        testMailRoutineID.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var cleanTestMailRecipient: String {
+        testMailRecipient.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var canSendTestMail: Bool {
+        !cleanTestMailFolderName.isEmpty
+            && !cleanTestMailRoutineID.isEmpty
+            && cleanTestMailRecipient.contains("@")
+            && !store.judgingSheetMailStatus.isSending
+    }
+
     private func prepareDefaultDriveFolderName() {
         guard cleanDriveFolderName.isEmpty else { return }
         driveFolderName = store.defaultDriveRootFolderName
@@ -1789,6 +1904,19 @@ struct ScoreEditorView: View {
         guard cleanMailFolderName.isEmpty else { return }
         mailFolderName = store.lastDriveExportSummary?.rootFolderName
             ?? (cleanDriveFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanDriveFolderName)
+    }
+
+    private func prepareDefaultTestMailValues() {
+        if cleanTestMailFolderName.isEmpty {
+            testMailFolderName = store.lastDriveExportSummary?.rootFolderName
+                ?? (cleanMailFolderName.isEmpty ? store.defaultDriveRootFolderName : cleanMailFolderName)
+        }
+        if cleanTestMailRoutineID.isEmpty || !sortedRoutines.contains(where: { $0.id == cleanTestMailRoutineID }) {
+            testMailRoutineID = filteredRoutines.first?.id ?? sortedRoutines.first?.id ?? ""
+        }
+        if cleanTestMailRecipient.isEmpty {
+            testMailRecipient = JudgingSheetMailService.defaultRecipientEmail
+        }
     }
 
     private func presentDriveFolderPrompt() {
@@ -1801,6 +1929,12 @@ struct ScoreEditorView: View {
         guard !store.judgingSheetMailStatus.isSending else { return }
         prepareDefaultMailFolderName()
         isMailFolderPromptPresented = true
+    }
+
+    private func presentTestMailPrompt() {
+        guard !store.judgingSheetMailStatus.isSending else { return }
+        prepareDefaultTestMailValues()
+        isTestMailPromptPresented = true
     }
 
     @MainActor
@@ -1836,6 +1970,16 @@ struct ScoreEditorView: View {
         guard !folderName.isEmpty else { return }
         isMailFolderPromptPresented = false
         await store.sendDriveLinksByMail(rootFolderName: folderName)
+    }
+
+    @MainActor
+    private func sendTestMail() async {
+        guard canSendTestMail else { return }
+        let folderName = cleanTestMailFolderName
+        let routineID = cleanTestMailRoutineID
+        let recipient = cleanTestMailRecipient
+        isTestMailPromptPresented = false
+        await store.sendRoutineDriveLinksTestMail(rootFolderName: folderName, routineID: routineID, recipientEmail: recipient)
     }
 
     private func resetPendingDriveOverwrite() {
@@ -1906,6 +2050,145 @@ private struct JudgingSheetMailButton: View {
         .buttonStyle(.plain)
         .disabled(isDisabled || status.isSending)
         .opacity(isDisabled || status.isSending ? 0.58 : 1)
+    }
+}
+
+private struct JudgingSheetTestMailSheet: View {
+    let routines: [Routine]
+    @Binding var folderName: String
+    @Binding var routineID: String
+    @Binding var recipient: String
+    let isSending: Bool
+    let onSend: () -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    private var selectedRoutine: Routine? {
+        routines.first { $0.id == routineID } ?? routines.first
+    }
+
+    private var canSend: Bool {
+        !folderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && selectedRoutine != nil
+            && recipient.trimmingCharacters(in: .whitespacesAndNewlines).contains("@")
+            && !isSending
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 18) {
+                Text("Manda solo las hojas de jueceo de una coreografía al mail indicado.")
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(LevitTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Carpeta de Drive")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+                    TextField("Nombre de carpeta", text: $folderName)
+                        .textInputAutocapitalization(.words)
+                        .disableAutocorrection(true)
+                        .font(.body.weight(.semibold))
+                        .padding(12)
+                        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Coreografía")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+
+                    Picker("Coreografía", selection: $routineID) {
+                        ForEach(routines) { routine in
+                            Text("#\(routine.id) \(routine.name)")
+                                .tag(routine.id)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .disabled(routines.isEmpty)
+
+                    if let selectedRoutine {
+                        Text("\(selectedRoutine.academy) · \(selectedRoutine.genre)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(LevitTheme.muted)
+                            .lineLimit(2)
+                    } else {
+                        Text("No hay coreografías disponibles en el bloque actual.")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Mail destino")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(LevitTheme.muted)
+                    TextField("mail@dominio.com", text: $recipient)
+                        .textInputAutocapitalization(.never)
+                        .disableAutocorrection(true)
+                        .keyboardType(.emailAddress)
+                        .font(.body.weight(.semibold))
+                        .padding(12)
+                        .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(22)
+            .navigationTitle("Enviar prueba")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancelar") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button {
+                        onSend()
+                    } label: {
+                        if isSending {
+                            ProgressView()
+                        } else {
+                            Text("Enviar")
+                        }
+                    }
+                    .disabled(!canSend)
+                }
+            }
+            .onAppear {
+                if routineID.isEmpty, let firstRoutine = routines.first {
+                    routineID = firstRoutine.id
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+}
+
+private struct JudgingSheetTestMailButton: View {
+    let isDisabled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Image(systemName: "paperplane.circle")
+                    .font(.callout.weight(.black))
+                Text("Enviar prueba")
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+            }
+            .font(.callout.weight(.black))
+            .frame(minWidth: 132)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .foregroundStyle(LevitTheme.ink)
+            .background(LevitTheme.softFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(LevitTheme.line))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isDisabled)
+        .opacity(isDisabled ? 0.58 : 1)
     }
 }
 

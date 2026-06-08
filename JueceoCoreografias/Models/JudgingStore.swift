@@ -1761,6 +1761,144 @@ final class JudgingStore: ObservableObject {
         }
     }
 
+    func sendRoutineDriveLinksTestMail(rootFolderName customRootFolderName: String, routineID: String, recipientEmail: String) async {
+        guard !judgingSheetMailStatus.isSending else { return }
+        guard let block = selectedBlock else {
+            let message = "No hay bloque seleccionado."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("No se pudo enviar la prueba", message: message)
+            return
+        }
+
+        let cleanFolderName = customRootFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanFolderName.isEmpty else {
+            let message = "Ingresá el nombre de la carpeta de Drive."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Falta carpeta", message: message)
+            return
+        }
+
+        let cleanRoutineID = routineID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanRoutineID.isEmpty else {
+            let message = "Ingresá el ID de la coreografía."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Falta coreografía", message: message)
+            return
+        }
+
+        let cleanEmail = recipientEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanEmail.contains("@") else {
+            let message = "Ingresá un mail válido para la prueba."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Mail inválido", message: message)
+            return
+        }
+
+        guard let config = JudgingSheetMailConfig.load() else {
+            let message = "Configurá JUDGING_MAIL_SCRIPT_URL con la URL del Web App de Apps Script."
+            judgingSheetMailStatus = .failed(message)
+            judgingSheetMailMessage = message
+            showOperationFailure("Falta configurar mail", message: message)
+            return
+        }
+
+        judgingSheetMailStatus = .sending
+        judgingSheetMailMessage = "Buscando #\(cleanRoutineID) en \(cleanFolderName)..."
+
+        do {
+            let drive = try GoogleDriveService.configured()
+            let rootFolderName = driveSafeName(cleanFolderName, fallback: drive.rootFolderName)
+            let blockFolderName = driveSafeName(block.name, fallback: "Bloque")
+            let links = try await drive.judgingSheetLinks(rootFolderName: rootFolderName, blockFolderName: blockFolderName)
+            let routineLinks = links
+                .filter { $0.routineID.normalizedKey == cleanRoutineID.normalizedKey }
+                .sorted { lhs, rhs in
+                    lhs.judge.localizedCaseInsensitiveCompare(rhs.judge) == .orderedAscending
+                }
+
+            guard !routineLinks.isEmpty else {
+                let message = "No se encontraron PDFs de la coreografía #\(cleanRoutineID) en \(rootFolderName)."
+                judgingSheetMailStatus = .failed(message)
+                judgingSheetMailMessage = message
+                showOperationFailure("Sin links de prueba", message: message)
+                return
+            }
+
+            let driveLinks = routineLinks.compactMap { link -> JudgingSheetDriveLink? in
+                guard let url = link.webViewLink?.trimmingCharacters(in: .whitespacesAndNewlines), !url.isEmpty else {
+                    return nil
+                }
+                return JudgingSheetDriveLink(
+                    fileID: link.fileID,
+                    fileName: link.fileName,
+                    routineID: link.routineID,
+                    routineName: link.routineName,
+                    judge: link.judge,
+                    url: url
+                )
+            }
+
+            guard !driveLinks.isEmpty else {
+                let message = "La coreografía #\(cleanRoutineID) no tiene links válidos de Drive."
+                judgingSheetMailStatus = .failed(message)
+                judgingSheetMailMessage = message
+                showOperationFailure("Sin links válidos", message: message)
+                return
+            }
+
+            let academyName = routineLinks.first?.academy ?? "Prueba"
+            let routineName = routineLinks.first?.routineName ?? cleanRoutineID
+            let payload = JudgingSheetMailPayload(
+                sharedSecret: config.sharedSecret,
+                eventName: currentEventName,
+                blockName: block.name,
+                subject: "[PRUEBA] \(JudgingSheetMailService.subject)",
+                bodyIntro: """
+                Este es un envío de prueba de la hoja de jueceo de la coreografía #\(cleanRoutineID) \(routineName).
+
+                Usalo para verificar que el mail sale correctamente y que los links de Drive abren antes de enviar las devoluciones reales.
+                """,
+                bodyClosing: """
+                Saludos,
+                Equipo Jueceo
+                """,
+                grantDriveAccess: true,
+                academies: [
+                    AcademyJudgingSheetMail(
+                        academy: "\(academyName) - prueba",
+                        email: cleanEmail,
+                        links: driveLinks
+                    )
+                ]
+            )
+
+            lastDriveExportSummary = GoogleDriveExportSummary(
+                rootFolderName: rootFolderName,
+                uploadedFiles: [],
+                judgingSheets: routineLinks
+            )
+
+            judgingSheetMailMessage = "Enviando prueba a \(cleanEmail)..."
+            let response = try await JudgingSheetMailService(config: config).send(payload)
+            let sentCount = response.sent ?? 1
+            let warningText = response.hasWarnings ? " Hubo avisos del envío." : ""
+            judgingSheetMailStatus = .completed(sentCount)
+            judgingSheetMailMessage = "Prueba enviada a \(cleanEmail).\(warningText)"
+            showOperationSuccess(
+                "Prueba enviada",
+                message: "Se enviaron \(driveLinks.count) hoja(s) de #\(cleanRoutineID) a \(cleanEmail).\(warningText)"
+            )
+        } catch {
+            judgingSheetMailStatus = .failed(error.localizedDescription)
+            judgingSheetMailMessage = error.localizedDescription
+            showOperationFailure("No se pudo enviar la prueba", message: error.localizedDescription)
+        }
+    }
+
     private func sendDriveSummaryByMail(_ summary: GoogleDriveExportSummary) async {
         guard let config = JudgingSheetMailConfig.load() else {
             let message = "Configurá JUDGING_MAIL_SCRIPT_URL con la URL del Web App de Apps Script."

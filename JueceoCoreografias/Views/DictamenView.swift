@@ -293,7 +293,7 @@ enum DictamenBuilder {
             options: .regularExpression
         )
         if key == "OPEN" {
-            return "OPEN NO AÉREO"
+            return "OPEN PISO"
         }
         if key.hasPrefix("OPEN:") {
             return "OPEN AÉREO"
